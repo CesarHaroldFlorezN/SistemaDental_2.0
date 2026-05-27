@@ -239,7 +239,11 @@ function acOpen(inpId, hidId, ctx) {
   const q   = inp.value.trim().toLowerCase();
   const portal = document.getElementById('acp');
   if (!q) { portal.classList.remove('on'); return; }
-  const hits = pac_cache.filter(p=>p.nombre.toLowerCase().includes(q)||(p.cedula||'').includes(q)||(p.telefono||'').includes(q)).slice(0,8);
+  const terminos = q.split(/\s+/);
+  const hits = pac_cache.filter(p => {
+    const nom = p.nombre.toLowerCase(), ced = p.cedula || '', tel = p.telefono || '';
+    return terminos.every(t => nom.includes(t) || ced.includes(t) || tel.includes(t));
+  }).slice(0,8);
   portal.innerHTML = hits.length
     ? hits.map(p=>`<div class="aci" onmousedown="event.preventDefault();acPick(${p.id})"><strong>${p.nombre}</strong>${p.alergias?' ⚠️':''}<div class="aci-sub">${p.cedula?'DNI: '+p.cedula+' · ':''}${p.telefono||''}</div></div>`).join('')
     : `<div class="aci">Sin resultados. <a style="color:var(--teal);cursor:pointer" onmousedown="event.preventDefault();openNuevoPac()">+ Crear</a></div>`;
@@ -296,12 +300,16 @@ function openNuevoPac(pid) {
   document.getElementById('mp-tit').textContent = pid ? '✏️ Editar Paciente' : '👤 Nuevo Paciente';
   document.getElementById('mp-body').innerHTML = `
     <div class="fgrid">
-      <div class="fg full"><label>Nombre Completo *</label><input id="fp-nom" value="${p.nombre||''}" placeholder="María González"></div>
+      <div class="fg"><label>ID de Ficha</label><input id="fp-cod" value="${p.codigo_ficha||''}" placeholder="Ej: F-001" style="font-weight:bold; color:var(--teal)"></div>
       <div class="fg"><label>DNI / Cédula</label><input id="fp-ced" value="${p.cedula||''}" placeholder="12345678"></div>
-      <div class="fg"><label>Fecha Nacimiento</label><input id="fp-nac" type="date" value="${p.nacimiento||''}"></div>
-      <div class="fg"><label>Género</label><select id="fp-gen"><option value="">—</option><option ${p.genero==='Masculino'?'selected':''}>Masculino</option><option ${p.genero==='Femenino'?'selected':''}>Femenino</option><option ${p.genero==='Otro'?'selected':''}>Otro</option></select></div>
+      
+      <div class="fg full"><label>Nombre Completo *</label><input id="fp-nom" value="${p.nombre||''}" placeholder="María González"></div>
+      
       <div class="fg"><label>Teléfono / WhatsApp</label><input id="fp-tel" value="${p.telefono||''}" placeholder="999 888 777"></div>
-      <div class="fg"><label>ID de Ficha</label><input id="fp-cod" value="${p.codigo_ficha||''}" placeholder="Ej: F-001"></div>
+      <div class="fg"><label>Fecha Nacimiento</label><input id="fp-nac" type="date" value="${p.nacimiento||''}"></div>
+      
+      <div class="fg"><label>Género</label><select id="fp-gen"><option value="">—</option><option ${p.genero==='Masculino'?'selected':''}>Masculino</option><option ${p.genero==='Femenino'?'selected':''}>Femenino</option><option ${p.genero==='Otro'?'selected':''}>Otro</option></select></div>
+      
       <div class="fg full"><label>Dirección</label><input id="fp-dir" value="${p.direccion||''}" placeholder="Av. Principal 123"></div>
       <div class="fg full"><label>⚠️ Alergias / Antecedentes</label><textarea id="fp-ale" placeholder="Ej: Alérgico a penicilina...">${p.alergias||''}</textarea></div>
       <div class="fg full"><label>Medicamentos Actuales</label><textarea id="fp-med" placeholder="Ej: Metformina 500mg...">${p.medicamentos||''}</textarea></div>
@@ -326,7 +334,15 @@ async function renderPac() {
   const deuMap={}, uvMap={};
   pagos.forEach(g=>{ const s=parseFloat(g.saldo||0); if(s>0) deuMap[g.pacienteId]=(deuMap[g.pacienteId]||0)+s; });
   citas.forEach(c=>{ if(c.estado==='completada'&&(!uvMap[c.pacienteId]||c.fecha>uvMap[c.pacienteId])) uvMap[c.pacienteId]=c.fecha; });
-  const fil = pacs.filter(p=>p.nombre.toLowerCase().includes(q)||(p.cedula||'').includes(q)||(p.telefono||'').includes(q));
+  const terminos = q.trim().split(/\s+/); // Separa la búsqueda por espacios
+  const fil = pacs.filter(p => {
+    if (!q.trim()) return true;
+    const nom = p.nombre.toLowerCase();
+    const ced = p.cedula || '';
+    const tel = p.telefono || '';
+    // Verifica que TODAS las palabras buscadas existan en el paciente
+    return terminos.every(t => nom.includes(t) || ced.includes(t) || tel.includes(t));
+  });
   document.getElementById('pac-cnt').textContent = fil.length + ' registro' + (fil.length!==1?'s':'');
   const tb = document.getElementById('tb-pac');
   if (!fil.length) { tb.innerHTML='<tr><td colspan="7"><div class="empty"><div class="ei">👥</div><p>Sin pacientes</p></div></td></tr>'; return; }
