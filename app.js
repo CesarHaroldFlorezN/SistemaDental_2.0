@@ -301,7 +301,7 @@ function openNuevoPac(pid) {
       <div class="fg"><label>Fecha Nacimiento</label><input id="fp-nac" type="date" value="${p.nacimiento||''}"></div>
       <div class="fg"><label>Género</label><select id="fp-gen"><option value="">—</option><option ${p.genero==='Masculino'?'selected':''}>Masculino</option><option ${p.genero==='Femenino'?'selected':''}>Femenino</option><option ${p.genero==='Otro'?'selected':''}>Otro</option></select></div>
       <div class="fg"><label>Teléfono / WhatsApp</label><input id="fp-tel" value="${p.telefono||''}" placeholder="999 888 777"></div>
-      <div class="fg"><label>Email</label><input id="fp-mail" type="email" value="${p.email||''}" placeholder="correo@email.com"></div>
+      <div class="fg"><label>ID de Ficha</label><input id="fp-cod" value="${p.codigo_ficha||''}" placeholder="Ej: F-001"></div>
       <div class="fg full"><label>Dirección</label><input id="fp-dir" value="${p.direccion||''}" placeholder="Av. Principal 123"></div>
       <div class="fg full"><label>⚠️ Alergias / Antecedentes</label><textarea id="fp-ale" placeholder="Ej: Alérgico a penicilina...">${p.alergias||''}</textarea></div>
       <div class="fg full"><label>Medicamentos Actuales</label><textarea id="fp-med" placeholder="Ej: Metformina 500mg...">${p.medicamentos||''}</textarea></div>
@@ -315,7 +315,7 @@ function openNuevoPac(pid) {
 async function savePac() {
   const nom = document.getElementById('fp-nom').value.trim();
   if (!nom) { toast('Nombre obligatorio','err'); return; }
-  const data = { nombre:nom, cedula:document.getElementById('fp-ced').value.trim(), nacimiento:document.getElementById('fp-nac').value, genero:document.getElementById('fp-gen').value, telefono:document.getElementById('fp-tel').value.trim(), email:document.getElementById('fp-mail').value.trim(), direccion:document.getElementById('fp-dir').value.trim(), alergias:document.getElementById('fp-ale').value.trim(), medicamentos:document.getElementById('fp-med').value.trim(), fechaReg:hoy() };
+  const data = { nombre:nom, cedula:document.getElementById('fp-ced').value.trim(),codigo_ficha: document.getElementById('fp-cod').value.trim(), nacimiento:document.getElementById('fp-nac').value, genero:document.getElementById('fp-gen').value, telefono:document.getElementById('fp-tel').value.trim(), codigo_ficha:document.getElementById('fp-cod').value.trim(), direccion:document.getElementById('fp-dir').value.trim(), alergias:document.getElementById('fp-ale').value.trim(), medicamentos:document.getElementById('fp-med').value.trim(), fechaReg:hoy() };
   if (editPacId) { data.id=editPacId; await dPut('pacientes',data); toast('Paciente actualizado'); }
   else { await dAdd('pacientes',data); toast('Paciente registrado ✅'); }
   closeM('m-pac'); await refreshCache(); renderPac();
@@ -353,8 +353,8 @@ async function verFicha(id) {
   document.getElementById('mf-body').innerHTML=`
     <div class="fgrid" style="margin-bottom:13px">
       <div class="sec"><h4>Datos Personales</h4><div style="font-size:12px;display:flex;flex-direction:column;gap:4px">
-        <div><span class="t-gray">DNI:</span> ${p.cedula||'—'}</div><div><span class="t-gray">Nacimiento:</span> ${fDate(p.nacimiento)} (${edad(p.nacimiento)})</div>
-        <div><span class="t-gray">Teléfono:</span> ${p.telefono||'—'}</div><div><span class="t-gray">Email:</span> ${p.email||'—'}</div>
+       <div><span class="t-gray">Cod. Ficha:</span> <strong style="color:var(--teal)">${p.codigo_ficha||'—'}</strong></div>    <div><span class="t-gray">DNI:</span> ${p.cedula||'—'}</div><div><span class="t-gray">Nacimiento:</span> ${fDate(p.nacimiento)} (${edad(p.nacimiento)})</div>
+        <div><span class="t-gray">Teléfono:</span> ${p.telefono||'—'}</div><div><span class="t-gray">Cód. Ficha:</span> <strong style="color:var(--teal)">${p.codigo_ficha||'—'}</strong></div>
       </div></div>
       <div class="sec"><h4>Historia Médica</h4>
         ${p.alergias?`<div style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);border-radius:6px;padding:7px;color:var(--err);font-size:11px;margin-bottom:6px">⚠️ <strong>Alergias:</strong> ${p.alergias}</div>`:'<p style="font-size:11px;color:var(--tx2)">Sin alergias</p>'}

@@ -27,7 +27,7 @@ class PacienteDB(Base):
     nacimiento = Column(String(50))
     genero = Column(String(50))
     telefono = Column(String(50))
-    ficha_tecnica = Column(Text)
+    codigo_ficha = Column(String(50)) # <--- ESTE ES EL NUEVO CAMPO
     direccion = Column(String(200))
     alergias = Column(Text)
     medicamentos = Column(Text)
