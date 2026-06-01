@@ -322,31 +322,36 @@ function openNuevoPac(pid) {
 }
 async function savePac() {
   const nom = document.getElementById('fp-nom').value.trim();
-  const ced = document.getElementById('fp-ced').value.trim(); // Capturamos el DNI
+  const ced = document.getElementById('fp-ced').value.trim(); 
+  const codFicha = document.getElementById('fp-cod').value.trim(); // Capturamos la ficha
   
   if (!nom) { toast('Nombre obligatorio', 'err'); return; }
 
   // 🛡️ VALIDACIÓN DE DNI DUPLICADO
   if (ced) {
-    // Buscamos si el DNI ya existe en otro paciente (ignorando al paciente actual si estamos editando)
-    const existe = pac_cache.find(p => p.cedula === ced && p.id !== editPacId);
-    if (existe) {
-      toast(`Ese DNI ya está registrado a nombre de: ${existe.nombre}`, 'err');
-      return; // Detiene el guardado
+    const existeDni = pac_cache.find(p => p.cedula === ced && p.id !== editPacId);
+    if (existeDni) {
+      toast(`Ese DNI ya está registrado a nombre de: ${existeDni.nombre}`, 'err');
+      return; 
     }
   }
 
-  // Si pasa la validación, armamos los datos (corregí un duplicado de codigo_ficha que tenías)
+  // 🛡️ VALIDACIÓN DE FICHA DUPLICADA
+  if (codFicha) {
+    const existeFicha = pac_cache.find(p => p.codigo_ficha === codFicha && p.id !== editPacId);
+    if (existeFicha) {
+      toast(`La ficha ${codFicha} ya está asignada a: ${existeFicha.nombre}`, 'err');
+      return; 
+    }
+  }
+
+  // Si pasa la validación, armamos los datos
   const data = { 
     nombre: nom, 
     cedula: ced, 
-    codigo_ficha: document.getElementById('fp-cod').value.trim(), 
+    codigo_ficha: codFicha, 
     nacimiento: document.getElementById('fp-nac').value, 
-    genero: document.getElementById('fp-gen').value, 
-    telefono: document.getElementById('fp-tel').value.trim(), 
-    direccion: document.getElementById('fp-dir').value.trim(), 
-    alergias: document.getElementById('fp-ale').value.trim(), 
-    medicamentos: document.getElementById('fp-med').value.trim(), 
+    // ... el resto de tu código sigue igual
     fechaReg: hoy() 
   };
   

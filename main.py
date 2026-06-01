@@ -153,14 +153,41 @@ def get_all(store: str, db: Session = Depends(get_db)):
     return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in registros]
 
 # POST: Crear un nuevo registro
+   
+    
+    # Extraemos el ID si viene (para ignorarlo al crear)
+    data.pop("id", None)
+
+# POST: Crear un nuevo registro
 @app.post("/api/{store}")
 def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db)):
     if store not in MODELOS:
         raise HTTPException(status_code=404, detail="Tabla no encontrada")
     
+    # --- 🛡️ NUEVA VALIDACIÓN EXCLUSIVA PARA PACIENTES ---
+    if store == "pacientes":
+        cedula_nueva = data.get("cedula")
+        ficha_nueva = data.get("codigo_ficha")
+        
+        if cedula_nueva:
+            if db.query(PacienteDB).filter(PacienteDB.cedula == cedula_nueva).first():
+                raise HTTPException(status_code=400, detail="El DNI ya está registrado.")
+                
+        if ficha_nueva:
+            if db.query(PacienteDB).filter(PacienteDB.codigo_ficha == ficha_nueva).first():
+                raise HTTPException(status_code=400, detail="El código de ficha ya existe.")
+    # ----------------------------------------------------
+    
     # Extraemos el ID si viene (para ignorarlo al crear)
     data.pop("id", None)
     
+    nuevo_registro = MODELOS[store](**data)
+    db.add(nuevo_registro)
+    db.commit()
+    db.refresh(nuevo_registro)
+    
+    return {c.name: getattr(nuevo_registro, c.name) for c in nuevo_registro.__table__.columns}
+
     nuevo_registro = MODELOS[store](**data)
     db.add(nuevo_registro)
     db.commit()
