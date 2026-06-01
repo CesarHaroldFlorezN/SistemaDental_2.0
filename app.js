@@ -322,11 +322,46 @@ function openNuevoPac(pid) {
 }
 async function savePac() {
   const nom = document.getElementById('fp-nom').value.trim();
-  if (!nom) { toast('Nombre obligatorio','err'); return; }
-  const data = { nombre:nom, cedula:document.getElementById('fp-ced').value.trim(),codigo_ficha: document.getElementById('fp-cod').value.trim(), nacimiento:document.getElementById('fp-nac').value, genero:document.getElementById('fp-gen').value, telefono:document.getElementById('fp-tel').value.trim(), codigo_ficha:document.getElementById('fp-cod').value.trim(), direccion:document.getElementById('fp-dir').value.trim(), alergias:document.getElementById('fp-ale').value.trim(), medicamentos:document.getElementById('fp-med').value.trim(), fechaReg:hoy() };
-  if (editPacId) { data.id=editPacId; await dPut('pacientes',data); toast('Paciente actualizado'); }
-  else { await dAdd('pacientes',data); toast('Paciente registrado ✅'); }
-  closeM('m-pac'); await refreshCache(); renderPac();
+  const ced = document.getElementById('fp-ced').value.trim(); // Capturamos el DNI
+  
+  if (!nom) { toast('Nombre obligatorio', 'err'); return; }
+
+  // 🛡️ VALIDACIÓN DE DNI DUPLICADO
+  if (ced) {
+    // Buscamos si el DNI ya existe en otro paciente (ignorando al paciente actual si estamos editando)
+    const existe = pac_cache.find(p => p.cedula === ced && p.id !== editPacId);
+    if (existe) {
+      toast(`Ese DNI ya está registrado a nombre de: ${existe.nombre}`, 'err');
+      return; // Detiene el guardado
+    }
+  }
+
+  // Si pasa la validación, armamos los datos (corregí un duplicado de codigo_ficha que tenías)
+  const data = { 
+    nombre: nom, 
+    cedula: ced, 
+    codigo_ficha: document.getElementById('fp-cod').value.trim(), 
+    nacimiento: document.getElementById('fp-nac').value, 
+    genero: document.getElementById('fp-gen').value, 
+    telefono: document.getElementById('fp-tel').value.trim(), 
+    direccion: document.getElementById('fp-dir').value.trim(), 
+    alergias: document.getElementById('fp-ale').value.trim(), 
+    medicamentos: document.getElementById('fp-med').value.trim(), 
+    fechaReg: hoy() 
+  };
+  
+  if (editPacId) { 
+    data.id = editPacId; 
+    await dPut('pacientes', data); 
+    toast('Paciente actualizado'); 
+  } else { 
+    await dAdd('pacientes', data); 
+    toast('Paciente registrado ✅'); 
+  }
+  
+  closeM('m-pac'); 
+  await refreshCache(); 
+  renderPac();
 }
 async function renderPac() {
   const [pacs, pagos, citas] = await Promise.all([dAll('pacientes'), dAll('pagos'), dAll('citas')]);
@@ -540,7 +575,7 @@ function ncGenSes() {
   const fec=document.getElementById('nc-fec').value, hor=document.getElementById('nc-hor').value;
   const n=parseInt(document.getElementById('nc-rec-n').value)||0;
   const int=parseInt(document.getElementById('nc-rec-int').value)||30;
-  const proc=document.getElementById('nc-proc').value||'Sesión';
+  const proc = getSelectedProcs('nc-proc-list') || 'Sesión';
   const lista=document.getElementById('nc-ses-lista');
   if (!fec||n<2){lista.innerHTML='';return;}
   let html='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--tx2);margin-bottom:6px">Edita fecha/hora de cada sesión:</div>';
@@ -813,7 +848,7 @@ async function abrirCompletar(citaId){
   const tpAct=pg?pg.tipoPago:'contado';
   const procsArr = (c.procedimiento||'').split(' + ');
   let procHTML = procsArr.map(p => getProcRowHTML(p)).join('');
-  if(!procHTML) procHTML = getProcRowHTML();
+  if(!procHTML) procHTML = getProcRowHTML('');
 
 
 
@@ -898,8 +933,7 @@ async function guardarCompletado(citaId,pagoId,saldo){
   if(Math.abs(costoDiff)>0.001){
     c.costo=costoFinal;
     saldo=Math.max(0,saldo+costoDiff);
-    if(pagoId){const pg=pagos.find(x=>x.id===pagoId);if(pg){pg.total=costoFinal;pg.saldo=saldo;await dPut('pagos',pg);}}
-    if(pagoId){const pg=pagos.find(x=>x.id===pagoId);
+    if(pagoId){const pg=pagos.find(x=>x.id===pagoId);if(pg){pg.total=costoFinal;pg.saldo=saldo;pg.concepto=c.procedimiento;await dPut('pagos',pg);}}
   }
   c.estado='completada';c.fin=new Date().toISOString();c.notasFin=document.getElementById('co-not')?.value||'';
   await dPut('citas',c);
@@ -1058,11 +1092,7 @@ async function editarCita(citaId){
       <div class="fgrid">
         <div class="fg"><label>Fecha *</label><input type="date" id="ec-fec" value="${c.fecha||''}" oninput="const e=document.getElementById('es-fec-${c.id}');if(e)e.value=this.value;"></div>
         <div class="fg"><label>Hora *</label><input type="time" id="ec-hor" value="${c.hora||''}" oninput="const e=document.getElementById('es-hor-${c.id}');if(e)e.value=this.value;"></div>
-        <div class="fg full"><label>Procedimiento</label>
-          <select id="ec-proc" onchange="document.getElementById('ec-otro-w').style.display=this.value==='Otro'?'':'none'">
-            ${PROCS.map(pr=>`<option${(c.procedimiento===pr||c.motivo===pr)?' selected':''}>${pr}</option>`).join('')}
-          </select>
-        </div>
+        
         <div class="fg full">
         <label>Procedimientos</label>
         <div id="ec-proc-list">${procHTML}</div>
