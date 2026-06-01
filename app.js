@@ -848,67 +848,64 @@ async function iniciarAt(id){
 // ══════════════════════════════════════════
 let cobrarOpt='cobrar';
 async function abrirCompletar(citaId){
-  const [citas,pacs,pagos]=await Promise.all([dAll('citas'),dAll('pacientes'),dAll('pagos')]);
-  const c=citas.find(x=>x.id===citaId);if(!c)return;
-  const p=pacs.find(x=>x.id===c.pacienteId)||{};
-  const pg=pagos.find(g=>g.citaId===citaId);
-  const saldo=pg?parseFloat(pg.saldo||0):(c.costo||0);
-  const cobAnt=pg?parseFloat(pg.cobrado||0):0;
-  const tpAct=pg?pg.tipoPago:'contado';
-  const procsArr = (c.procedimiento||'').split(' + ');
+  const [citas, pacs, pagos] = await Promise.all([dAll('citas'), dAll('pacientes'), dAll('pagos')]);
+  const c = citas.find(x => x.id === citaId); if(!c) return;
+  const p = pacs.find(x => x.id === c.pacienteId) || {};
+  const pg = pagos.find(g => g.citaId === citaId);
+  
+  // Detectamos si es una sesión subsecuente (Ej: Sesión 2, 3...)
+  const esSesionHija = c.citaBaseId ? true : false;
+  
+  const saldo = pg ? parseFloat(pg.saldo || 0) : (c.costo || 0);
+  const cobAnt = pg ? parseFloat(pg.cobrado || 0) : 0;
+  const procsArr = (c.procedimiento || '').split(' + ');
   let procHTML = procsArr.map(p => getProcRowHTML(p)).join('');
-  if(!procHTML) procHTML = getProcRowHTML('');
 
-
-
-
-  document.getElementById('mco-tit').textContent='✅ Completar — '+p.nombre;
-  let html=`<div class="cres">
-
+  document.getElementById('mco-tit').textContent = '✅ Completar — ' + p.nombre;
+  
+  let html = `
   <div class="sec hi" style="border-color:var(--teal);margin-bottom:11px">
-  <h4 style="color:var(--teal)">🛠️ Procedimientos Realizados</h4>
-  <div id="co-proc-list">${procHTML}</div>
-  <button class="btn btn-sm btn-g" style="margin-top:6px" onclick="addProcRow('co-proc-list')">＋ Añadir otro procedimiento</button>
+      <h4 style="color:var(--teal)">🛠️ Procedimientos Realizados Hoy</h4>
+      <div id="co-proc-list">${procHTML}</div>
+      <button class="btn btn-sm btn-info" style="margin-top:6px" onclick="addProcRow('co-proc-list'); document.getElementById('extra-cost-box').style.display='block';">
+          ＋ Agregar procedimiento extra
+      </button>
   </div>
-    <div class="crow"><span class="t-gray">Paciente</span><strong>${p.nombre}</strong></div>
-    
+  
+  <div class="cres">
     <div class="crow"><span class="t-gray">Fecha</span>${fDate(c.fecha)} ${c.hora||''}</div>
-    <div class="crow"><span class="t-gray">Costo registrado</span>${fMon(c.costo)}</div>
-    ${cobAnt>0?`<div class="crow"><span class="t-gray">Ya cobrado</span><span class="t-ok">${fMon(cobAnt)}</span></div>`:''}
-    <div class="crow"><span class="t-gray">Saldo pendiente</span><span class="${saldo>0?'t-err fw7':'t-ok'}">${saldo>0?fMon(saldo):'✓ Sin saldo'}</span></div>
-  </div>
-  <div class="sec" style="border-color:rgba(243,156,18,.2);margin-bottom:11px">
-    <h4 style="color:var(--warn)">⚙️ ¿El costo cambió?</h4>
-    <div class="fgrid">
-      <div class="fg"><label>Costo original</label><input type="number" id="co-orig" value="${c.costo||0}" disabled style="opacity:.5"></div>
-      <div class="fg"><label>Costo final (edita si cambió)</label><input type="number" id="co-final" value="${c.costo||0}" min="0" step="0.01"></div>
-    </div>
+    <div class="crow"><span class="t-gray">Costo base de hoy</span>${fMon(c.costo)}</div>
   </div>`;
-  if(saldo>0){
-    if(tpAct === 'cuotas') {
-      cobrarOpt='mantener_cuotas';
-      html+=`<div class="sec" style="border-color:var(--teal);background:var(--tbg);margin-bottom:11px">
-        <h4 style="color:var(--teal)">📅 Financiamiento Activo</h4>
-        <div style="font-size:12px;color:var(--tx2)">El saldo de ${fMon(saldo)} ya está financiado en cuotas. Se mantendrá el plan de pagos configurado.</div>
-      </div>`;
-    } else {
-      cobrarOpt='cobrar';
-      html+=`<div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--tx2);margin-bottom:8px">¿Qué hacer con el saldo de ${fMon(saldo)}?</div>
-    <div class="copts">
-      <div class="copt on" id="cop-cobrar" onclick="selCob('cobrar')"><div class="co-i">💵</div><div class="co-t">Cobrar ahora</div><div class="co-d">Paga hoy parcial o completo.</div></div>
-      <div class="copt" id="cop-cuotas" onclick="selCob('cuotas')"><div class="co-i">📅</div><div class="co-t">Queda en cuotas</div><div class="co-d">Se financia en fechas acordadas.</div></div>
-      <div class="copt" id="cop-pendiente" onclick="selCob('pendiente')"><div class="co-i">🕐</div><div class="co-t">Dejar pendiente</div><div class="co-d">Queda en cuentas por cobrar.</div></div>
-      <div class="copt" id="cop-cortesia" onclick="selCob('cortesia')"><div class="co-i">🎁</div><div class="co-t">Cortesía</div><div class="co-d">Se condona el saldo.</div></div>
-    </div>
-    <div id="cob-det" style="margin-top:8px"></div>`;
-        setTimeout(()=>selCob('cobrar'),20);
-        }
-      } else {
-        html+=`<div class="sec" style="border-color:rgba(39,174,96,.3);text-align:center;padding:14px"><div style="font-size:26px">✅</div><div style="font-weight:700;color:var(--ok);margin-top:4px">Cita completamente pagada</div></div>`;
-      }
-  html+=`<div class="divider"></div><div class="fg"><label>Indicaciones post-tratamiento</label><textarea id="co-not" placeholder="Ej: Evitar alimentos duros 24h..."></textarea></div>
-  <div class="factions"><button class="btn btn-p" onclick="guardarCompletado(${citaId},${pg?pg.id:0},${saldo})">✅ Completar</button><button class="btn btn-g" onclick="closeM('m-comp')">Cancelar</button></div>`;
-  document.getElementById('mco-body').innerHTML=html;
+
+  // CAJA DINÁMICA DE COSTOS EXTRAS (Especial para Sesiones Subsecuentes)
+  html += `
+  <div id="extra-cost-box" class="sec" style="border-color:rgba(243,156,18,.4); margin-top:11px; display:none; background:var(--s2);">
+    <h4 style="color:var(--warn)">💰 Se agregaron extras. ¿Cuál es el costo adicional?</h4>
+    <div class="fgrid">
+      <div class="fg"><label>Costo Adicional (S/.)</label>
+        <input type="number" id="co-costo-extra" value="0" min="0" step="0.01">
+      </div>
+    </div>`;
+    
+  if (esSesionHija) {
+      // Si es sesión 2+, damos la opción de separar la cuenta o sumarla al plan
+      html += `
+      <div style="font-size:12px; margin-top:10px; color:var(--tx2)">¿Cómo se pagará este adicional?</div>
+      <label style="display:block; margin-top:5px; cursor:pointer;"><input type="radio" name="pago_extra" value="separado" checked> <b>Cobrar por separado:</b> El paciente paga este extra hoy mismo.</label>
+      <label style="display:block; margin-top:5px; cursor:pointer;"><input type="radio" name="pago_extra" value="sumar_plan"> <b>Sumar al Plan:</b> Sumar este monto a la deuda general de las cuotas.</label>
+      `;
+  }
+  
+  html += `</div>`; // Fin de caja extra
+
+  html += `<div class="divider"></div>
+  <div class="fg"><label>Indicaciones post-tratamiento</label><textarea id="co-not" placeholder="Ej: Evitar alimentos duros..."></textarea></div>
+  <div class="factions">
+      <button class="btn btn-p" onclick="guardarCompletado(${citaId}, ${esSesionHija})">✅ Confirmar y Completar</button>
+      <button class="btn btn-g" onclick="closeM('m-comp')">Cancelar</button>
+  </div>`;
+  
+  document.getElementById('mco-body').innerHTML = html;
   openM('m-comp');
 }
 function selCob(opt){
@@ -930,41 +927,62 @@ function genCobCuotas(){
   for(let i=0;i<n;i++) html+=`<tr><td><span class="b b-teal">${i+1}</span></td><td><input type="date" id="cob-cfec-${i}" value="${addDays(hoy(),i*int)}"></td><td><input type="number" id="cob-cmon-${i}" value="${m}" min="0" step="0.01"></td></tr>`;
   w.innerHTML=html+'</tbody></table>';
 }
-async function guardarCompletado(citaId,pagoId,saldo){
-  const [citas,pagos]=await Promise.all([dAll('citas'),dAll('pagos')]);
-  const c=citas.find(x=>x.id===citaId);if(!c)return;
-  // Cost adjustment
-  const costoFinal=parseFloat(document.getElementById('co-final')?.value)||c.costo||0;
-  const costoDiff=costoFinal-(c.costo||0);
+async function guardarCompletado(citaId, esSesionHija) {
+  const [citas, pagos, planPagos] = await Promise.all([dAll('citas'), dAll('pagos'), dAll('planPagos')]);
+  const c = citas.find(x => x.id === citaId); if(!c) return;
+
+  // Actualizar procedimientos
   const procFinal = getSelectedProcs('co-proc-list');
   if (procFinal) c.procedimiento = procFinal;
 
-  if(Math.abs(costoDiff)>0.001){
-    c.costo=costoFinal;
-    saldo=Math.max(0,saldo+costoDiff);
-    if(pagoId){const pg=pagos.find(x=>x.id===pagoId);if(pg){pg.total=costoFinal;pg.saldo=saldo;pg.concepto=c.procedimiento;await dPut('pagos',pg);}}
+  // Evaluar costos extras
+  const costoExtra = parseFloat(document.getElementById('co-costo-extra')?.value) || 0;
+  
+  if (costoExtra > 0) {
+      if (esSesionHija) {
+          const modoPago = document.querySelector('input[name="pago_extra"]:checked').value;
+          
+          if (modoPago === 'separado') {
+              // Crea un pago independiente para la limpieza extra, sin tocar las cuotas
+              await dAdd('pagos', {
+                  pacienteId: c.pacienteId, citaId: citaId, concepto: "Adicional: " + procFinal,
+                  fecha: hoy(), total: costoExtra, cobrado: 0, saldo: costoExtra, 
+                  metodo: '', tipoPago: 'contado', cuotas: [], creadoEn: new Date().toISOString()
+              });
+              toast('Se generó una cuenta por cobrar independiente para el extra', 'warn');
+          } 
+          else if (modoPago === 'sumar_plan') {
+              // Busca la cita base y su plan de pagos para sumarle el costo
+              const citaBaseId = c.citaBaseId || c.id;
+              const pgPadre = pagos.find(x => x.citaId === citaBaseId);
+              if (pgPadre) {
+                  pgPadre.total = parseFloat(pgPadre.total) + costoExtra;
+                  pgPadre.saldo = parseFloat(pgPadre.saldo) + costoExtra;
+                  await dPut('pagos', pgPadre);
+                  // Opcional: Podrías buscar en `planPagos` y recalcular aquí usando tu función reajustarCuotas
+                  toast('Costo extra sumado a la deuda principal', 'ok');
+              }
+          }
+      } else {
+          // Si es sesión única, simplemente aumentamos el costo de esta cita
+          c.costo = (c.costo || 0) + costoExtra;
+          const pg = pagos.find(x => x.citaId === citaId);
+          if (pg) {
+              pg.total = c.costo;
+              pg.saldo = (pg.saldo || 0) + costoExtra;
+              await dPut('pagos', pg);
+          }
+      }
   }
-  c.estado='completada';c.fin=new Date().toISOString();c.notasFin=document.getElementById('co-not')?.value||'';
-  await dPut('citas',c);
-  const pg=pagoId?pagos.find(x=>x.id===pagoId):null;
-  if(saldo>0){
-    if(cobrarOpt==='mantener_cuotas'){
-      // El plan ya existe, el sistema lo protege y no hace nada extra.
-    } else if(cobrarOpt==='cobrar'){
-      const mon=parseFloat(document.getElementById('cob-m')?.value)||0;
-      const met=document.getElementById('cob-met')?.value||'';
-      if(pg){pg.cobrado=parseFloat(pg.cobrado||0)+mon;pg.saldo=Math.max(0,parseFloat(pg.total||0)-pg.cobrado);pg.metodo=met;pg.fechaUltPago=hoy();await dPut('pagos',pg);}
-      else if(costoFinal>0) await dAdd('pagos',{pacienteId:c.pacienteId,citaId,concepto:c.procedimiento,fecha:hoy(),total:costoFinal,cobrado:mon,saldo:Math.max(0,costoFinal-mon),metodo:met,tipoPago:'contado',fechaUltPago:hoy(),cuotas:[],creadoEn:new Date().toISOString()});
-    } else if(cobrarOpt==='cuotas'){
-      const n=parseInt(document.getElementById('cob-ncuo')?.value)||0;
-      const cuotas=[];for(let i=0;i<n;i++)cuotas.push({num:i+1,tipo:'cuota',fecha:document.getElementById('cob-cfec-'+i)?.value||hoy(),monto:parseFloat(document.getElementById('cob-cmon-'+i)?.value)||0,pagado:false,fechaPago:null,metodoPago:null});
-      if(pg){pg.tipoPago='cuotas';pg.cuotas=cuotas;await dPut('pagos',pg);}
-      if(cuotas.length>0) await dAdd('planPagos',{pacienteId:c.pacienteId,pagoId:pagoId||0,citaId,concepto:c.procedimiento,totalAcordado:costoFinal,anticipo:0,metodoPreferido:'',estado:'activo',cuotas,totalCuotas:cuotas.reduce((a,q)=>a+q.monto,0),cobrado:0,saldo:costoFinal,fechaCreacion:hoy(),creadoEn:new Date().toISOString()});
-    } else if(cobrarOpt==='cortesia'){
-      if(pg){pg.saldo=0;pg.cobrado=pg.total;pg.tipoPago='cortesia';pg.nota='Condonado al finalizar';await dPut('pagos',pg);}
-    }
-  }
-  closeM('m-comp');toast('Atención completada ✅');renderCitas();renderDash();
+
+  c.estado = 'completada'; 
+  c.fin = new Date().toISOString(); 
+  c.notasFin = document.getElementById('co-not')?.value || '';
+  
+  await dPut('citas', c);
+  closeM('m-comp');
+  toast('Atención completada ✅');
+  renderCitas(); renderDash();
 }
 
 // ══════════════════════════════════════════
@@ -1186,18 +1204,37 @@ async function openNuevoPlan(planId = null){
      pl = planes.find(x=>x.id===planId) || {};
   }
   document.getElementById('m-plan').querySelector('.mtit span').textContent = planId ? '✏️ Editar Plan' : '🗂️ Plan de Tratamiento';
-  document.getElementById('mpl-body').innerHTML=`
+  // Reemplaza el innerHTML dentro de openNuevoPlan()
+document.getElementById('mpl-body').innerHTML=`
     <input type="hidden" id="pl-edit-id" value="${planId || ''}">
     <div class="sec hi" style="margin-bottom:11px"><h4>Paciente</h4>
       ${planId ? `<div style="padding:10px;background:var(--tbg);border:1px solid var(--bdr);border-radius:7px;font-size:12px;color:var(--teal);font-weight:600">👤 Paciente asignado (no se puede cambiar)</div><input type="hidden" id="pl-id" value="${pl.pacienteId}">` : buildAcField('pl','Buscar paciente')}
     </div>
     <div class="fgrid">
       <div class="fg full"><label>Nombre del Plan *</label><input id="pl-nom" value="${pl.nombre||''}" placeholder="Ej: Ortodoncia completa"></div>
-      <div class="fg"><label>Tipo</label><select id="pl-tipo"><option ${pl.tipo==='Ortodoncia'?'selected':''}>Ortodoncia</option><option ${pl.tipo==='Endodoncia'?'selected':''}>Endodoncia</option><option ${pl.tipo==='Implantología'?'selected':''}>Implantología</option><option ${pl.tipo==='Periodoncia'?'selected':''}>Periodoncia</option><option ${pl.tipo==='Blanqueamiento'?'selected':''}>Blanqueamiento</option><option ${pl.tipo==='Rehabilitación Oral'?'selected':''}>Rehabilitación Oral</option><option ${pl.tipo==='Cirugía Oral'?'selected':''}>Cirugía Oral</option><option ${pl.tipo==='Otro'?'selected':''}>Otro</option></select></div>
-      <div class="fg"><label>Duración estimada</label><select id="pl-dur"><option ${pl.duracion==='1 mes'?'selected':''}>1 mes</option><option ${pl.duracion==='3 meses'?'selected':''}>3 meses</option><option ${pl.duracion==='6 meses'?'selected':''}>6 meses</option><option ${pl.duracion==='1 año'?'selected':''}>1 año</option><option ${pl.duracion==='18 meses'?'selected':''}>18 meses</option><option ${pl.duracion==='2 años'?'selected':''}>2 años</option><option ${pl.duracion==='Indefinido'?'selected':''}>Indefinido</option></select></div>
-      <div class="fg"><label>Costo total (S/.)</label><input type="number" id="pl-cos" value="${pl.costo||''}" placeholder="0.00" min="0" step="0.01"></div>
-      <div class="fg"><label>Sesiones estimadas</label><input type="number" id="pl-nses" value="${pl.nSesiones||''}" placeholder="Ej: 24" min="1"></div>
+      <div class="fg"><label>Tipo</label><select id="pl-tipo"><option ${pl.tipo==='Ortodoncia'?'selected':''}>Ortodoncia</option><option ${pl.tipo==='Endodoncia'?'selected':''}>Endodoncia</option><option ${pl.tipo==='Otro'?'selected':''}>Otro</option></select></div>
+      <div class="fg"><label>Duración estimada</label><select id="pl-dur"><option ${pl.duracion==='1 mes'?'selected':''}>1 mes</option><option ${pl.duracion==='6 meses'?'selected':''}>6 meses</option><option ${pl.duracion==='1 año'?'selected':''}>1 año</option></select></div>
+      
+      <div class="fg"><label>Costo total (S/.)</label><input type="number" id="plan-costo" value="${pl.costo||''}" placeholder="0.00" min="0" step="0.01" oninput="calcularCuotas()"></div>
+      <div class="fg"><label>Sesiones estimadas</label><input type="number" id="plan-sesiones" value="${pl.nSesiones||''}" placeholder="Ej: 24" min="1" oninput="calcularCuotas()"></div>
+      
       <div class="fg full"><label>Descripción</label><textarea id="pl-desc" placeholder="Objetivos del tratamiento...">${pl.descripcion||''}</textarea></div>
+      
+      <div class="fg full" style="margin-top:5px; background:var(--s2); padding:10px; border-radius:8px; border:1px solid var(--bdr);">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; text-transform:none; color:var(--tx);">
+              <input type="checkbox" id="vincular-pagos" onchange="calcularCuotas()" style="width:auto; accent-color:var(--teal);">
+              Vincular y dividir el pago entre el número de sesiones
+          </label>
+          
+          <div id="contenedor-cuotas" style="display:none; margin-top:10px;">
+              <table class="ctab">
+                  <thead><tr><th>Sesión</th><th>Monto (S/)</th><th>Estado</th></tr></thead>
+                  <tbody id="body-cuotas"></tbody>
+              </table>
+              <button type="button" class="btn btn-sm btn-info" onclick="agregarCuotaExtra()" style="margin-top:8px;">＋ Agregar sesión extra</button>
+          </div>
+      </div>
+
     </div>
     <div class="factions"><button class="btn btn-p" onclick="savePlan()">${planId ? '💾 Guardar Cambios' : '🗂️ Crear Plan'}</button><button class="btn btn-g" onclick="closeM('m-plan')">Cancelar</button></div>`;
   openM('m-plan');
@@ -1674,13 +1711,7 @@ function agregarCuotaExtra() {
     `;
 }
 
-const datosPlan = {
-    // ... tus otros datos (pacienteId, descripción, etc)
-    nSesiones: document.getElementById('plan-sesiones').value,
-    costo: document.getElementById('plan-costo').value,
-    // AQUÍ INYECTAS EL JSON DE LOS PAGOS VINCULADOS
-    cuotas: JSON.stringify(cuotasActuales) 
-};
+
 
 // Permite modificar manualmente una cuota si el usuario lo desea
 function actualizarMontoManual(index, nuevoMonto) {

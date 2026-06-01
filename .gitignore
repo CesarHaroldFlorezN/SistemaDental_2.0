@@ -1,2 +1,11 @@
+# Archivos de caché de Python
 __pycache__/
+
+# Carpetas y archivos de empaquetado generados por PyInstaller
+build/
+dist/
+SistemaDental.spec
+
+# Base de datos (¡Muy importante!)
+*.db
 dentalpro.db

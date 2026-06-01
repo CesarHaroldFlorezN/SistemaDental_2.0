@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, Text, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel
 from typing import List, Optional, Any, Dict
+import uvicorn
 
 # ══════════════════════════════════════════
 # 1. CONFIGURACIÓN DE BASE DE DATOS
@@ -182,14 +183,6 @@ def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db
     
     return {c.name: getattr(nuevo_registro, c.name) for c in nuevo_registro.__table__.columns}
 
-# PUT: Actualizar un registro existente
-    nuevo_registro = MODELOS[store](**data)
-    db.add(nuevo_registro)
-    db.commit()
-    db.refresh(nuevo_registro)
-    
-    # Devolver el objeto creado (incluyendo el ID autogenerado)
-    return {c.name: getattr(nuevo_registro, c.name) for c in nuevo_registro.__table__.columns}
 
 # PUT: Actualizar un registro existente
 @app.put("/api/{store}/{item_id}")
@@ -222,3 +215,11 @@ def delete_record(store: str, item_id: int, db: Session = Depends(get_db)):
     db.delete(registro)
     db.commit()
     return {"message": "Eliminado exitosamente"}
+
+
+
+# ... (Todo tu código anterior de app = FastAPI(), tus rutas, etc.) ...
+
+if __name__ == "__main__":
+    # Pasamos la variable 'app' directamente, sin comillas
+    uvicorn.run(app, host="127.0.0.1", port=8000)
