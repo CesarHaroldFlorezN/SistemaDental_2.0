@@ -153,12 +153,6 @@ def get_all(store: str, db: Session = Depends(get_db)):
     return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in registros]
 
 # POST: Crear un nuevo registro
-   
-    
-    # Extraemos el ID si viene (para ignorarlo al crear)
-    data.pop("id", None)
-
-# POST: Crear un nuevo registro
 @app.post("/api/{store}")
 def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db)):
     if store not in MODELOS:
@@ -188,6 +182,7 @@ def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db
     
     return {c.name: getattr(nuevo_registro, c.name) for c in nuevo_registro.__table__.columns}
 
+# PUT: Actualizar un registro existente
     nuevo_registro = MODELOS[store](**data)
     db.add(nuevo_registro)
     db.commit()

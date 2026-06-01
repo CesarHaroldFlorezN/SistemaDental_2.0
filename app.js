@@ -345,13 +345,17 @@ async function savePac() {
     }
   }
 
-  // Si pasa la validación, armamos los datos
+  // Si pasa la validación, armamos los datos (¡Completos!)
   const data = { 
     nombre: nom, 
     cedula: ced, 
     codigo_ficha: codFicha, 
     nacimiento: document.getElementById('fp-nac').value, 
-    // ... el resto de tu código sigue igual
+    telefono: document.getElementById('fp-tel').value,
+    genero: document.getElementById('fp-gen').value,
+    direccion: document.getElementById('fp-dir').value,
+    alergias: document.getElementById('fp-ale').value,
+    medicamentos: document.getElementById('fp-med').value,
     fechaReg: hoy() 
   };
   
@@ -1596,6 +1600,91 @@ async function renderDash(){
   document.getElementById('d-alerts').innerHTML=alerts||'<div class="empty" style="padding:12px"><p>✅ Todo al día</p></div>';
   const cm=citas.filter(c=>c.fecha===man&&c.estado!=='cancelada').sort((a,b)=>a.hora.localeCompare(b.hora));
   document.getElementById('d-man').innerHTML=cm.length?cm.slice(0,3).map(c=>{const p=pm[c.pacienteId]||{};return`<div class="cc" style="padding:7px 9px"><div class="ctime"><div class="ct" style="font-size:11px">${c.hora}</div></div><div class="cinfo" style="flex:1"><div class="pn" style="font-size:12px">${p.nombre||'—'}</div><div class="tr">${c.procedimiento||'—'}</div></div></div>`;}).join(''):'<div class="empty" style="padding:12px"><p>Sin citas mañana</p></div>';
+}
+// Variable global para almacenar las cuotas actuales antes de guardar
+let cuotasActuales = [];
+
+function calcularCuotas() {
+    const numSesiones = parseInt(document.getElementById('plan-sesiones').value) || 1;
+    const costoTotal = parseFloat(document.getElementById('plan-costo').value) || 0;
+    const vincular = document.getElementById('vincular-pagos').checked;
+    const contenedor = document.getElementById('contenedor-cuotas');
+    const tbody = document.getElementById('body-cuotas');
+
+    if (vincular && numSesiones > 0 && costoTotal > 0) {
+        contenedor.style.display = 'block';
+        cuotasActuales = []; // Reiniciamos el arreglo
+        tbody.innerHTML = ''; // Limpiamos la tabla visual
+
+        // Dividimos el costo en partes iguales
+        let montoPorCuota = (costoTotal / numSesiones).toFixed(2);
+
+        for (let i = 1; i <= numSesiones; i++) {
+            // Creamos el objeto JSON tal como lo espera tu base de datos
+            let cuota = {
+                num: i,
+                tipo: "cuota",
+                monto: parseFloat(montoPorCuota),
+                pagado: false,
+                fechaPago: null,
+                metodoPago: null
+            };
+            cuotasActuales.push(cuota);
+
+            // Lo dibujamos en la tabla
+            tbody.innerHTML += `
+                <tr>
+                    <td>Sesión ${i}</td>
+                    <td>S/ <input type="number" value="${cuota.monto}" onchange="actualizarMontoManual(${i-1}, this.value)"></td>
+                    <td>Pendiente</td>
+                </tr>
+            `;
+        }
+    } else {
+        // Si desmarca el checkbox, ocultamos y limpiamos
+        contenedor.style.display = 'none';
+        cuotasActuales = [];
+    }
+}
+
+function agregarCuotaExtra() {
+    const numSesionesInput = document.getElementById('plan-sesiones');
+    let nuevoNumero = parseInt(numSesionesInput.value) + 1;
+    numSesionesInput.value = nuevoNumero; // Actualizamos el input visual
+
+    let nuevaCuota = {
+        num: nuevoNumero,
+        tipo: "cuota_extra", // Etiqueta para saber que se agregó después
+        monto: 0, // Se deja en 0 para que recepción ingrese el costo del nuevo procedimiento
+        pagado: false,
+        fechaPago: null,
+        metodoPago: null
+    };
+    
+    cuotasActuales.push(nuevaCuota);
+    
+    // Agregamos la fila a la tabla visual
+    const tbody = document.getElementById('body-cuotas');
+    tbody.innerHTML += `
+        <tr style="background-color: #eef8ff;"> <!-- Destacar que es extra -->
+            <td>Sesión ${nuevoNumero} (Extra)</td>
+            <td>S/ <input type="number" value="0" onchange="actualizarMontoManual(${cuotasActuales.length - 1}, this.value)" placeholder="Monto extra"></td>
+            <td>Pendiente</td>
+        </tr>
+    `;
+}
+
+const datosPlan = {
+    // ... tus otros datos (pacienteId, descripción, etc)
+    nSesiones: document.getElementById('plan-sesiones').value,
+    costo: document.getElementById('plan-costo').value,
+    // AQUÍ INYECTAS EL JSON DE LOS PAGOS VINCULADOS
+    cuotas: JSON.stringify(cuotasActuales) 
+};
+
+// Permite modificar manualmente una cuota si el usuario lo desea
+function actualizarMontoManual(index, nuevoMonto) {
+    cuotasActuales[index].monto = parseFloat(nuevoMonto);
 }
 
 // ══════════════════════════════════════════
