@@ -415,6 +415,36 @@ async function verFicha(id) {
 // ══════════════════════════════════════════
 const PROCS = ['Consulta de evaluación','Limpieza dental','Empaste / Resina','Endodoncia (canal)','Extracción simple','Extracción muela juicio','Corona dental','Implante dental','Blanqueamiento','Ortodoncia — colocación','Ortodoncia — control','Prótesis dental','Rayos X','Cirugía oral','Otro'];
 let ncPagoTipo = 'contado';
+function getProcRowHTML(selVal) {
+    const isOtro = selVal && !PROCS.includes(selVal) && selVal !== '';
+    const mainVal = isOtro ? 'Otro' : selVal;
+    return `<div class="proc-row" style="display:flex; gap:5px; margin-bottom:5px; align-items:flex-start">
+      <div style="flex:1">
+        <select class="proc-sel" onchange="this.nextElementSibling.style.display=this.value==='Otro'?'':'none'">
+          <option value="">— Seleccionar —</option>
+          ${PROCS.map(p=>`<option${mainVal===p?' selected':''}>${p}</option>`).join('')}
+        </select>
+        <input class="proc-otro" placeholder="Especificar..." value="${isOtro?selVal:''}" style="display:${isOtro?'':'none'}; margin-top:4px; width:100%">
+      </div>
+      <button class="btn btn-err btn-sm" onclick="this.closest('.proc-row').remove()" style="padding:6px 9px" title="Quitar">✕</button>
+    </div>`;
+}
+
+function addProcRow(containerId) {
+    document.getElementById(containerId).insertAdjacentHTML('beforeend', getProcRowHTML(''));
+}
+
+function getSelectedProcs(containerId) {
+    const rows = document.querySelectorAll('#' + containerId + ' .proc-row');
+    let procs = [];
+    rows.forEach(r => {
+        const sel = r.querySelector('.proc-sel').value;
+        const otro = r.querySelector('.proc-otro').value.trim();
+        const p = sel === 'Otro' ? otro : sel;
+        if (p && p !== '— Seleccionar —') procs.push(p);
+    });
+    return procs.join(' + ');
+}
 
 function buildAcField(prefix, label) {
   return `<div class="fg full">
@@ -450,8 +480,11 @@ function openNuevaCita(pacId, planId) {
       <div class="fgrid">
         <div class="fg"><label>Fecha *</label><input type="date" id="nc-fec" value="${hoy()}"></div>
         <div class="fg"><label>Hora *</label><input type="time" id="nc-hor" value="${hor}"></div>
-        <div class="fg full"><label>Procedimiento *</label>${buildProcSelect('')}</div>
-        <div class="fg full" id="nc-otro-w" style="display:none"><label>Especificar</label><input id="nc-otro" placeholder="Describe el procedimiento..."></div>
+        <div class="fg full">
+        <label>Procedimientos *</label>
+        <div id="nc-proc-list">${getProcRowHTML('')}</div>
+        <button class="btn btn-sm btn-g" style="align-self:flex-start; margin-top:2px" onclick="addProcRow('nc-proc-list')">＋ Añadir otro procedimiento</button>
+        </div>
         <div class="fg full"><label>Notas</label><textarea id="nc-not" placeholder="Síntomas, indicaciones..."></textarea></div>
       </div>
     </div>
@@ -464,7 +497,7 @@ function openNuevaCita(pacId, planId) {
             <option value="multiple">Múltiples sesiones</option>
           </select>
         </div>
-        <div class="fg" id="nc-rec-n-w" style="display:none"><label>Sesiones adicionales</label><input type="number" id="nc-rec-n" placeholder="Ej: 3" min="1" max="30" oninput="ncGenSes()"></div>
+        <div class="fg" id="nc-rec-n-w" style="display:none"><label>Total de sesiones</label><input type="number" id="nc-rec-n" placeholder="Ej: 3" min="2" max="30" oninput="ncGenSes()"></div>
         <div class="fg" id="nc-rec-int-w" style="display:none"><label>Intervalo</label>
           <select id="nc-rec-int" onchange="ncGenSes()">
             <option value="7">Semanal</option><option value="14">Quincenal</option><option value="30" selected>Mensual</option><option value="45">45 días</option><option value="60">Bimestral</option>
@@ -509,13 +542,13 @@ function ncGenSes() {
   const int=parseInt(document.getElementById('nc-rec-int').value)||30;
   const proc=document.getElementById('nc-proc').value||'Sesión';
   const lista=document.getElementById('nc-ses-lista');
-  if (!fec||n<1){lista.innerHTML='';return;}
+  if (!fec||n<2){lista.innerHTML='';return;}
   let html='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--tx2);margin-bottom:6px">Edita fecha/hora de cada sesión:</div>';
-  for(let i=0;i<=n;i++){
+  for(let i=0; i<n; i++){
     const fd=i===0?fec:addDays(fec,i*int);
     html+=`<div class="sesrow">
       <div class="sesnum">${i+1}</div>
-      <div style="font-size:11px;font-weight:600">${i===0?proc+' (Principal)':'Sesión '+(i+1)+' de '+(n+1)}</div>
+      <div style="font-size:11px;font-weight:600">${i===0?proc+' (Principal)':'Sesión '+(i+1)+' de '+n}</div>
       <input type="date" id="ns-fec-${i}" value="${fd}">
       <input type="time" id="ns-hor-${i}" value="${hor||'09:00'}" style="max-width:90px">
       <span></span>
@@ -618,9 +651,7 @@ async function saveCita() {
   const pacId=parseInt(document.getElementById('nc-id')?.value);
   const fec=document.getElementById('nc-fec')?.value;
   const hor=document.getElementById('nc-hor')?.value;
-  const procV=document.getElementById('nc-proc')?.value;
-  const otro=document.getElementById('nc-otro')?.value?.trim();
-  const proc=procV==='Otro'?(otro||'Otro'):procV;
+  const proc = getSelectedProcs('nc-proc-list');
   if(!pacId){toast('Selecciona un paciente','err');return;}
   if(!fec||!hor){toast('Fecha y hora obligatorias','err');return;}
  if(!proc){toast('Selecciona un procedimiento','err');return;}
@@ -633,11 +664,11 @@ async function saveCita() {
 
   // Build sessions list
   const sesiones=[];
-  if(recTipo==='multiple'&&recN>0){
-    for(let i=0;i<=recN;i++){
+  if(recTipo==='multiple'&&recN>1){
+    for(let i=0; i<recN; i++){
       const sf=document.getElementById('ns-fec-'+i)?.value||addDays(fec,i*30);
       const sh=document.getElementById('ns-hor-'+i)?.value||hor;
-      sesiones.push({fecha:sf,hora:sh,num:i+1,total:recN+1});
+      sesiones.push({fecha:sf,hora:sh,num:i+1,total:recN});
     }
   } else { sesiones.push({fecha:fec,hora:hor,num:1,total:1}); }
 
@@ -691,7 +722,19 @@ async function renderCitas(){
   const fd=document.getElementById('q-fecha')?.value||'';
 
   let lista=citaPil==='todas'?[...citas]:citas.filter(c=>c.estado===citaPil);
-  if(q) lista=lista.filter(c=>(pm[c.pacienteId]?.nombre||'').toLowerCase().includes(q)||(c.procedimiento||'').toLowerCase().includes(q));
+  if (q.trim()) {
+    const terminos = q.trim().split(/\s+/);
+    lista = lista.filter(c => {
+      const p = pm[c.pacienteId] || {};
+      const nomPac = (p.nombre || '').toLowerCase();
+      const cedPac = (p.cedula || '').toLowerCase(); // <--- Capturamos el DNI / Cédula del paciente
+      const proc = (c.procedimiento || '').toLowerCase();
+      
+      // Ahora valida que cada término esté en el nombre, en el DNI o en el procedimiento
+      return terminos.every(t => nomPac.includes(t) || cedPac.includes(t) || proc.includes(t));
+    });
+  }
+
   if(fd) lista=lista.filter(c=>c.fecha===fd);
 
   // Smart sort
@@ -768,10 +811,23 @@ async function abrirCompletar(citaId){
   const saldo=pg?parseFloat(pg.saldo||0):(c.costo||0);
   const cobAnt=pg?parseFloat(pg.cobrado||0):0;
   const tpAct=pg?pg.tipoPago:'contado';
+  const procsArr = (c.procedimiento||'').split(' + ');
+  let procHTML = procsArr.map(p => getProcRowHTML(p)).join('');
+  if(!procHTML) procHTML = getProcRowHTML();
+
+
+
+
   document.getElementById('mco-tit').textContent='✅ Completar — '+p.nombre;
   let html=`<div class="cres">
+
+  <div class="sec hi" style="border-color:var(--teal);margin-bottom:11px">
+  <h4 style="color:var(--teal)">🛠️ Procedimientos Realizados</h4>
+  <div id="co-proc-list">${procHTML}</div>
+  <button class="btn btn-sm btn-g" style="margin-top:6px" onclick="addProcRow('co-proc-list')">＋ Añadir otro procedimiento</button>
+  </div>
     <div class="crow"><span class="t-gray">Paciente</span><strong>${p.nombre}</strong></div>
-    <div class="crow"><span class="t-gray">Procedimiento</span><strong>${c.procedimiento||'—'}</strong></div>
+    
     <div class="crow"><span class="t-gray">Fecha</span>${fDate(c.fecha)} ${c.hora||''}</div>
     <div class="crow"><span class="t-gray">Costo registrado</span>${fMon(c.costo)}</div>
     ${cobAnt>0?`<div class="crow"><span class="t-gray">Ya cobrado</span><span class="t-ok">${fMon(cobAnt)}</span></div>`:''}
@@ -836,10 +892,14 @@ async function guardarCompletado(citaId,pagoId,saldo){
   // Cost adjustment
   const costoFinal=parseFloat(document.getElementById('co-final')?.value)||c.costo||0;
   const costoDiff=costoFinal-(c.costo||0);
+  const procFinal = getSelectedProcs('co-proc-list');
+  if (procFinal) c.procedimiento = procFinal;
+
   if(Math.abs(costoDiff)>0.001){
     c.costo=costoFinal;
     saldo=Math.max(0,saldo+costoDiff);
     if(pagoId){const pg=pagos.find(x=>x.id===pagoId);if(pg){pg.total=costoFinal;pg.saldo=saldo;await dPut('pagos',pg);}}
+    if(pagoId){const pg=pagos.find(x=>x.id===pagoId);
   }
   c.estado='completada';c.fin=new Date().toISOString();c.notasFin=document.getElementById('co-not')?.value||'';
   await dPut('citas',c);
@@ -980,6 +1040,12 @@ async function editarCita(citaId){
   }
 
   const sesIds=JSON.stringify(grp.map(s=>s.id));
+  const procsArr = (c.procedimiento||'').split(' + ');
+  let procHTML = procsArr.map(p => getProcRowHTML(p)).join('');
+  if(!procHTML) procHTML = getProcRowHTML('');
+
+
+
   document.getElementById('me-body').innerHTML=`
     <div class="cres" style="margin-bottom:12px">
       <div class="crow"><span class="t-gray">Paciente</span><strong>${p.nombre}</strong></div>
@@ -997,7 +1063,11 @@ async function editarCita(citaId){
             ${PROCS.map(pr=>`<option${(c.procedimiento===pr||c.motivo===pr)?' selected':''}>${pr}</option>`).join('')}
           </select>
         </div>
-        <div class="fg full" id="ec-otro-w" style="display:none"><label>Especificar</label><input id="ec-otro" value=""></div>
+        <div class="fg full">
+        <label>Procedimientos</label>
+        <div id="ec-proc-list">${procHTML}</div>
+        <button class="btn btn-sm btn-g" style="align-self:flex-start; margin-top:2px" onclick="addProcRow('ec-proc-list')">＋ Añadir otro procedimiento</button>
+        </div>
         <div class="fg full"><label>Notas</label><textarea id="ec-notas">${c.notas||''}</textarea></div>
       </div>
     </div>
@@ -1031,9 +1101,8 @@ async function guardarEditCita(citaId,sesIds){
   const c=citas.find(x=>x.id===citaId);if(!c)return;
   const fec=document.getElementById('ec-fec')?.value||c.fecha;
   const hor=document.getElementById('ec-hor')?.value||c.hora;
-  const procV=document.getElementById('ec-proc')?.value||'';
-  const otro=(document.getElementById('ec-otro')?.value||'').trim();
-  const proc=procV==='Otro'?(otro||'Otro'):procV;
+  const proc = getSelectedProcs('ec-proc-list');
+  if (proc) c.procedimiento = proc;
   const costoNuevo=parseFloat(document.getElementById('ec-costo')?.value)||0;
   const met=document.getElementById('ec-met')?.value||'';
   if(!fec||!hor){toast('Fecha y hora obligatorias','err');return;}
