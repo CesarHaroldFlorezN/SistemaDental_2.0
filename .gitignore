@@ -9,3 +9,4 @@ SistemaDental.spec
 # Base de datos (¡Muy importante!)
 *.db
 dentalpro.db
+dist.zip
