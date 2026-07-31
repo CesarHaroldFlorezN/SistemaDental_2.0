@@ -106,4 +106,28 @@ export const api = {
   eliminarPlan: (id) => request(`${API_URL}/planes/${id}`, {
     method: 'DELETE'
   }),
+
+
+
+  // --- IMPORTAR / EXPORTAR ---
+  exportarPacientes: () => {
+    // Abre la ruta en una nueva pestaña forzando la descarga del archivo CSV
+    window.location.href = `${API_URL}/exportar/pacientes`;
+  },
+  
+  importarPacientes: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    // Para archivos, usamos fetch directamente para que el navegador maneje los headers (multipart/form-data)
+    return fetch(`${API_URL}/importar/pacientes`, {
+      method: 'POST',
+      body: formData
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Error al importar el archivo.');
+      }
+      return res.json();
+    });
+  },
 };

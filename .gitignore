@@ -1,12 +1,15 @@
-# Archivos de caché de Python
-__pycache__/
-
-# Carpetas y archivos de empaquetado generados por PyInstaller
-build/
-dist/
-SistemaDental.spec
-
-# Base de datos (¡Muy importante!)
+# Base de datos y respaldos
+data/
 *.db
-dentalpro.db
-dist.zip
+*.csv
+
+# Carpetas pesadas de React y Python
+node_modules/
+__pycache__/
+dist/
+build/
+
+# Entornos virtuales y variables de entorno
+env/
+venv/
+.env

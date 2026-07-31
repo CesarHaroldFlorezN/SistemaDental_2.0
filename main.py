@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, JSON
@@ -7,6 +7,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from typing import Dict, Any
 import uvicorn
 import os
+import csv
+import io
 
 # 1. CONFIGURACIÓN DE BASE DE DATOS
 os.makedirs("./data", exist_ok=True) # Asegura que exista la carpeta data/
@@ -226,6 +228,86 @@ def delete_record(store: str, item_id: int, db: Session = Depends(get_db)):
     db.delete(registro)
     db.commit()
     return {"message": "Eliminado exitosamente"}
+
+
+# ==========================================
+# RUTAS DE EXPORTACIÓN E IMPORTACIÓN CSV
+# ==========================================
+
+@app.get("/api/exportar/pacientes")
+def exportar_pacientes(db: Session = Depends(get_db)):
+    pacientes = db.query(PacienteDB).all()
+    
+    # Crear un archivo CSV en memoria
+    output = io.StringIO()
+    
+    # ¡ESTA ES LA LÍNEA MÁGICA PARA EXCEL! (UTF-8 BOM)
+    output.write('\ufeff') 
+    
+    writer = csv.writer(output, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+    
+    # Escribir la primera fila (los encabezados obligatorios)
+    headers = ["codigo_ficha", "cedula", "nombre", "telefono", "correo", "fechaNacimiento", "genero", "direccion", "alergias", "medicamentos"]
+    writer.writerow(headers)
+    
+    # Escribir los datos de cada paciente
+    for p in pacientes:
+        writer.writerow([
+            p.codigo_ficha or "", p.cedula or "", p.nombre or "", 
+            p.telefono or "", p.correo or "", p.fechaNacimiento or "", 
+            p.genero or "", p.direccion or "", p.alergias or "", p.medicamentos or ""
+        ])
+    
+    output.seek(0)
+    
+    # Enviar el archivo como descarga automática
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=pacientes_respaldo.csv"}
+    )
+
+@app.post("/api/importar/pacientes")
+async def importar_pacientes(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser formato CSV.")
+    
+    content = await file.read()
+    decoded_content = content.decode('utf-8-sig') # utf-8-sig evita problemas con acentos y caracteres especiales
+    csv_reader = csv.DictReader(io.StringIO(decoded_content), delimiter=',')
+    
+    nuevos, actualizados, omitidos = 0, 0, 0
+
+    for row in csv_reader:
+        nombre = row.get("nombre", "").strip()
+        cedula = row.get("cedula", "").strip()
+        
+        if not nombre:
+            omitidos += 1
+            continue # El nombre es obligatorio, si no hay, saltamos la fila
+            
+        # Buscar si el DNI ya existe para no duplicar
+        paciente_existente = db.query(PacienteDB).filter(PacienteDB.cedula == cedula).first() if cedula else None
+            
+        if paciente_existente:
+            # Si existe, actualizamos sus datos con los del Excel
+            for key, value in row.items():
+                if hasattr(paciente_existente, key) and key != "id" and value.strip():
+                    setattr(paciente_existente, key, value.strip())
+            actualizados += 1
+        else:
+            # Si no existe, creamos uno nuevo
+            nuevo_paciente = PacienteDB(**{k: v.strip() for k, v in row.items() if hasattr(PacienteDB, k) and k != "id"})
+            db.add(nuevo_paciente)
+            nuevos += 1
+
+    try:
+        db.commit()
+        return {"message": f"Éxito: {nuevos} nuevos, {actualizados} actualizados, {omitidos} omitidos."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al guardar: {str(e)}")
+
 
 # --- CONEXIÓN PARA SERVIR EL FRONTEND ---
 app.mount("/static", StaticFiles(directory="static"), name="static")
