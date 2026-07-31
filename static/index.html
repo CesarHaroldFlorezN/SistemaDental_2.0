@@ -278,10 +278,9 @@ select option{background:var(--surface)}
     </div>
 
     <div id="page-pacientes" class="page">
-      <div class="sbwrap"><div class="sbin"><span class="si">🔍</span><input id="q-pac" placeholder="Buscar por nombre, DNI o teléfono..." oninput="renderPac()"></div><button class="clrbtn" onclick="clearQ('q-pac',renderPac)">✕</button></div>
+      <div class="sbwrap"><div class="sbin"><span class="si">🔍</span><input id="q-pac" placeholder="Buscar por Nombre, Ficha, DNI o Teléfono..." oninput="renderPac()"></div><button class="clrbtn" onclick="clearQ('q-pac',renderPac)">✕</button></div>
       <div class="card"><div class="ctit">Pacientes <small id="pac-cnt" style="font-size:11px;color:var(--tx2);font-family:Inter,sans-serif;font-weight:400"></small></div>
-        <div class="tw"><table><thead><tr><th>Paciente</th><th>DNI</th><th>Teléfono</th><th>Edad</th><th>Última visita</th><th>Deuda</th><th></th></tr></thead><tbody id="tb-pac"></tbody></table></div>
-      </div>
+<div class="tw"><table><thead><tr><th>Ficha</th><th>Paciente</th><th>DNI</th><th>Teléfono</th><th>Edad</th><th>Última visita</th><th>Deuda</th><th></th></tr></thead><tbody id="tb-pac"></tbody></table></div>      </div>
     </div>
 
     <div id="page-citas" class="page">

@@ -241,7 +241,7 @@ function acOpen(inpId, hidId, ctx) {
   if (!q) { portal.classList.remove('on'); return; }
   const terminos = q.split(/\s+/);
   const hits = pac_cache.filter(p => {
-    const nom = p.nombre.toLowerCase(), ced = p.cedula || '', tel = p.telefono || '';
+    const nom = p.nombre.toLowerCase(), ced = p.cedula || '', tel = p.telefono || '', fic = (p.codigo_ficha || '').toLowerCase();
     return terminos.every(t => nom.includes(t) || ced.includes(t) || tel.includes(t));
   }).slice(0,8);
   portal.innerHTML = hits.length
@@ -384,24 +384,43 @@ async function renderPac() {
     const nom = p.nombre.toLowerCase();
     const ced = p.cedula || '';
     const tel = p.telefono || '';
+    const fic = (p.codigo_ficha || '').toLowerCase();
     // Verifica que TODAS las palabras buscadas existan en el paciente
-    return terminos.every(t => nom.includes(t) || ced.includes(t) || tel.includes(t));
+    return terminos.every(t => nom.includes(t) || ced.includes(t) || tel.includes(t) || fic.includes(t));
+  });
+
+  // --- NUEVO: ORDENAMIENTO INTELIGENTE POR NÚMERO DE FICHA ---
+  fil.sort((a, b) => {
+    // Extraemos solo los números por si acaso escriben "F-915" o "915"
+    const numA = parseInt((a.codigo_ficha || '').replace(/\D/g, ''), 10) || 999999;
+    const numB = parseInt((b.codigo_ficha || '').replace(/\D/g, ''), 10) || 999999;
+    
+    if (numA !== numB) {
+      return numA - numB; // Ordena de menor a mayor (914, 915, 916...)
+    }
+    // Si no tienen ficha o es igual, ordena alfabéticamente por nombre
+    return (a.nombre || '').localeCompare(b.nombre || '');
   });
   document.getElementById('pac-cnt').textContent = fil.length + ' registro' + (fil.length!==1?'s':'');
+  
   const tb = document.getElementById('tb-pac');
   if (!fil.length) { tb.innerHTML='<tr><td colspan="7"><div class="empty"><div class="ei">👥</div><p>Sin pacientes</p></div></td></tr>'; return; }
   tb.innerHTML = fil.map(p => {
     const d = deuMap[p.id]||0;
     return `<tr>
+      <td><span class="b b-teal fw7">${p.codigo_ficha || 'N/A'}</span></td>
       <td><div class="pname">${avt(p.nombre,26)}<div><div style="font-size:12px;font-weight:600">${p.nombre}</div>${p.alergias?`<div style="font-size:10px;color:var(--err)">⚠️ ${p.alergias.slice(0,40)}</div>`:''}</div></div></td>
-      <td>${p.cedula||'—'}</td><td>${p.telefono||'—'}</td><td>${edad(p.nacimiento)}</td>
+      <td>${p.cedula||'—'}</td>
+      <td>${p.telefono||'—'}</td>
+      <td>${edad(p.nacimiento)}</td>
       <td>${uvMap[p.id]?fDate(uvMap[p.id]):'<span class="t-gray">Sin visitas</span>'}</td>
       <td>${d>0?`<span class="fw7 t-err">${fMon(d)}</span>`:'<span class="t-ok">✓ Al día</span>'}</td>
       <td><div style="display:flex;gap:3px">
-        <button class="btn btn-sm btn-g" onclick="verFicha(${p.id})">📋</button>
+        <button class="btn btn-sm btn-g" onclick="verFicha(${p.id})">👁️</button>
         <button class="btn btn-sm btn-g" onclick="openNuevoPac(${p.id})">✏️</button>
-        <button class="btn btn-sm btn-err" onclick="delPac(${p.id})">🗑</button>
-      </div></td></tr>`;
+        <button class="btn btn-sm btn-err" onclick="delPac(${p.id})">🗑️</button>
+      </div></td>
+    </tr>`;
   }).join('');
 }
 async function delPac(id) { if(!confirm('¿Eliminar paciente?'))return; await dDel('pacientes',id); await refreshCache(); toast('Eliminado','warn'); renderPac(); }

@@ -4,11 +4,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from pydantic import BaseModel
-from typing import List, Optional, Any, Dict
+from typing import Dict, Any
 import uvicorn
+import os
 
 # 1. CONFIGURACIÓN DE BASE DE DATOS
+os.makedirs("./data", exist_ok=True) # Asegura que exista la carpeta data/
 DATABASE_URL = "sqlite:///./data/dentalpro.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -19,11 +20,12 @@ class PacienteDB(Base):
     __tablename__ = "pacientes"
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
-    cedula = Column(String(50))
-    nacimiento = Column(String(50))
+    cedula = Column(String(50), index=True)
+    fechaNacimiento = Column(String(50))  # Corregido para coincidir con React
     genero = Column(String(50))
     telefono = Column(String(50))
-    codigo_ficha = Column(String(50))
+    correo = Column(String(100))          # Agregado
+    codigo_ficha = Column(String(50), index=True)
     direccion = Column(String(200))
     alergias = Column(Text)
     medicamentos = Column(Text)
@@ -143,22 +145,30 @@ def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Tabla no encontrada")
         
     if store == "pacientes":
-        cedula_nueva = data.get("cedula")
-        ficha_nueva = data.get("codigo_ficha")
+        cedula_nueva = str(data.get("cedula", "")).strip()
+        ficha_nueva = str(data.get("codigo_ficha", "")).strip()
                 
         if cedula_nueva:
             if db.query(PacienteDB).filter(PacienteDB.cedula == cedula_nueva).first():
-                raise HTTPException(status_code=400, detail="El DNI ya está registrado.")
+                raise HTTPException(status_code=400, detail=f"El DNI/Cédula '{cedula_nueva}' ya está registrado.")
                         
         if ficha_nueva:
             if db.query(PacienteDB).filter(PacienteDB.codigo_ficha == ficha_nueva).first():
-                raise HTTPException(status_code=400, detail="El código de ficha ya existe.")
+                raise HTTPException(status_code=400, detail=f"El código de ficha '{ficha_nueva}' ya existe.")
                 
-    data.pop("id", None)
-    nuevo_registro = MODELOS[store](**data)
-    db.add(nuevo_registro)
-    db.commit()
-    db.refresh(nuevo_registro)
+    # Filtramos solo las columnas válidas de la tabla de BD
+    valid_columns = {c.name for c in MODELOS[store].__table__.columns}
+    filtered_data = {k: v for k, v in data.items() if k in valid_columns and k != "id"}
+    
+    nuevo_registro = MODELOS[store](**filtered_data)
+    try:
+        db.add(nuevo_registro)
+        db.commit()
+        db.refresh(nuevo_registro)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error en base de datos: {str(e)}")
+        
     return {c.name: getattr(nuevo_registro, c.name) for c in nuevo_registro.__table__.columns}
 
 @app.put("/api/{store}/{item_id}")
@@ -169,12 +179,39 @@ def update_record(store: str, item_id: int, data: Dict[str, Any], db: Session = 
     registro = db.query(MODELOS[store]).filter(MODELOS[store].id == item_id).first()
     if not registro:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-        
+
+    if store == "pacientes":
+        cedula_nueva = str(data.get("cedula", "")).strip()
+        ficha_nueva = str(data.get("codigo_ficha", "")).strip()
+                
+        if cedula_nueva:
+            existe_dni = db.query(PacienteDB).filter(
+                PacienteDB.cedula == cedula_nueva, 
+                PacienteDB.id != item_id
+            ).first()
+            if existe_dni:
+                raise HTTPException(status_code=400, detail=f"El DNI '{cedula_nueva}' ya está registrado en otro paciente.")
+                        
+        if ficha_nueva:
+            existe_ficha = db.query(PacienteDB).filter(
+                PacienteDB.codigo_ficha == ficha_nueva, 
+                PacienteDB.id != item_id
+            ).first()
+            if existe_ficha:
+                raise HTTPException(status_code=400, detail=f"El código de ficha '{ficha_nueva}' ya existe en otro paciente.")
+                
+    # Actualizar solo campos que existan en el modelo
+    valid_columns = {c.name for c in MODELOS[store].__table__.columns}
     for key, value in data.items():
-        if hasattr(registro, key) and key != "id":
+        if key in valid_columns and key != "id":
             setattr(registro, key, value)
             
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al actualizar: {str(e)}")
+        
     return {"message": "Actualizado exitosamente", "id": item_id}
 
 @app.delete("/api/{store}/{item_id}")
