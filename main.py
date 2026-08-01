@@ -4,11 +4,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Literal
+from pydantic import BaseModel, Field
+from datetime import datetime
 import uvicorn
 import os
 import csv
 import io
+from pathlib import Path
+import sys
 
 # 1. CONFIGURACIÓN DE BASE DE DATOS
 os.makedirs("./data", exist_ok=True) # Asegura que exista la carpeta data/
@@ -124,7 +128,98 @@ def get_db():
         yield db
     finally:
         db.close()
+class CitaPagoPayload(BaseModel):
+    pacienteId: int
 
+    planId: Optional[int] = None
+    citaBaseId: Optional[int] = None
+
+    fecha: str
+    hora: str
+    procedimiento: str
+
+    notas: str = ""
+    estado: str = "pendiente"
+
+    costo: float = Field(default=0, ge=0)
+
+    tipoPago: Literal[
+        "contado",
+        "completo",
+        "anticipo",
+        "cuotas",
+        "cortesia"
+    ] = "contado"
+
+    montoPagado: float = Field(default=0, ge=0)
+    metodoPago: str = "Efectivo"
+
+    sesionNum: int = Field(default=1, ge=1)
+    totalSesiones: int = Field(default=1, ge=1)
+
+def serializar_modelo(registro):
+    return {
+        columna.name: getattr(registro, columna.name)
+        for columna in registro.__table__.columns
+    }
+
+
+def calcular_datos_pago(payload: CitaPagoPayload):
+    tipo_pago = payload.tipoPago
+
+    if tipo_pago == "cortesia":
+        total = 0.0
+        cobrado = 0.0
+
+    else:
+        total = round(float(payload.costo), 2)
+
+        if tipo_pago == "completo":
+            cobrado = total
+
+        elif tipo_pago == "contado":
+            cobrado = 0.0
+
+        else:
+            cobrado = round(float(payload.montoPagado), 2)
+
+    if cobrado > total:
+        raise HTTPException(
+            status_code=400,
+            detail="El monto pagado no puede superar el costo total."
+        )
+
+    if tipo_pago == "anticipo":
+        if cobrado <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Debes ingresar el monto del anticipo."
+            )
+
+        if cobrado >= total:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "El anticipo debe ser menor al costo total. "
+                    "Si pagó todo, selecciona 'Pagado completo'."
+                )
+            )
+
+    saldo = round(total - cobrado, 2)
+
+    metodo = (
+        payload.metodoPago.strip()
+        if cobrado > 0 and payload.metodoPago.strip()
+        else "Pendiente"
+    )
+
+    return {
+        "total": total,
+        "cobrado": cobrado,
+        "saldo": saldo,
+        "metodo": metodo
+    }
+    
 # 4. RUTAS DINÁMICAS (CRUD Universal)
 MODELOS = {
     "pacientes": PacienteDB,
@@ -140,6 +235,256 @@ def get_all(store: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Tabla no encontrada")
     registros = db.query(MODELOS[store]).all()
     return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in registros]
+
+@app.post("/api/operaciones/citas")
+def crear_cita_con_pago(
+    payload: CitaPagoPayload,
+    db: Session = Depends(get_db)
+):
+    paciente = db.query(PacienteDB).filter(
+        PacienteDB.id == payload.pacienteId
+    ).first()
+
+    if not paciente:
+        raise HTTPException(
+            status_code=404,
+            detail="El paciente seleccionado no existe."
+        )
+
+    datos_pago = calcular_datos_pago(payload)
+    ahora = datetime.now().isoformat(timespec="seconds")
+
+    nueva_cita = CitaDB(
+        pacienteId=payload.pacienteId,
+        planId=payload.planId,
+        citaBaseId=payload.citaBaseId,
+        fecha=payload.fecha,
+        hora=payload.hora,
+        procedimiento=payload.procedimiento.strip(),
+        notas=payload.notas.strip(),
+        costo=datos_pago["total"],
+        tipoPago=payload.tipoPago,
+        estado=payload.estado,
+        sesionNum=payload.sesionNum,
+        totalSesiones=payload.totalSesiones,
+        creadaEn=ahora
+    )
+
+    try:
+        db.add(nueva_cita)
+
+        # Obtiene el ID sin confirmar todavía la transacción.
+        db.flush()
+
+        nuevo_pago = PagoDB(
+            pacienteId=payload.pacienteId,
+            citaId=nueva_cita.id,
+            concepto=payload.procedimiento.strip(),
+            fecha=payload.fecha,
+            total=datos_pago["total"],
+            cobrado=datos_pago["cobrado"],
+            saldo=datos_pago["saldo"],
+            metodo=datos_pago["metodo"],
+            tipoPago=payload.tipoPago,
+            cuotas=[],
+            creadoEn=ahora,
+            fechaUltPago=(
+                payload.fecha
+                if datos_pago["cobrado"] > 0
+                else None
+            ),
+            nota="Pago generado automáticamente desde la cita",
+            devuelto=0,
+            creditoFavor=0
+        )
+
+        db.add(nuevo_pago)
+
+        # Cita y pago se confirman juntos.
+        db.commit()
+
+        db.refresh(nueva_cita)
+        db.refresh(nuevo_pago)
+
+        return {
+            "message": "Cita y pago registrados correctamente.",
+            "cita": serializar_modelo(nueva_cita),
+            "pago": serializar_modelo(nuevo_pago)
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as error:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo registrar la cita y el pago: {error}"
+        )
+
+@app.put("/api/operaciones/citas/{cita_id}")
+def actualizar_cita_con_pago(
+    cita_id: int,
+    payload: CitaPagoPayload,
+    db: Session = Depends(get_db)
+):
+    cita = db.query(CitaDB).filter(
+        CitaDB.id == cita_id
+    ).first()
+
+    if not cita:
+        raise HTTPException(
+            status_code=404,
+            detail="La cita no existe."
+        )
+
+    paciente = db.query(PacienteDB).filter(
+        PacienteDB.id == payload.pacienteId
+    ).first()
+
+    if not paciente:
+        raise HTTPException(
+            status_code=404,
+            detail="El paciente seleccionado no existe."
+        )
+
+    pago = db.query(PagoDB).filter(
+        PagoDB.citaId == cita_id
+    ).first()
+
+    datos_pago = calcular_datos_pago(payload)
+    ahora = datetime.now().isoformat(timespec="seconds")
+
+    # Evita eliminar accidentalmente dinero ya cobrado.
+    if pago and datos_pago["cobrado"] < float(pago.cobrado or 0):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No puedes reducir un monto ya cobrado desde la cita. "
+                "Primero debes revertir el cobro desde Finanzas."
+            )
+        )
+
+    cita.pacienteId = payload.pacienteId
+    cita.planId = payload.planId
+    cita.citaBaseId = payload.citaBaseId
+    cita.fecha = payload.fecha
+    cita.hora = payload.hora
+    cita.procedimiento = payload.procedimiento.strip()
+    cita.notas = payload.notas.strip()
+    cita.costo = datos_pago["total"]
+    cita.tipoPago = payload.tipoPago
+    cita.estado = payload.estado
+    cita.sesionNum = payload.sesionNum
+    cita.totalSesiones = payload.totalSesiones
+
+    try:
+        if not pago:
+            pago = PagoDB(
+                pacienteId=payload.pacienteId,
+                citaId=cita.id,
+                cuotas=[],
+                creadoEn=ahora,
+                devuelto=0,
+                creditoFavor=0
+            )
+
+            db.add(pago)
+
+        pago.pacienteId = payload.pacienteId
+        pago.concepto = payload.procedimiento.strip()
+        pago.fecha = payload.fecha
+        pago.total = datos_pago["total"]
+        pago.cobrado = datos_pago["cobrado"]
+        pago.saldo = datos_pago["saldo"]
+        pago.metodo = datos_pago["metodo"]
+        pago.tipoPago = payload.tipoPago
+        pago.fechaUltPago = (
+            payload.fecha
+            if datos_pago["cobrado"] > 0
+            else None
+        )
+
+        db.commit()
+
+        db.refresh(cita)
+        db.refresh(pago)
+
+        return {
+            "message": "Cita y pago actualizados correctamente.",
+            "cita": serializar_modelo(cita),
+            "pago": serializar_modelo(pago)
+        }
+
+    except Exception as error:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo actualizar la cita: {error}"
+        )
+@app.delete("/api/operaciones/citas/{cita_id}")
+def eliminar_cita_con_pago(
+    cita_id: int,
+    db: Session = Depends(get_db)
+):
+    cita = db.query(CitaDB).filter(
+        CitaDB.id == cita_id
+    ).first()
+
+    if not cita:
+        raise HTTPException(
+            status_code=404,
+            detail="La cita no existe."
+        )
+
+    pago = db.query(PagoDB).filter(
+        PagoDB.citaId == cita_id
+    ).first()
+
+    if pago and float(pago.cobrado or 0) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Esta cita tiene dinero cobrado. "
+                "Debes cancelarla o revertir el cobro; no puedes eliminarla."
+            )
+        )
+
+    if pago:
+        plan_cuotas = db.query(PlanPagoDB).filter(
+            PlanPagoDB.pagoId == pago.id
+        ).first()
+
+        if plan_cuotas:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Esta cita está relacionada con un plan de cuotas. "
+                    "Primero debes cancelar ese plan."
+                )
+            )
+
+    try:
+        if pago:
+            db.delete(pago)
+
+        db.delete(cita)
+        db.commit()
+
+        return {
+            "message": "Cita y pago eliminados correctamente."
+        }
+
+    except Exception as error:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo eliminar la cita: {error}"
+        )
 
 @app.post("/api/{store}")
 def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db)):
@@ -309,12 +654,88 @@ async def importar_pacientes(file: UploadFile = File(...), db: Session = Depends
         raise HTTPException(status_code=400, detail=f"Error al guardar: {str(e)}")
 
 
-# --- CONEXIÓN PARA SERVIR EL FRONTEND ---
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# =====================================================
+# FRONTEND REACT
+# =====================================================
 
-@app.get("/")
-def read_root():
-    return FileResponse("static/index.html")
+def obtener_directorio_frontend() -> Path:
+    """
+    Devuelve la ubicación del frontend compilado.
+
+    Desarrollo:
+        frontend-moderno/dist
+
+    PyInstaller:
+        frontend/
+    """
+    if getattr(sys, "frozen", False):
+        base_dir = Path(sys._MEIPASS)
+        return base_dir / "frontend"
+
+    return Path(__file__).resolve().parent / "frontend-moderno" / "dist"
+
+
+FRONTEND_DIR = obtener_directorio_frontend()
+FRONTEND_ASSETS = FRONTEND_DIR / "assets"
+
+
+if FRONTEND_DIR.is_dir():
+
+    if FRONTEND_ASSETS.is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(FRONTEND_ASSETS)),
+            name="react-assets",
+        )
+
+    @app.get("/", include_in_schema=False)
+    def mostrar_frontend():
+        return FileResponse(FRONTEND_DIR / "index.html")
+
+    @app.get("/{ruta:path}", include_in_schema=False)
+    def mostrar_ruta_react(ruta: str):
+        """
+        Permite que React maneje las futuras rutas internas.
+        Ejemplos:
+            /pacientes
+            /agenda
+            /finanzas
+        """
+
+        # Las rutas API inexistentes deben devolver 404,
+        # no el index.html de React.
+        if ruta.startswith("api/"):
+            raise HTTPException(
+                status_code=404,
+                detail="Ruta API no encontrada",
+            )
+
+        archivo_solicitado = (FRONTEND_DIR / ruta).resolve()
+        frontend_resuelto = FRONTEND_DIR.resolve()
+
+        # Protección contra rutas como ../../archivo
+        try:
+            archivo_solicitado.relative_to(frontend_resuelto)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+        if archivo_solicitado.is_file():
+            return FileResponse(archivo_solicitado)
+
+        # React controla cualquier ruta que no sea un archivo.
+        return FileResponse(FRONTEND_DIR / "index.html")
+
+else:
+
+    @app.get("/", include_in_schema=False)
+    def estado_backend():
+        return {
+            "message": "API DentalPro activa",
+            "frontend": "No compilado",
+            "instruccion": (
+                "Ejecuta npm run dev o compila React con npm run build"
+            ),
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

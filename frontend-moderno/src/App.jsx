@@ -124,19 +124,44 @@ export default function App() {
 
   // --- CARGA INICIAL DE DATOS DESDE PYTHON ---
   const cargarPacientes = () => {
-    api.getPacientes().then(data => setPacientes(data || [])).catch(err => console.error(err));
+    return api.getPacientes()
+      .then(data => setPacientes(data || []))
+      .catch(err => {
+        console.error(err);
+        throw err;
+      });
   };
   const cargarCitas = () => {
-    api.getCitas().then(data => setCitas(data || [])).catch(err => console.error(err));
+    return api.getCitas()
+      .then(data => setCitas(data || []))
+      .catch(err => {
+        console.error(err);
+        throw err;
+      });
   };
   const cargarPagos = () => {
-    api.getPagos().then(data => setPagos(data || [])).catch(err => console.error(err));
+    return api.getPagos()
+      .then(data => setPagos(data || []))
+      .catch(err => {
+        console.error(err);
+        throw err;
+      });
   };
   const cargarPlanPagos = () => {
-    api.getPlanPagos().then(data => setPlanPagos(data || [])).catch(err => console.error(err));
+    return api.getPlanPagos()
+      .then(data => setPlanPagos(data || []))
+      .catch(err => {
+        console.error(err);
+        throw err;
+      });
   };
   const cargarPlanes = () => {
-    api.getPlanes().then(data => setPlanes(data || [])).catch(err => console.error(err));
+    return api.getPlanes()
+      .then(data => setPlanes(data || []))
+      .catch(err => {
+        console.error(err);
+        throw err;
+      });
   };
 
   useEffect(() => {
@@ -211,27 +236,88 @@ export default function App() {
   const handleGuardarCita = async (payload, id) => {
     try {
       if (id) {
-        await api.actualizarCita(id, payload);
-        Swal.fire({ title: 'Cita Actualizada', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+        await api.actualizarCitaConPago(id, payload);
+        Swal.fire({
+          title: 'Cita actualizada',
+          text: 'La cita y su información financiera se actualizaron correctamente.',
+          icon: 'success',
+          background: '#1e293b',
+          color: '#fff',
+          timer: 1700,
+          showConfirmButton: false
+        });
       } else {
-        await api.crearCita(payload);
-        Swal.fire({ title: 'Cita Agendada', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+        await api.crearCitaConPago(payload);
+        Swal.fire({
+          title: 'Cita agendada',
+          text: 'La cita y su registro financiero fueron creados correctamente.',
+          icon: 'success',
+          background: '#1e293b',
+          color: '#fff',
+          timer: 1700,
+          showConfirmButton: false
+        });
       }
+
       setModalCitaAbierto(false);
-      cargarCitas();
-      cargarPagos();
-      cargarPlanPagos();
+      setCitaSeleccionada(null);
+
+      await Promise.all([
+        cargarCitas(),
+        cargarPagos(),
+        cargarPlanPagos()
+      ]);
     } catch (error) {
-      Swal.fire({ title: 'Error', text: 'No se pudo guardar la cita.', icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({
+        title: 'No se pudo guardar',
+        text: error.message || 'Ocurrió un error desconocido al guardar la cita.',
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
     }
   };
 
   const handleEliminarCita = async (id, nombrePaciente) => {
-    const confirm = await Swal.fire({ title: `¿Eliminar cita de ${nombrePaciente}?`, icon: 'warning', showCancelButton: true, background: '#1e293b', color: '#fff', confirmButtonColor: '#ef4444', confirmButtonText: 'Sí, eliminar' });
-    if (confirm.isConfirmed) {
-      await api.eliminarCita(id);
-      cargarCitas();
-      Swal.fire({ title: 'Cita eliminada', icon: 'success', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false });
+    const confirm = await Swal.fire({
+      title: `¿Eliminar cita de ${nombrePaciente}?`,
+      text: 'También se eliminará su registro financiero si todavía no tiene dinero cobrado.',
+      icon: 'warning',
+      showCancelButton: true,
+      background: '#1e293b',
+      color: '#fff',
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await api.eliminarCitaConPago(id);
+
+      await Promise.all([
+        cargarCitas(),
+        cargarPagos(),
+        cargarPlanPagos()
+      ]);
+
+      Swal.fire({
+        title: 'Cita eliminada',
+        icon: 'success',
+        background: '#1e293b',
+        color: '#fff',
+        timer: 1400,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire({
+        title: 'No se pudo eliminar',
+        text: error.message || 'La cita tiene información financiera relacionada.',
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
     }
   };
 
@@ -240,14 +326,14 @@ export default function App() {
   };
 
   const handleAbrirCompletar = (cita) => {
-    const pagoAsociado = pagos.find(p => p.citaId === cita.id);
+    const pagoAsociado = pagos.find(p => Number(p.citaId) === Number(cita.id));
     setCitaParaAccion(cita);
     setPagoParaAccion(pagoAsociado || null);
     setModalCompletarAbierto(true);
   };
 
   const handleAbrirCancelar = (cita) => {
-    const pagoAsociado = pagos.find(p => p.citaId === cita.id);
+    const pagoAsociado = pagos.find(p => Number(p.citaId) === Number(cita.id));
     setCitaParaAccion(cita);
     setPagoParaAccion(pagoAsociado || null);
     setModalCancelarAbierto(true);
@@ -1023,7 +1109,26 @@ export default function App() {
 
       {/* MODALES EMERGENTES */}
       <PacienteModal key={pacienteSeleccionado ? pacienteSeleccionado.id : 'nuevo-paciente'} isOpen={modalAbierto} onClose={() => setModalAbierto(false)} onSave={handleGuardarPaciente} pacienteEditar={pacienteSeleccionado} />
-      <CitaModal key={citaSeleccionada ? citaSeleccionada.id : 'nueva-cita'} isOpen={modalCitaAbierto} onClose={() => setModalCitaAbierto(false)} onSave={handleGuardarCita} citaEditar={citaSeleccionada} pacientes={pacientes} />
+      <CitaModal
+        key={
+          citaSeleccionada?.id
+            ? `cita-${citaSeleccionada.id}`
+            : `nueva-cita-${citaSeleccionada?.fecha || 'sin-fecha'}-${citaSeleccionada?.hora || 'sin-hora'}`
+        }
+        isOpen={modalCitaAbierto}
+        onClose={() => {
+          setModalCitaAbierto(false);
+          setCitaSeleccionada(null);
+        }}
+        onSave={handleGuardarCita}
+        citaEditar={citaSeleccionada}
+        pagoEditar={
+          citaSeleccionada?.id
+            ? pagos.find((pago) => Number(pago.citaId) === Number(citaSeleccionada.id)) || null
+            : null
+        }
+        pacientes={pacientes}
+      />
       <CompletarCitaModal key={citaParaAccion ? `comp-${citaParaAccion.id}` : 'comp-modal'} isOpen={modalCompletarAbierto} onClose={() => setModalCompletarAbierto(false)} onSave={handleGuardarCompletado} cita={citaParaAccion} pago={pagoParaAccion} />
       <CancelarCitaModal key={citaParaAccion ? `canc-${citaParaAccion.id}` : 'canc-modal'} isOpen={modalCancelarAbierto} onClose={() => setModalCancelarAbierto(false)} onSave={handleGuardarCancelacion} cita={citaParaAccion} pago={pagoParaAccion} />
       <FichaPacienteModal isOpen={modalFichaAbierto} onClose={() => setModalFichaAbierto(false)} paciente={pacienteSeleccionado} citas={citas} pagos={pagos} onNuevaCita={() => { setCitaSeleccionada(null); setModalCitaAbierto(true); }} onEditarPaciente={handleEditarPaciente} />

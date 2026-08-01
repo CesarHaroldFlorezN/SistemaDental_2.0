@@ -1,15 +1,20 @@
-# Base de datos y respaldos
-data/
-*.db
-*.csv
-
-# Carpetas pesadas de React y Python
-node_modules/
+# Python
 __pycache__/
-dist/
-build/
-
-# Entornos virtuales y variables de entorno
-env/
+*.pyc
+.venv/
 venv/
-.env
+
+# Base de datos local
+data/*.db
+
+# React
+frontend-moderno/node_modules/
+frontend-moderno/dist/
+
+# PyInstaller
+build/
+dist/
+
+# Sistema
+.DS_Store
+Thumbs.db
