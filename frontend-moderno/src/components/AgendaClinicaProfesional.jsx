@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowRight,
   BadgeCheck,
   CalendarCheck2,
+  CalendarClock,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -49,8 +51,8 @@ const localizer = dateFnsLocalizer({
 
 const ESTADOS = {
   pendiente: {
-    etiqueta: 'Pendiente',
-    corta: 'Programada',
+    etiqueta: 'Programado',
+    corta: 'Programado',
     clase: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
     colorCalendario: '#f59e0b'
   },
@@ -101,7 +103,7 @@ const ESTADOS_ACTIVOS = new Set([
 
 const FILTROS_ESTADO = [
   ['todos', 'Todas'],
-  ['pendiente', 'Pendientes'],
+  ['pendiente', 'Programadas'],
   ['confirmada', 'Confirmadas'],
   ['en_espera', 'En espera'],
   ['en_atencion', 'En atención'],
@@ -167,6 +169,64 @@ const formatearFecha = (fecha, largo = false) => {
     year: 'numeric'
   });
 };
+
+const horaAMinutos = (hora) => {
+  const [horas, minutos] = String(hora || '').split(':').map(Number);
+  if (!Number.isFinite(horas) || !Number.isFinite(minutos)) return null;
+  return horas * 60 + minutos;
+};
+
+const minutosAHora = (total) => {
+  const valor = Math.max(0, Math.min(1439, Number(total) || 0));
+  return `${String(Math.floor(valor / 60)).padStart(2, '0')}:${String(valor % 60).padStart(2, '0')}`;
+};
+
+const obtenerHoraFinCita = (cita) => {
+  if (cita?.horaFin) return cita.horaFin;
+  const inicio = horaAMinutos(cita?.hora || '09:00');
+  return inicio === null ? '—' : minutosAHora(inicio + Number(cita?.duracionMinutos || 60));
+};
+
+const obtenerDuracionCita = (cita) => {
+  const inicio = horaAMinutos(cita?.hora);
+  const fin = horaAMinutos(obtenerHoraFinCita(cita));
+  if (inicio === null || fin === null || fin <= inicio) return Number(cita?.duracionMinutos || 60);
+  return fin - inicio;
+};
+
+
+const obtenerServicios = (cita) => {
+  if (Array.isArray(cita?.servicios) && cita.servicios.length) {
+    return cita.servicios.filter((servicio) => servicio?.nombre);
+  }
+  return [{ nombre: cita?.procedimiento || 'Consulta', costo: Number(cita?.costo || 0) }];
+};
+
+function ServiciosCita({ cita, compacto = false }) {
+  const servicios = obtenerServicios(cita);
+  if (compacto) {
+    return (
+      <div className="space-y-0.5">
+        {servicios.slice(0, 3).map((servicio, indice) => (
+          <div key={`${servicio.nombre}-${indice}`} className="truncate text-xs font-semibold text-cyan-100">
+            {servicio.nombre}
+          </div>
+        ))}
+        {servicios.length > 3 && <div className="text-[11px] font-semibold text-cyan-400">+ {servicios.length - 3} servicio(s)</div>}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {servicios.map((servicio, indice) => (
+        <div key={`${servicio.nombre}-${indice}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+          <div className="min-w-0"><div className="truncate text-sm font-semibold text-white">{servicio.nombre}</div><div className="text-[10px] uppercase tracking-wider text-slate-500">Servicio {indice + 1}</div></div>
+          <div className="shrink-0 text-sm font-bold text-cyan-300">{moneda(servicio.costo)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function BadgeEstado({ estado }) {
   const info = ESTADOS[estado] || ESTADOS.pendiente;
@@ -243,7 +303,7 @@ function PagoResumen({ cita, compacto = false, onCobrar, onVerCuotas }) {
       <div className="flex items-center gap-2 text-[11px]">
         <span className={`h-2.5 w-2.5 rounded-full ${pagado ? 'bg-emerald-400' : tipo === 'cuotas' ? 'bg-violet-400' : 'bg-rose-400'}`} />
         <span className="truncate text-slate-300">
-          {pagado ? 'Pagado' : tipo === 'cuotas' ? `Cuotas · ${moneda(saldo)}` : `Pendiente · ${moneda(saldo)}`}
+          {pagado ? 'Pagado' : tipo === 'cuotas' ? `Cuotas · saldo ${moneda(saldo)}` : `Saldo pendiente · ${moneda(saldo)}`}
         </span>
       </div>
     );
@@ -353,54 +413,41 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle }) {
   const pago = cita.pago;
   const saldo = Number(pago?.saldo || 0);
   const tipo = pago?.tipoPago || cita.tipoPago;
-  const cerrada = ['completada', 'cancelada', 'no_asistio'].includes(cita.estado);
+  const horaFin = obtenerHoraFinCita(cita);
+  const duracion = obtenerDuracionCita(cita);
 
   return (
-    <article className={`rounded-2xl border bg-slate-900/70 p-3 shadow-md transition hover:-translate-y-0.5 hover:shadow-lg ${cita.estado === 'en_atencion' ? 'border-rose-500/50' : 'border-slate-700'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-sm font-bold text-cyan-300">{cita.hora || '—'}</span>
-            <BadgeEstado estado={cita.estado} />
+    <article className={`overflow-hidden rounded-2xl border bg-gradient-to-b from-slate-900/95 to-slate-900/70 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl ${cita.estado === 'en_atencion' ? 'border-rose-500/50' : 'border-slate-700'}`}>
+      <div className="p-3.5">
+        <div className="grid grid-cols-[minmax(76px,auto)_minmax(0,1fr)_36px] items-center gap-2">
+          <div className="rounded-xl border border-slate-600 bg-slate-800/90 px-3 py-2 text-center shadow-inner">
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Ficha</div>
+            <div className="mt-0.5 text-xl font-black text-white">{cita.codigoFicha || '—'}</div>
           </div>
-          <button type="button" onClick={() => onDetalle(cita)} className="mt-2 block truncate text-left text-sm font-bold text-white hover:text-cyan-300">
-            {cita.nombrePaciente}
-          </button>
-          <div className="mt-1 truncate text-xs text-slate-400">{cita.procedimiento || 'Consulta'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">Ficha {cita.codigoFicha || '—'} · DNI {cita.cedulaPaciente || '—'}</div>
+          <div className="flex min-w-0 items-center justify-center gap-1.5 rounded-xl border border-cyan-500/10 bg-slate-800/70 px-2 py-2">
+            <span className="text-base font-black text-cyan-300">{cita.hora || '—'}</span>
+            <ArrowRight size={16} className="shrink-0 text-cyan-600" />
+            <span className="text-base font-black text-cyan-300">{horaFin}</span>
+          </div>
+          <button type="button" title="Ver detalle" onClick={() => onDetalle(cita)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400 transition hover:border-cyan-500/40 hover:text-cyan-300"><Eye size={18} /></button>
         </div>
-        <button type="button" title="Ver detalle" onClick={() => onDetalle(cita)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-800 hover:text-white">
-          <Eye size={16} />
-        </button>
-      </div>
 
-      <div className="mt-3">
-        <PagoResumen cita={cita} compacto />
-      </div>
+        <button type="button" onClick={() => onDetalle(cita)} className="mt-4 block w-full truncate text-left text-lg font-black tracking-tight text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock size={13} /><span>{duracion} min de atención</span></div>
 
-      <div className="mt-3">
-        <AccionPrincipal
-          cita={cita}
-          onCambiarEstado={callbacks.onCambiarEstado}
-          onCompletar={callbacks.onCompletar}
-          onCobrar={callbacks.onCobrar}
-          onVerCuotas={callbacks.onVerCuotas}
-        />
-      </div>
+        <div className="mt-3 grid gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <ServiciosCita cita={cita} compacto />
+          <div className="justify-self-start sm:justify-self-end"><BadgeEstado estado={cita.estado} /></div>
+        </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {!cerrada && (
-          <BotonSecundario onClick={() => callbacks.onEditar?.(cita)} title="Editar cita"><Edit3 size={14} /> Editar</BotonSecundario>
-        )}
-        {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && (
-          <BotonSecundario onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} title="No asistió"><UserRoundX size={14} /></BotonSecundario>
-        )}
-        {ESTADOS_ACTIVOS.has(cita.estado) && (
-          <BotonSecundario danger onClick={() => callbacks.onCancelar?.(cita)} title="Cancelar cita"><XCircle size={14} /></BotonSecundario>
-        )}
-        {saldo > 0 && pago && tipo !== 'cuotas' && cita.estado !== 'cancelada' && (
-          <BotonSecundario onClick={() => callbacks.onCobrar?.(pago, cita.nombrePaciente)} title="Registrar pago"><CircleDollarSign size={14} /></BotonSecundario>
-        )}
+        <div className="mt-3"><PagoResumen cita={cita} compacto /></div>
+        <div className="mt-3"><AccionPrincipal cita={cita} onCambiarEstado={callbacks.onCambiarEstado} onCompletar={callbacks.onCompletar} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} /></div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <BotonSecundario onClick={() => callbacks.onEditar?.(cita)} title="Editar servicios o cita"><Edit3 size={14} /> Editar</BotonSecundario>
+          {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && <BotonSecundario onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} title="No asistió"><UserRoundX size={14} /></BotonSecundario>}
+          {ESTADOS_ACTIVOS.has(cita.estado) && <BotonSecundario danger onClick={() => callbacks.onCancelar?.(cita)} title="Cancelar cita"><XCircle size={14} /></BotonSecundario>}
+          {saldo > 0 && pago && tipo !== 'cuotas' && cita.estado !== 'cancelada' && <BotonSecundario onClick={() => callbacks.onCobrar?.(pago, cita.nombrePaciente)} title="Registrar pago"><CircleDollarSign size={14} /></BotonSecundario>}
+        </div>
       </div>
     </article>
   );
@@ -430,9 +477,8 @@ function ColumnaRecepcion({ titulo, subtitulo, citas, clase, callbacks, onDetall
 function EventoCalendario({ event }) {
   return (
     <div className="min-w-0 leading-tight">
-      <div className="truncate font-bold">{event.citaData.hora} · {event.citaData.nombrePaciente}</div>
-      <div className="mt-0.5 truncate text-[10px] opacity-90">{event.citaData.procedimiento}</div>
-      <div className="mt-1"><PagoResumen cita={event.citaData} compacto /></div>
+      <div className="truncate font-bold">{event.citaData.hora} → {obtenerHoraFinCita(event.citaData)} · {event.citaData.nombrePaciente}</div>
+      <div className="mt-0.5"><ServiciosCita cita={event.citaData} compacto /></div>
     </div>
   );
 }
@@ -445,50 +491,27 @@ function DetalleRapido({ cita, onClose, callbacks }) {
 
   return (
     <div className="fixed inset-0 z-[70] flex justify-end bg-black/60 backdrop-blur-sm" onMouseDown={onClose}>
-      <aside className="h-full w-full max-w-md overflow-y-auto border-l border-slate-700 bg-slate-900 p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+      <aside className="h-full w-full max-w-lg overflow-y-auto border-l border-slate-700 bg-slate-900 p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">Detalle de la cita</div>
-            <h2 className="mt-1 text-xl font-bold text-white">{cita.nombrePaciente}</h2>
-            <div className="mt-1 text-sm text-slate-400">{formatearFecha(cita.fecha, true)} · {cita.hora}</div>
-          </div>
+          <div><div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">Detalle de la atención</div><h2 className="mt-1 text-xl font-bold text-white">{cita.nombrePaciente}</h2><div className="mt-1 text-sm text-slate-400">{formatearFecha(cita.fecha, true)} · {cita.hora} → {obtenerHoraFinCita(cita)} · {obtenerDuracionCita(cita)} min</div></div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-800 hover:text-white"><X size={19} /></button>
         </div>
-
-        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
-          <EstadoStepper estado={cita.estado} />
-        </div>
-
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-800/70 p-4"><EstadoStepper estado={cita.estado} /></div>
         <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-cyan-500/10 p-2.5 text-cyan-300"><UserRound size={19} /></div>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold text-white">{cita.procedimiento || 'Consulta'}</div>
-              <div className="mt-1 text-xs text-slate-400">Ficha {cita.codigoFicha || '—'} · DNI {cita.cedulaPaciente || '—'}</div>
-              {cita.telefonoPaciente && <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400"><Phone size={13} /> {cita.telefonoPaciente}</div>}
-              {cita.notas && <div className="mt-3 rounded-lg bg-slate-900/70 p-3 text-xs text-slate-400">{cita.notas}</div>}
-            </div>
-          </div>
+          <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paciente</div><div className="font-semibold text-white">{cita.nombrePaciente}</div></div><div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-right"><div className="text-[10px] uppercase text-cyan-400">Ficha</div><div className="text-lg font-black text-white">{cita.codigoFicha || '—'}</div></div></div>
+          {cita.telefonoPaciente && <div className="mb-3 flex items-center gap-1.5 text-xs text-slate-400"><Phone size={13} /> {cita.telefonoPaciente}</div>}
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Servicios programados</div>
+          <ServiciosCita cita={cita} />
+          {cita.notas && <div className="mt-3 rounded-lg bg-slate-900/70 p-3 text-xs text-slate-400">{cita.notas}</div>}
         </div>
-
         <div className="mt-4"><PagoResumen cita={cita} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} /></div>
-
-        <div className="mt-4">
-          <AccionPrincipal cita={cita} onCambiarEstado={callbacks.onCambiarEstado} onCompletar={callbacks.onCompletar} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} />
-        </div>
-
+        <div className="mt-4"><AccionPrincipal cita={cita} onCambiarEstado={callbacks.onCambiarEstado} onCompletar={callbacks.onCompletar} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} /></div>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <BotonSecundario onClick={() => { onClose(); callbacks.onEditar?.(cita); }} title="Editar"><Edit3 size={15} /> Editar</BotonSecundario>
-          <BotonSecundario onClick={() => callbacks.onVerFicha?.(cita.paciente)} title="Ver ficha"><FileText size={15} /> Ver ficha</BotonSecundario>
-          {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && (
-            <BotonSecundario onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} title="No asistió"><UserRoundX size={15} /> No asistió</BotonSecundario>
-          )}
-          {ESTADOS_ACTIVOS.has(cita.estado) && (
-            <BotonSecundario danger onClick={() => callbacks.onCancelar?.(cita)} title="Cancelar"><XCircle size={15} /> Cancelar</BotonSecundario>
-          )}
-          {puedeEliminar && (
-            <button type="button" onClick={() => callbacks.onEliminar?.(cita.id, cita.nombrePaciente)} className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"><Trash2 size={15} /> Eliminar definitivamente</button>
-          )}
+          <BotonSecundario onClick={() => callbacks.onEditar?.(cita)} title="Editar servicios y cita"><Edit3 size={15} /> Editar</BotonSecundario>
+          <BotonSecundario onClick={() => callbacks.onVerFicha?.(cita.paciente)} title="Abrir ficha encima"><FileText size={15} /> Ver ficha</BotonSecundario>
+          {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && <BotonSecundario onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} title="No asistió"><UserRoundX size={15} /> No asistió</BotonSecundario>}
+          {ESTADOS_ACTIVOS.has(cita.estado) && <BotonSecundario danger onClick={() => callbacks.onCancelar?.(cita)} title="Cancelar"><XCircle size={15} /> Cancelar</BotonSecundario>}
+          {puedeEliminar && <button type="button" onClick={() => callbacks.onEliminar?.(cita.id, cita.nombrePaciente)} className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"><Trash2 size={15} /> Eliminar definitivamente</button>}
         </div>
       </aside>
     </div>
@@ -548,7 +571,21 @@ export default function AgendaClinicaProfesional({
 
   const hoy = fechaLocal();
   const manana = fechaLocal(sumarDias(new Date(), 1));
+  const pasadoManana = fechaLocal(sumarDias(new Date(), 2));
   const finSemana = fechaLocal(sumarDias(new Date(), 7));
+
+  const resumenDias = useMemo(() => {
+    const construir = (fecha, etiqueta, descripcion) => {
+      const delDia = citasEnriquecidas.filter((cita) => cita.fecha === fecha && cita.estado !== 'cancelada');
+      const programadas = delDia.filter((cita) => ['pendiente', 'confirmada'].includes(cita.estado)).length;
+      return { fecha, etiqueta, descripcion, total: delDia.length, programadas };
+    };
+    return [
+      construir(hoy, 'Hoy', 'Jornada actual'),
+      construir(manana, 'Mañana', 'Próxima jornada'),
+      construir(pasadoManana, 'Pasado mañana', 'Vista anticipada')
+    ];
+  }, [citasEnriquecidas, hoy, manana, pasadoManana]);
 
   const citasFiltradas = useMemo(() => {
     const terminos = normalizar(busqueda).split(/\s+/).filter(Boolean);
@@ -572,7 +609,8 @@ export default function AgendaClinicaProfesional({
         cita.procedimiento,
         cita.notas,
         cita.fecha,
-        cita.hora
+        cita.hora,
+        cita.horaFin
       ].join(' '));
       return terminos.every((termino) => texto.includes(termino));
     }).sort((a, b) => `${a.fecha || ''}${a.hora || ''}`.localeCompare(`${b.fecha || ''}${b.hora || ''}`));
@@ -593,11 +631,13 @@ export default function AgendaClinicaProfesional({
     const [year, month, day] = String(cita.fecha || hoy).split('-').map(Number);
     const [hour, minute] = String(cita.hora || '09:00').split(':').map(Number);
     const start = new Date(year, month - 1, day, hour || 0, minute || 0);
+    const [endHour, endMinute] = String(obtenerHoraFinCita(cita)).split(':').map(Number);
+    const end = new Date(year, month - 1, day, endHour || 0, endMinute || 0);
     return {
       id: cita.id,
-      title: `${cita.nombrePaciente} · ${cita.procedimiento || 'Consulta'}`,
+      title: `${cita.nombrePaciente} · ${obtenerServicios(cita)[0]?.nombre || 'Consulta'}`,
       start,
-      end: new Date(start.getTime() + 60 * 60 * 1000),
+      end: end > start ? end : new Date(start.getTime() + Number(cita.duracionMinutos || 60) * 60 * 1000),
       estado: cita.estado,
       citaData: cita
     };
@@ -672,11 +712,25 @@ export default function AgendaClinicaProfesional({
 
       {modoVista === 'recepcion' && (
         <>
+          <div className="grid gap-3 md:grid-cols-3">
+            {resumenDias.map((dia) => {
+              const activo = fechaRecepcion === dia.fecha;
+              return (
+                <button key={dia.fecha} type="button" onClick={() => setFechaRecepcion(dia.fecha)} className={`rounded-2xl border p-4 text-left transition ${activo ? 'border-cyan-500 bg-cyan-500/10 shadow-lg shadow-cyan-950/20' : dia.programadas > 0 ? 'border-amber-500/30 bg-amber-500/5 hover:border-amber-400/60' : 'border-slate-700 bg-slate-800/60 hover:border-slate-600'}`}>
+                  <div className="flex items-center justify-between gap-3"><div><div className={`text-xs font-bold uppercase tracking-wider ${activo ? 'text-cyan-300' : 'text-slate-400'}`}>{dia.etiqueta}</div><div className="mt-1 text-[11px] text-slate-500">{dia.descripcion}</div></div><CalendarCheck2 size={20} className={dia.programadas > 0 ? 'text-amber-300' : 'text-slate-600'} /></div>
+                  <div className="mt-3 text-2xl font-black text-white">{dia.programadas}</div>
+                  <div className="text-xs font-semibold text-slate-300">{dia.programadas === 1 ? 'paciente programado' : 'pacientes programados'}</div>
+                  <div className="mt-1 text-[11px] text-slate-500">{dia.total ? `${dia.total} cita(s) registradas en total` : 'Sin citas registradas'}</div>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Jornada de recepción</div>
               <div className="mt-1 text-lg font-bold capitalize text-white">{formatearFecha(fechaRecepcion, true)}</div>
-              <div className="text-xs text-slate-500">{citasRecepcion.length} cita{citasRecepcion.length === 1 ? '' : 's'} programada{citasRecepcion.length === 1 ? '' : 's'}</div>
+              <div className="text-xs text-slate-500">{citasRecepcion.length} cita{citasRecepcion.length === 1 ? '' : 's'} registrada{citasRecepcion.length === 1 ? '' : 's'}</div>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => cambiarDiaRecepcion(-1)} className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 hover:text-white"><ChevronLeft size={18} /></button>
@@ -723,7 +777,7 @@ export default function AgendaClinicaProfesional({
               selectable
               onSelectEvent={(event) => setCitaDetalle(event.citaData)}
               onDoubleClickEvent={(event) => onEditarCita?.(event.citaData)}
-              onSelectSlot={(slotInfo) => onNuevaCita?.({ fecha: format(slotInfo.start, 'yyyy-MM-dd'), hora: format(slotInfo.start, 'HH:mm') === '00:00' ? '09:00' : format(slotInfo.start, 'HH:mm') })}
+              onSelectSlot={(slotInfo) => { const inicio = format(slotInfo.start, 'HH:mm') === '00:00' ? '09:00' : format(slotInfo.start, 'HH:mm'); const finSeleccionado = format(slotInfo.end, 'HH:mm'); const fin = finSeleccionado === '00:00' || finSeleccionado <= inicio ? minutosAHora((horaAMinutos(inicio) || 540) + 60) : finSeleccionado; onNuevaCita?.({ fecha: format(slotInfo.start, 'yyyy-MM-dd'), hora: inicio, horaFin: fin, duracionMinutos: Math.max(5, (horaAMinutos(fin) || 600) - (horaAMinutos(inicio) || 540)) }); }}
             />
           </div>
         </div>
@@ -740,8 +794,8 @@ export default function AgendaClinicaProfesional({
               {citasGrupo.slice(0, limiteVisible).map((cita) => (
                 <article key={cita.id} className="rounded-2xl border border-slate-700/80 bg-slate-800/80 p-4 shadow-lg hover:border-cyan-500/40">
                   <div className="grid gap-4 lg:grid-cols-[105px_minmax(0,1fr)_230px_180px] lg:items-center">
-                    <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-center"><div className="text-lg font-bold text-cyan-300">{cita.hora}</div><BadgeEstado estado={cita.estado} /></div>
-                    <div className="min-w-0"><button type="button" onClick={() => setCitaDetalle(cita)} className="truncate text-left text-base font-bold text-white hover:text-cyan-300">{cita.nombrePaciente}</button><div className="mt-1 text-sm text-cyan-100">{cita.procedimiento}</div><div className="mt-1 text-xs text-slate-500">Ficha {cita.codigoFicha || '—'} · DNI {cita.cedulaPaciente || '—'} · {cita.telefonoPaciente || 'Sin teléfono'}</div></div>
+                    <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-center"><div className="flex items-center justify-center gap-1 text-sm font-bold text-cyan-300"><span>{cita.hora}</span><ArrowRight size={13} /><span>{obtenerHoraFinCita(cita)}</span></div><div className="mt-1"><BadgeEstado estado={cita.estado} /></div></div>
+                    <div className="min-w-0"><button type="button" onClick={() => setCitaDetalle(cita)} className="truncate text-left text-base font-bold text-white hover:text-cyan-300">{cita.nombrePaciente}</button><div className="mt-2"><ServiciosCita cita={cita} compacto /></div><div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-400"><strong className="text-cyan-300">Ficha {cita.codigoFicha || '—'}</strong><span>·</span><span>{cita.telefonoPaciente || 'Sin teléfono'}</span></div></div>
                     <PagoResumen cita={cita} onCobrar={onCobrar} onVerCuotas={onVerCuotas} />
                     <div className="space-y-2"><AccionPrincipal cita={cita} onCambiarEstado={onCambiarEstado} onCompletar={onCompletarCita} onCobrar={onCobrar} onVerCuotas={onVerCuotas} /><button type="button" onClick={() => setCitaDetalle(cita)} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white"><MoreHorizontal size={15} /> Ver más acciones</button></div>
                   </div>

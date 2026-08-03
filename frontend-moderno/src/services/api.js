@@ -85,10 +85,10 @@ export const api = {
       jsonOptions('PATCH', { estado })
     ),
 
-  reprogramarCita: (id, fecha, hora) =>
+  reprogramarCita: (id, data) =>
     request(
       `${API_URL}/operaciones/citas/${id}/reprogramar`,
-      jsonOptions('PATCH', { fecha, hora })
+      jsonOptions('PATCH', data)
     ),
 
   // Alias para componentes antiguos.

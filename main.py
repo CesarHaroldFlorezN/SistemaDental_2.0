@@ -3,9 +3,9 @@ from __future__ import annotations
 import csv
 import io
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import uvicorn
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
@@ -88,7 +88,10 @@ class CitaDB(Base):
     citaBaseId = Column(Integer, nullable=True)
     fecha = Column(String(50), index=True)
     hora = Column(String(50), index=True)
+    horaFin = Column(String(50), index=True)
+    duracionMinutos = Column(Integer)
     procedimiento = Column(String(200))
+    servicios = Column(JSON)
     notas = Column(Text)
     notasFin = Column(Text)
     costo = Column(Float)
@@ -162,13 +165,31 @@ class PlanPagoDB(Base):
 Base.metadata.create_all(bind=engine)
 
 
+def asegurar_compatibilidad_esquema() -> None:
+    """Agrega columnas nuevas sin borrar ni reemplazar la base existente."""
+    with engine.begin() as connection:
+        columnas_citas = {
+            fila[1]
+            for fila in connection.exec_driver_sql("PRAGMA table_info(citas)").fetchall()
+        }
+        if "servicios" not in columnas_citas:
+            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN servicios JSON")
+        if "horaFin" not in columnas_citas:
+            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN horaFin VARCHAR(50)")
+        if "duracionMinutos" not in columnas_citas:
+            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN duracionMinutos INTEGER")
+
+
+asegurar_compatibilidad_esquema()
+
+
 # =====================================================
 # FASTAPI
 # =====================================================
 
 app = FastAPI(
     title="API DentalPro",
-    version="1.1.0",
+    version="1.3.0",
     description="Backend local para gestión clínica, agenda y finanzas.",
 )
 
@@ -218,6 +239,11 @@ TipoPago = Literal[
 ]
 
 
+class ServicioCitaPayload(BaseModel):
+    nombre: str = Field(min_length=2, max_length=150)
+    costo: float = Field(default=0, ge=0)
+
+
 class CitaPagoPayload(BaseModel):
     pacienteId: int = Field(gt=0)
     planId: Optional[int] = Field(default=None, gt=0)
@@ -225,7 +251,10 @@ class CitaPagoPayload(BaseModel):
 
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
+    horaFin: Optional[str] = Field(default=None, min_length=5, max_length=5)
+    duracionMinutos: int = Field(default=60, ge=5, le=720)
     procedimiento: str = Field(min_length=2, max_length=200)
+    servicios: List[ServicioCitaPayload] = Field(default_factory=list, max_length=20)
     notas: str = Field(default="", max_length=5000)
     estado: EstadoCita = "pendiente"
 
@@ -245,6 +274,8 @@ class CambioEstadoPayload(BaseModel):
 class ReprogramarCitaPayload(BaseModel):
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
+    horaFin: Optional[str] = Field(default=None, min_length=5, max_length=5)
+    duracionMinutos: int = Field(default=60, ge=5, le=720)
 
 
 # =====================================================
@@ -305,14 +336,64 @@ def serializar_modelo(registro):
     }
 
 
-def validar_fecha_hora(fecha: str, hora: str) -> None:
+def convertir_hora_a_minutos(hora: str) -> int:
     try:
-        datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+        horas, minutos = [int(parte) for parte in hora.split(":", 1)]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="La hora no tiene un formato válido.",
+        ) from exc
+
+    if not (0 <= horas <= 23 and 0 <= minutos <= 59):
+        raise HTTPException(
+            status_code=422,
+            detail="La hora no tiene un formato válido.",
+        )
+    return horas * 60 + minutos
+
+
+def minutos_a_hora(total_minutos: int) -> str:
+    total_minutos = int(total_minutos) % (24 * 60)
+    return f"{total_minutos // 60:02d}:{total_minutos % 60:02d}"
+
+
+def resolver_rango_horario(
+    fecha: str,
+    hora_inicio: str,
+    hora_fin: Optional[str],
+    duracion_minutos: int,
+) -> tuple[int, int, str, int]:
+    try:
+        datetime.strptime(fecha, "%Y-%m-%d")
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
-            detail="La fecha o la hora no tienen un formato válido.",
+            detail="La fecha no tiene un formato válido.",
         ) from exc
+
+    inicio_min = convertir_hora_a_minutos(hora_inicio)
+    duracion = int(duracion_minutos or 60)
+
+    if hora_fin:
+        fin_min = convertir_hora_a_minutos(hora_fin)
+        duracion = fin_min - inicio_min
+    else:
+        fin_min = inicio_min + duracion
+        hora_fin = minutos_a_hora(fin_min)
+
+    if duracion < 5:
+        raise HTTPException(
+            status_code=422,
+            detail="La hora final debe ser posterior a la hora de inicio.",
+        )
+    if duracion > 720 or fin_min > 24 * 60:
+        raise HTTPException(
+            status_code=422,
+            detail="La duración de la cita no puede superar 12 horas ni terminar después de medianoche.",
+        )
+
+    return inicio_min, fin_min, hora_fin, duracion
 
 
 def obtener_paciente(db: Session, paciente_id: int) -> PacienteDB:
@@ -343,38 +424,52 @@ def validar_disponibilidad(
     db: Session,
     fecha: str,
     hora: str,
+    hora_fin: Optional[str],
+    duracion_minutos: int,
     estado: str,
     cita_excluida_id: Optional[int] = None,
-) -> None:
-    """Evita dos citas activas exactamente en el mismo horario."""
+) -> tuple[str, int]:
+    """Impide cruces parciales o totales entre citas activas."""
+    _inicio, _fin, hora_fin_resuelta, duracion_resuelta = resolver_rango_horario(
+        fecha, hora, hora_fin, duracion_minutos
+    )
+
     if estado not in ESTADOS_QUE_BLOQUEAN_HORARIO:
-        return
+        return hora_fin_resuelta, duracion_resuelta
 
     consulta = db.query(CitaDB).filter(
         CitaDB.fecha == fecha,
-        CitaDB.hora == hora,
         CitaDB.estado.in_(ESTADOS_QUE_BLOQUEAN_HORARIO),
     )
-
     if cita_excluida_id:
         consulta = consulta.filter(CitaDB.id != cita_excluida_id)
 
-    conflicto = consulta.first()
-    if not conflicto:
-        return
+    for conflicto in consulta.all():
+        inicio_existente = convertir_hora_a_minutos(conflicto.hora or "00:00")
+        duracion_existente = int(conflicto.duracionMinutos or 60)
+        try:
+            fin_existente = convertir_hora_a_minutos(conflicto.horaFin) if conflicto.horaFin else inicio_existente + duracion_existente
+        except HTTPException:
+            fin_existente = inicio_existente + duracion_existente
 
-    paciente = db.query(PacienteDB).filter(
-        PacienteDB.id == conflicto.pacienteId
-    ).first()
-    nombre = paciente.nombre if paciente else "otro paciente"
+        hay_cruce = _inicio < fin_existente and _fin > inicio_existente
+        if not hay_cruce:
+            continue
 
-    raise HTTPException(
-        status_code=409,
-        detail=(
-            f"El horario {fecha} a las {hora} ya está ocupado por "
-            f"{nombre} ({conflicto.procedimiento or 'consulta'})."
-        ),
-    )
+        paciente = db.query(PacienteDB).filter(
+            PacienteDB.id == conflicto.pacienteId
+        ).first()
+        nombre = paciente.nombre if paciente else "otro paciente"
+        rango_existente = f"{conflicto.hora or '—'} → {conflicto.horaFin or minutos_a_hora(fin_existente)}"
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El rango {hora} → {hora_fin_resuelta} se cruza con una cita existente. "
+                f"Horario ocupado: {rango_existente}. Paciente: {nombre}."
+            ),
+        )
+
+    return hora_fin_resuelta, duracion_resuelta
 
 
 def validar_secuencia_sesion(db: Session, cita: CitaDB) -> None:
@@ -410,14 +505,49 @@ def validar_secuencia_sesion(db: Session, cita: CitaDB) -> None:
         )
 
 
-def calcular_datos_pago(payload: CitaPagoPayload) -> Dict[str, Any]:
+def normalizar_servicios(payload: CitaPagoPayload) -> Dict[str, Any]:
+    servicios = []
+
+    for servicio in payload.servicios:
+        nombre = servicio.nombre.strip()
+        if not nombre:
+            continue
+        servicios.append({
+            "nombre": nombre,
+            "costo": round(float(servicio.costo or 0), 2),
+        })
+
+    if not servicios:
+        servicios = [{
+            "nombre": payload.procedimiento.strip(),
+            "costo": round(float(payload.costo or 0), 2),
+        }]
+
+    if payload.tipoPago in {"cortesia", "sesion"}:
+        servicios = [
+            {**servicio, "costo": 0.0}
+            for servicio in servicios
+        ]
+
+    procedimiento = " + ".join(servicio["nombre"] for servicio in servicios)
+    procedimiento = procedimiento[:200]
+    costo_total = round(sum(servicio["costo"] for servicio in servicios), 2)
+
+    return {
+        "servicios": servicios,
+        "procedimiento": procedimiento,
+        "costo_total": costo_total,
+    }
+
+
+def calcular_datos_pago(payload: CitaPagoPayload, costo_total: Optional[float] = None) -> Dict[str, Any]:
     tipo_pago = payload.tipoPago
 
     if tipo_pago in {"cortesia", "sesion"}:
         total = 0.0
         cobrado = 0.0
     else:
-        total = round(float(payload.costo), 2)
+        total = round(float(payload.costo if costo_total is None else costo_total), 2)
 
         if tipo_pago == "completo":
             cobrado = total
@@ -499,7 +629,6 @@ def crear_cita_con_pago(
     payload: CitaPagoPayload,
     db: Session = Depends(get_db),
 ):
-    validar_fecha_hora(payload.fecha, payload.hora)
     obtener_paciente(db, payload.pacienteId)
     validar_plan(db, payload.planId, payload.pacienteId)
 
@@ -509,14 +638,17 @@ def crear_cita_con_pago(
             detail="La sesión actual no puede superar el total de sesiones.",
         )
 
-    validar_disponibilidad(
+    hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
         payload.fecha,
         payload.hora,
+        payload.horaFin,
+        payload.duracionMinutos,
         payload.estado,
     )
 
-    datos_pago = calcular_datos_pago(payload)
+    detalle_servicios = normalizar_servicios(payload)
+    datos_pago = calcular_datos_pago(payload, detalle_servicios["costo_total"])
     ahora = ahora_iso()
 
     nueva_cita = CitaDB(
@@ -525,7 +657,10 @@ def crear_cita_con_pago(
         citaBaseId=payload.citaBaseId,
         fecha=payload.fecha,
         hora=payload.hora,
-        procedimiento=payload.procedimiento.strip(),
+        horaFin=hora_fin_resuelta,
+        duracionMinutos=duracion_resuelta,
+        procedimiento=detalle_servicios["procedimiento"],
+        servicios=detalle_servicios["servicios"],
         notas=payload.notas.strip(),
         costo=datos_pago["total"],
         tipoPago=payload.tipoPago,
@@ -544,7 +679,7 @@ def crear_cita_con_pago(
         nuevo_pago = PagoDB(
             pacienteId=payload.pacienteId,
             citaId=nueva_cita.id,
-            concepto=payload.procedimiento.strip(),
+            concepto=detalle_servicios["procedimiento"],
             fecha=payload.fecha,
             total=datos_pago["total"],
             cobrado=datos_pago["cobrado"],
@@ -590,7 +725,6 @@ def actualizar_cita_con_pago(
     if not cita:
         raise HTTPException(status_code=404, detail="La cita no existe.")
 
-    validar_fecha_hora(payload.fecha, payload.hora)
     obtener_paciente(db, payload.pacienteId)
     validar_plan(db, payload.planId, payload.pacienteId)
 
@@ -600,16 +734,19 @@ def actualizar_cita_con_pago(
             detail="La sesión actual no puede superar el total de sesiones.",
         )
 
-    validar_disponibilidad(
+    hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
         payload.fecha,
         payload.hora,
+        payload.horaFin,
+        payload.duracionMinutos,
         payload.estado,
         cita_excluida_id=cita_id,
     )
 
     pago = db.query(PagoDB).filter(PagoDB.citaId == cita_id).first()
-    datos_pago = calcular_datos_pago(payload)
+    detalle_servicios = normalizar_servicios(payload)
+    datos_pago = calcular_datos_pago(payload, detalle_servicios["costo_total"])
     ahora = ahora_iso()
 
     if pago and datos_pago["cobrado"] < float(pago.cobrado or 0):
@@ -626,7 +763,10 @@ def actualizar_cita_con_pago(
     cita.citaBaseId = payload.citaBaseId
     cita.fecha = payload.fecha
     cita.hora = payload.hora
-    cita.procedimiento = payload.procedimiento.strip()
+    cita.horaFin = hora_fin_resuelta
+    cita.duracionMinutos = duracion_resuelta
+    cita.procedimiento = detalle_servicios["procedimiento"]
+    cita.servicios = detalle_servicios["servicios"]
     cita.notas = payload.notas.strip()
     cita.costo = datos_pago["total"]
     cita.tipoPago = payload.tipoPago
@@ -652,7 +792,7 @@ def actualizar_cita_con_pago(
             db.add(pago)
 
         pago.pacienteId = payload.pacienteId
-        pago.concepto = payload.procedimiento.strip()
+        pago.concepto = detalle_servicios["procedimiento"]
         pago.fecha = payload.fecha
         pago.total = datos_pago["total"]
         pago.cobrado = datos_pago["cobrado"]
@@ -694,27 +834,31 @@ def reprogramar_cita(
             detail="Solo se pueden reprogramar citas activas.",
         )
 
-    validar_fecha_hora(payload.fecha, payload.hora)
-    validar_disponibilidad(
+    hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
         payload.fecha,
         payload.hora,
+        payload.horaFin,
+        payload.duracionMinutos,
         cita.estado,
         cita_excluida_id=cita.id,
     )
 
     fecha_anterior = cita.fecha
     hora_anterior = cita.hora
+    hora_fin_anterior = cita.horaFin or minutos_a_hora(convertir_hora_a_minutos(cita.hora or "00:00") + int(cita.duracionMinutos or 60))
     cita.fecha = payload.fecha
     cita.hora = payload.hora
+    cita.horaFin = hora_fin_resuelta
+    cita.duracionMinutos = duracion_resuelta
 
     try:
         db.commit()
         db.refresh(cita)
         return {
             "message": (
-                f"Cita reprogramada de {fecha_anterior} {hora_anterior} "
-                f"a {payload.fecha} {payload.hora}."
+                f"Cita reprogramada de {fecha_anterior} {hora_anterior} → {hora_fin_anterior} "
+                f"a {payload.fecha} {payload.hora} → {hora_fin_resuelta}."
             ),
             "cita": serializar_modelo(cita),
         }
@@ -761,6 +905,8 @@ def cambiar_estado_cita(
             db,
             cita.fecha,
             cita.hora,
+            cita.horaFin,
+            int(cita.duracionMinutos or 60),
             estado_nuevo,
             cita_excluida_id=cita.id,
         )
@@ -792,7 +938,7 @@ def cambiar_estado_cita(
         ) from error
 
     etiquetas = {
-        "pendiente": "pendiente",
+        "pendiente": "programada",
         "confirmada": "confirmada",
         "en_espera": "en espera",
         "en_atencion": "en atención",
@@ -969,15 +1115,20 @@ def update_record(
     if store == "citas":
         fecha = str(data.get("fecha", registro.fecha) or "")
         hora = str(data.get("hora", registro.hora) or "")
+        hora_fin = data.get("horaFin", registro.horaFin)
+        duracion = int(data.get("duracionMinutos", registro.duracionMinutos or 60) or 60)
         estado = str(data.get("estado", registro.estado) or "pendiente")
-        validar_fecha_hora(fecha, hora)
-        validar_disponibilidad(
+        hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
             db,
             fecha,
             hora,
+            hora_fin,
+            duracion,
             estado,
             cita_excluida_id=item_id,
         )
+        data["horaFin"] = hora_fin_resuelta
+        data["duracionMinutos"] = duracion_resuelta
 
     columnas_validas = {columna.name for columna in modelo.__table__.columns}
     for clave, valor in data.items():

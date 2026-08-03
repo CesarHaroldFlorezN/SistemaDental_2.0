@@ -384,11 +384,19 @@ export default function App() {
   const handleReprogramarCita = async (cita, nuevaFechaHora) => {
     const nuevaFecha = format(nuevaFechaHora, 'yyyy-MM-dd');
     const nuevaHora = format(nuevaFechaHora, 'HH:mm');
+    const duracionMinutos = Number(cita.duracionMinutos || 60);
+    const finDate = new Date(nuevaFechaHora.getTime() + duracionMinutos * 60 * 1000);
+    const nuevaHoraFin = format(finDate, 'HH:mm');
 
     if (cita.fecha === nuevaFecha && cita.hora === nuevaHora) return;
 
     try {
-      const respuesta = await api.reprogramarCita(cita.id, nuevaFecha, nuevaHora);
+      const respuesta = await api.reprogramarCita(cita.id, {
+        fecha: nuevaFecha,
+        hora: nuevaHora,
+        horaFin: nuevaHoraFin,
+        duracionMinutos
+      });
       await cargarCitas();
 
       Swal.fire({
@@ -825,7 +833,7 @@ export default function App() {
       case 'cancelada':
         return <span className="bg-slate-500/10 text-slate-400 border border-slate-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><XCircle size={13}/> Cancelada</span>;
       default:
-        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Pendiente</span>;
+        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Programado</span>;
     }
   };
 
@@ -1270,10 +1278,22 @@ export default function App() {
             : null
         }
         pacientes={pacientes}
+        citas={citas}
       />
       <CompletarCitaModal key={citaParaAccion ? `comp-${citaParaAccion.id}` : 'comp-modal'} isOpen={modalCompletarAbierto} onClose={() => setModalCompletarAbierto(false)} onSave={handleGuardarCompletado} cita={citaParaAccion} pago={pagoParaAccion} />
       <CancelarCitaModal key={citaParaAccion ? `canc-${citaParaAccion.id}` : 'canc-modal'} isOpen={modalCancelarAbierto} onClose={() => setModalCancelarAbierto(false)} onSave={handleGuardarCancelacion} cita={citaParaAccion} pago={pagoParaAccion} />
-      <FichaPacienteModal isOpen={modalFichaAbierto} onClose={() => setModalFichaAbierto(false)} paciente={pacienteSeleccionado} citas={citas} pagos={pagos} onNuevaCita={() => { setCitaSeleccionada(null); setModalCitaAbierto(true); }} onEditarPaciente={handleEditarPaciente} />
+      <FichaPacienteModal
+        isOpen={modalFichaAbierto}
+        onClose={() => setModalFichaAbierto(false)}
+        paciente={pacienteSeleccionado}
+        citas={citas}
+        pagos={pagos}
+        onNuevaCita={(paciente) => {
+          setCitaSeleccionada({ pacienteId: paciente?.id || null });
+          setModalCitaAbierto(true);
+        }}
+        onEditarPaciente={handleEditarPaciente}
+      />
       <PlanPagoModal isOpen={modalPPAbierto} onClose={() => setModalPPAbierto(false)} onSave={handleGuardarNuevoPP} pacientes={pacientes} />
       <PlanTratamientoModal key={planSeleccionado ? planSeleccionado.id : 'nuevo-plan'} isOpen={modalPlanAbierto} onClose={() => setModalPlanAbierto(false)} onSave={handleGuardarPlan} planEditar={planSeleccionado} pacientes={pacientes} />
     </div>

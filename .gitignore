@@ -34,3 +34,24 @@ dist/
 # Respaldos automáticos
 respaldos_codigo/
 respaldos/
+
+# Bases de datos
+data/*.db
+frontend-moderno/data/*.db
+
+# React
+frontend-moderno/node_modules/
+frontend-moderno/dist/
+
+# PyInstaller
+build/
+dist/
+
+# Respaldos locales
+respaldos_codigo/
+respaldos/data/
+frontend-moderno/data/
+
+# Datos locales del sistema
+/data/
+/frontend-moderno/data/
