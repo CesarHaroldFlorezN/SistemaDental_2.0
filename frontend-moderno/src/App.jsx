@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { api } from './services/api';
 import PacienteModal from './components/PacienteModal';
 import CitaModal from './components/CitaModal';
+import AgendaClinicaProfesional from './components/AgendaClinicaProfesional';
 import Sidebar from './components/Sidebar';
 import { 
   Search, Edit, Trash2, UserPlus, 
@@ -16,16 +17,20 @@ import {
   Download, Upload
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { format } from 'date-fns';
 
-// --- IMPORTACIONES DEL CALENDARIO ---
-import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
-import { es } from 'date-fns/locale';
+const obtenerFechaLocal = (fecha = new Date()) => {
+  const year = fecha.getFullYear();
+  const month = String(fecha.getMonth() + 1).padStart(2, '0');
+  const day = String(fecha.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
-const locales = { 'es': es };
-const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
-// ------------------------------------
+const normalizarTexto = (valor) => String(valor ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
 
 export default function App() {
   const [vistaActiva, setVistaActiva] = useState('dashboard');
@@ -94,8 +99,6 @@ export default function App() {
   // ESTADOS DE CITAS & MODALES CLÍNICOS
   // ==========================================
   const [citas, setCitas] = useState([]);
-  const [busquedaCita, setBusquedaCita] = useState('');
-  const [filtroEstadoCita, setFiltroEstadoCita] = useState('Todos');
   const [modalCitaAbierto, setModalCitaAbierto] = useState(false);
   const [citaSeleccionada, setCitaSeleccionada] = useState(null);
 
@@ -230,7 +233,16 @@ export default function App() {
   // ==========================================
   // CRUD CITAS & MODALES CLÍNICOS
   // ==========================================
-  const handleNuevaCita = () => { setCitaSeleccionada(null); setModalCitaAbierto(true); };
+  const handleNuevaCita = (datosIniciales = null) => {
+    const esEventoReact = Boolean(datosIniciales?.nativeEvent);
+    const datosValidos =
+      datosIniciales && typeof datosIniciales === 'object' && !esEventoReact
+        ? datosIniciales
+        : null;
+
+    setCitaSeleccionada(datosValidos);
+    setModalCitaAbierto(true);
+  };
   const handleEditarCita = (cita) => { setCitaSeleccionada(cita); setModalCitaAbierto(true); };
 
   const handleGuardarCita = async (payload, id) => {
@@ -322,7 +334,89 @@ export default function App() {
   };
 
   const handleCambiarEstadoCita = async (cita, nuevoEstado) => {
-    try { await api.actualizarCita(cita.id, { ...cita, estado: nuevoEstado }); cargarCitas(); } catch (error) { console.error(error); }
+    const nombresEstado = {
+      confirmada: 'confirmada',
+      en_espera: 'en espera',
+      en_atencion: 'en atención',
+      no_asistio: 'no asistió'
+    };
+
+    if (nuevoEstado === 'no_asistio') {
+      const confirmacion = await Swal.fire({
+        title: '¿Registrar que no asistió?',
+        text: `La cita de ${cita.nombrePaciente || 'este paciente'} quedará cerrada como inasistencia.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, registrar',
+        cancelButtonText: 'Volver',
+        confirmButtonColor: '#ea580c',
+        background: '#1e293b',
+        color: '#fff'
+      });
+
+      if (!confirmacion.isConfirmed) return;
+    }
+
+    try {
+      const respuesta = await api.cambiarEstadoCita(cita.id, nuevoEstado);
+      await cargarCitas();
+
+      Swal.fire({
+        title: nuevoEstado === 'en_atencion' ? 'Atención iniciada' : 'Estado actualizado',
+        text: respuesta?.message || `La cita ahora está ${nombresEstado[nuevoEstado] || nuevoEstado}.`,
+        icon: nuevoEstado === 'en_atencion' ? 'info' : 'success',
+        background: '#1e293b',
+        color: '#fff',
+        timer: 1600,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire({
+        title: 'No se pudo cambiar el estado',
+        text: error.message || 'Ocurrió un error al actualizar la cita.',
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
+    }
+  };
+
+  const handleReprogramarCita = async (cita, nuevaFechaHora) => {
+    const nuevaFecha = format(nuevaFechaHora, 'yyyy-MM-dd');
+    const nuevaHora = format(nuevaFechaHora, 'HH:mm');
+
+    if (cita.fecha === nuevaFecha && cita.hora === nuevaHora) return;
+
+    try {
+      const respuesta = await api.reprogramarCita(cita.id, nuevaFecha, nuevaHora);
+      await cargarCitas();
+
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        title: 'Cita reprogramada',
+        text: respuesta?.message || `${nuevaFecha} a las ${nuevaHora}`,
+        icon: 'success',
+        timer: 2200,
+        showConfirmButton: false,
+        background: '#1e293b',
+        color: '#fff'
+      });
+    } catch (error) {
+      await cargarCitas();
+      Swal.fire({
+        title: 'No se pudo reprogramar',
+        text: error.message || 'El horario seleccionado no está disponible.',
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
+    }
+  };
+
+  const handleVerCuotasDesdeAgenda = (cita) => {
+    setBusquedaPP(cita?.nombrePaciente || '');
+    setVistaActiva('planPagos');
   };
 
   const handleAbrirCompletar = (cita) => {
@@ -393,14 +487,124 @@ export default function App() {
   };
 
   const handleCobrarSaldo = async (pago, nombrePaciente) => {
-    const { value: montoAbono } = await Swal.fire({ title: `Cobrar a ${nombrePaciente}`, text: `Deuda pendiente: ${fMon(pago.saldo)}`, input: 'number', inputValue: pago.saldo, inputAttributes: { min: '0.1', max: pago.saldo, step: '0.5' }, showCancelButton: true, background: '#1e293b', color: '#fff', confirmButtonColor: '#0891b2', confirmButtonText: 'Registrar Cobro' });
-    if (montoAbono) {
-      const abono = parseFloat(montoAbono);
-      const nuevoCobrado = parseFloat(pago.cobrado || 0) + abono;
-      const nuevoSaldo = Math.max(0, parseFloat(pago.total || 0) - nuevoCobrado);
-      await api.actualizarPago(pago.id, { ...pago, cobrado: nuevoCobrado, saldo: nuevoSaldo, fechaUltPago: new Date().toISOString().split('T')[0], tipoPago: nuevoSaldo === 0 && pago.tipoPago !== 'cuotas' ? 'completo' : pago.tipoPago });
-      cargarPagos(); cargarPlanPagos();
-      Swal.fire({ title: '¡Cobrado!', text: `Abono de ${fMon(abono)} registrado.`, icon: 'success', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
+    const saldoActual = Number(pago?.saldo || 0);
+    if (saldoActual <= 0) {
+      Swal.fire({
+        title: 'Pago completo',
+        text: 'Este tratamiento ya no tiene saldo pendiente.',
+        icon: 'success',
+        background: '#1e293b',
+        color: '#fff'
+      });
+      return;
+    }
+
+    const planVinculado = planPagos.find(
+      (plan) => Number(plan.pagoId) === Number(pago.id)
+    );
+
+    if ((pago.tipoPago || '').toLowerCase() === 'cuotas' && planVinculado) {
+      setBusquedaPP(nombrePaciente || '');
+      setVistaActiva('planPagos');
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        title: 'Plan de cuotas abierto',
+        text: 'Selecciona la cuota que deseas registrar.',
+        icon: 'info',
+        timer: 2200,
+        showConfirmButton: false,
+        background: '#1e293b',
+        color: '#fff'
+      });
+      return;
+    }
+
+    const resultado = await Swal.fire({
+      title: `Registrar pago de ${nombrePaciente}`,
+      html: `
+        <div style="text-align:left; display:grid; gap:12px;">
+          <div style="padding:12px; border-radius:10px; background:#0f172a; color:#cbd5e1;">
+            Saldo pendiente: <strong style="color:#fb7185;">${fMon(saldoActual)}</strong>
+          </div>
+          <label style="font-size:13px; color:#cbd5e1;">
+            Monto a cobrar
+            <input id="dp-monto-cobro" type="number" min="0.01" max="${saldoActual}" step="0.01" value="${saldoActual}" class="swal2-input" style="margin:6px 0 0; width:100%;" />
+          </label>
+          <label style="font-size:13px; color:#cbd5e1;">
+            Método de pago
+            <select id="dp-metodo-cobro" class="swal2-select" style="margin:6px 0 0; width:100%;">
+              <option value="Efectivo">Efectivo</option>
+              <option value="Yape">Yape</option>
+              <option value="Plin">Plin</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Tarjeta">Tarjeta</option>
+            </select>
+          </label>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Registrar pago',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#0891b2',
+      background: '#1e293b',
+      color: '#fff',
+      focusConfirm: false,
+      preConfirm: () => {
+        const monto = Number(document.getElementById('dp-monto-cobro')?.value || 0);
+        const metodo = document.getElementById('dp-metodo-cobro')?.value || 'Efectivo';
+
+        if (monto <= 0) {
+          Swal.showValidationMessage('El monto debe ser mayor que cero.');
+          return false;
+        }
+        if (monto > saldoActual) {
+          Swal.showValidationMessage('El monto no puede superar el saldo pendiente.');
+          return false;
+        }
+
+        return { monto, metodo };
+      }
+    });
+
+    if (!resultado.isConfirmed || !resultado.value) return;
+
+    try {
+      const { monto, metodo } = resultado.value;
+      const nuevoCobrado = Number(pago.cobrado || 0) + monto;
+      const nuevoSaldo = Math.max(0, Number(pago.total || 0) - nuevoCobrado);
+
+      await api.actualizarPago(pago.id, {
+        ...pago,
+        cobrado: Number(nuevoCobrado.toFixed(2)),
+        saldo: Number(nuevoSaldo.toFixed(2)),
+        metodo,
+        fechaUltPago: format(new Date(), 'yyyy-MM-dd'),
+        tipoPago:
+          nuevoSaldo === 0 && pago.tipoPago !== 'cuotas'
+            ? 'completo'
+            : pago.tipoPago
+      });
+
+      await Promise.all([cargarPagos(), cargarPlanPagos()]);
+
+      Swal.fire({
+        title: 'Pago registrado',
+        text: `${fMon(monto)} mediante ${metodo}. Saldo: ${fMon(nuevoSaldo)}.`,
+        icon: 'success',
+        background: '#1e293b',
+        color: '#fff',
+        timer: 2200,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire({
+        title: 'No se pudo registrar el pago',
+        text: error.message || 'Ocurrió un error al guardar el cobro.',
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
     }
   };
 
@@ -518,8 +722,18 @@ export default function App() {
   // FILTRADO Y ORDENAMIENTO
   // ==========================================
   const pacientesFiltrados = pacientes.filter(p => {
-    const q = busqueda.toLowerCase();
-    return (p.nombre || '').toLowerCase().includes(q) || (p.cedula || '').toLowerCase().includes(q) || (p.codigo_ficha || '').toLowerCase().includes(q);
+    const terminos = normalizarTexto(busqueda).split(/\s+/).filter(Boolean);
+    if (!terminos.length) return true;
+
+    const textoPaciente = normalizarTexto([
+      p.nombre,
+      p.cedula,
+      p.codigo_ficha,
+      p.telefono,
+      p.correo
+    ].join(' '));
+
+    return terminos.every(termino => textoPaciente.includes(termino));
   }).sort((a, b) => {
     const numA = parseInt((a.codigo_ficha || '').replace(/\D/g, ''), 10) || 999999;
     const numB = parseInt((b.codigo_ficha || '').replace(/\D/g, ''), 10) || 999999;
@@ -528,20 +742,40 @@ export default function App() {
   });
 
   const citasFiltradas = citas.map(c => {
-    const pac = pacientes.find(p => p.id === c.pacienteId) || {};
-    return { ...c, nombrePaciente: pac.nombre || 'Paciente no encontrado', cedulaPaciente: pac.cedula || '—', codigoFicha: pac.codigo_ficha || '' };
-  }).filter(c => {
-    const q = busquedaCita.toLowerCase();
-    const coincideTexto = c.nombrePaciente.toLowerCase().includes(q) || (c.procedimiento || '').toLowerCase().includes(q) || (c.cedulaPaciente || '').toLowerCase().includes(q);
-    return coincideTexto && (filtroEstadoCita === 'Todos' || c.estado === filtroEstadoCita.toLowerCase());
+    const pac = pacientes.find(p => Number(p.id) === Number(c.pacienteId)) || {};
+    return {
+      ...c,
+      nombrePaciente: pac.nombre || 'Paciente no encontrado',
+      cedulaPaciente: pac.cedula || '—',
+      codigoFicha: pac.codigo_ficha || '',
+      telefonoPaciente: pac.telefono || '—'
+    };
   });
 
   const pagosFiltrados = pagos.map(g => {
-    const pac = pacientes.find(p => p.id === g.pacienteId) || {};
-    return { ...g, nombrePaciente: pac.nombre || 'Paciente no encontrado', cedulaPaciente: pac.cedula || '—' };
+    const pac = pacientes.find(p => Number(p.id) === Number(g.pacienteId)) || {};
+    return {
+      ...g,
+      nombrePaciente: pac.nombre || 'Paciente no encontrado',
+      cedulaPaciente: pac.cedula || '—',
+      codigoFicha: pac.codigo_ficha || '',
+      telefonoPaciente: pac.telefono || '—'
+    };
   }).filter(g => {
-    const q = busquedaFinanzas.toLowerCase();
-    return g.nombrePaciente.toLowerCase().includes(q) || (g.concepto || '').toLowerCase().includes(q) || (g.metodo || '').toLowerCase().includes(q);
+    const terminos = normalizarTexto(busquedaFinanzas).split(/\s+/).filter(Boolean);
+    if (!terminos.length) return true;
+
+    const textoPago = normalizarTexto([
+      g.nombrePaciente,
+      g.cedulaPaciente,
+      g.codigoFicha,
+      g.telefonoPaciente,
+      g.concepto,
+      g.metodo,
+      g.tipoPago
+    ].join(' '));
+
+    return terminos.every(termino => textoPago.includes(termino));
   }).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
 
   const planPagosFiltrados = planPagos.map(pl => {
@@ -560,9 +794,10 @@ export default function App() {
     return pl.nombrePaciente.toLowerCase().includes(q) || (pl.nombre || '').toLowerCase().includes(q) || (pl.tipo || '').toLowerCase().includes(q);
   }).sort((a, b) => (b.creadoEn || '').localeCompare(a.creadoEn || ''));
 
-  const hoyStr = new Date().toISOString().split('T')[0];
-  const mananaDate = new Date(); mananaDate.setDate(mananaDate.getDate() + 1);
-  const mananaStr = mananaDate.toISOString().split('T')[0];
+  const hoyStr = obtenerFechaLocal();
+  const mananaDate = new Date();
+  mananaDate.setDate(mananaDate.getDate() + 1);
+  const mananaStr = obtenerFechaLocal(mananaDate);
 
   const citasHoy = citasFiltradas.filter(c => c.fecha === hoyStr && c.estado !== 'cancelada');
   const citasManana = citasFiltradas.filter(c => c.fecha === mananaStr && c.estado !== 'cancelada');
@@ -577,10 +812,20 @@ export default function App() {
 
   const getBadgeEstado = (estado) => {
     switch ((estado || '').toLowerCase()) {
-      case 'completada': return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><CheckCircle size={13}/> Completada</span>;
-      case 'en_atencion': return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max animate-pulse"><Clock size={13}/> En Atención 🔴</span>;
-      case 'cancelada': return <span className="bg-slate-500/10 text-slate-400 border border-slate-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><XCircle size={13}/> Cancelada</span>;
-      default: return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Pendiente</span>;
+      case 'completada':
+        return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><CheckCircle size={13}/> Atendida</span>;
+      case 'en_atencion':
+        return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max animate-pulse"><Clock size={13}/> En atención 🔴</span>;
+      case 'en_espera':
+        return <span className="bg-violet-500/10 text-violet-400 border border-violet-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><Clock size={13}/> En espera</span>;
+      case 'confirmada':
+        return <span className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><CheckCircle size={13}/> Confirmada</span>;
+      case 'no_asistio':
+        return <span className="bg-orange-500/10 text-orange-400 border border-orange-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> No asistió</span>;
+      case 'cancelada':
+        return <span className="bg-slate-500/10 text-slate-400 border border-slate-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><XCircle size={13}/> Cancelada</span>;
+      default:
+        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Pendiente</span>;
     }
   };
 
@@ -744,7 +989,7 @@ export default function App() {
               </div>
               <div className="relative mb-6">
                 <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
-                <input type="text" placeholder="Buscar por Ficha, Nombre o DNI..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
+                <input type="text" placeholder="Buscar por ficha, nombre, DNI, teléfono o correo..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
               </div>
               <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
                 <table className="w-full text-left border-collapse">
@@ -776,134 +1021,31 @@ export default function App() {
           )}
 
           {/* ==============================================
-              PANTALLA 2: AGENDA / CITAS CON CALENDARIO
+              PANTALLA 2: AGENDA CLÍNICA PROFESIONAL
           =============================================== */}
           {vistaActiva === 'citas' && (
-            <div className="flex flex-col h-full">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h1 className="text-3xl font-bold text-cyan-400">Agenda Clínica Interactiva</h1>
-                  <p className="text-sm text-slate-400 mt-1">Haz clic en un horario vacío del calendario para agendar un paciente rápidamente.</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-4 py-1.5 rounded-full text-sm font-semibold">
-                    {citasFiltradas.length} Citas
-                  </span>
-                  <button onClick={handleNuevaCita} className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-cyan-600/20 transition cursor-pointer">
-                    <CalendarPlus size={18} /> Agendar Cita
-                  </button>
-                </div>
-              </div>
-
-              {/* === BARRA DE BÚSQUEDA Y FILTROS RESTAURADA === */}
-              <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
-                  <input
-                    type="text"
-                    placeholder="Buscar en la agenda por paciente, DNI o motivo..."
-                    value={busquedaCita}
-                    onChange={(e) => setBusquedaCita(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm"
-                  />
-                </div>
-
-                <div className="flex bg-slate-800 border border-slate-700 rounded-xl p-1 gap-1">
-                  {['Todos', 'pendiente', 'en_atencion', 'completada', 'cancelada'].map((estado) => {
-                    const label = {
-                      Todos: 'Todas',
-                      pendiente: 'Pendientes',
-                      en_atencion: 'En Atención',
-                      completada: 'Completadas',
-                      cancelada: 'Canceladas'
-                    }[estado];
-
-                    return (
-                      <button
-                        key={estado}
-                        onClick={() => setFiltroEstadoCita(estado)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                          filtroEstadoCita === estado
-                            ? 'bg-cyan-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* === CALENDARIO CLÍNICO INTERACTIVO === */}
-              <div className="p-4 bg-slate-800/80 border border-slate-700/80 rounded-xl shadow-xl flex-1">
-                <div style={{ height: '70vh' }}>
-                  <Calendar
-                    localizer={localizer}
-                    culture="es"
-                    defaultView="week"
-                    views={['month', 'week', 'day', 'agenda']}
-                    events={citasFiltradas.map(c => {
-                      const fechaBase = c.fecha || new Date().toISOString().split('T')[0];
-                      const horaBase = c.hora || '09:00';
-                      const [year, month, day] = fechaBase.split('-');
-                      const [hora, min] = horaBase.split(':');
-                      
-                      const start = new Date(year, month - 1, day, hora, min);
-                      const end = new Date(start.getTime() + 60 * 60 * 1000); 
-                      
-                      return {
-                        id: c.id,
-                        title: `${c.nombrePaciente} - ${c.procedimiento || 'Consulta'}`,
-                        start,
-                        end,
-                        estado: c.estado,
-                        citaData: c
-                      };
-                    })}
-                    messages={{
-                      next: "Sig. ❯", previous: "❮ Ant.", today: "Hoy",
-                      month: "Mes", week: "Semana", day: "Día", agenda: "Lista",
-                      date: "Fecha", time: "Hora", event: "Tratamiento",
-                      noEventsInRange: "No hay citas programadas en esta fecha."
-                    }}
-                    eventPropGetter={(event) => {
-                      let backgroundColor = '#475569'; 
-                      if (event.estado === 'completada') backgroundColor = '#10b981'; 
-                      if (event.estado === 'en_atencion') backgroundColor = '#f43f5e'; 
-                      if (event.estado === 'cancelada') backgroundColor = '#334155'; 
-
-                      return {
-                        style: {
-                          backgroundColor,
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          display: 'block',
-                          fontSize: '12px',
-                          padding: '3px 6px',
-                          fontWeight: '600',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                        }
-                      };
-                    }}
-                    selectable
-                    onSelectEvent={(event) => {
-                      handleEditarCita(event.citaData);
-                    }}
-                    onSelectSlot={(slotInfo) => {
-                      const fechaClic = format(slotInfo.start, 'yyyy-MM-dd');
-                      const horaClic = format(slotInfo.start, 'HH:mm');
-                      setCitaSeleccionada({ 
-                        fecha: fechaClic, 
-                        hora: horaClic !== '00:00' ? horaClic : '' 
-                      });
-                      setModalCitaAbierto(true);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
+            <AgendaClinicaProfesional
+              citas={citas}
+              pacientes={pacientes}
+              pagos={pagos}
+              onNuevaCita={handleNuevaCita}
+              onEditarCita={handleEditarCita}
+              onCambiarEstado={handleCambiarEstadoCita}
+              onCompletarCita={handleAbrirCompletar}
+              onCancelarCita={handleAbrirCancelar}
+              onCobrar={handleCobrarSaldo}
+              onVerFicha={handleVerFicha}
+              onEliminarCita={handleEliminarCita}
+              onReprogramarCita={handleReprogramarCita}
+              onVerCuotas={handleVerCuotasDesdeAgenda}
+              onRecargar={() => Promise.all([
+                cargarPacientes(),
+                cargarCitas(),
+                cargarPagos(),
+                cargarPlanPagos(),
+                cargarPlanes()
+              ])}
+            />
           )}
 
           {/* ==============================================
@@ -938,7 +1080,7 @@ export default function App() {
               </div>
               <div className="relative mb-6">
                 <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
-                <input type="text" placeholder="Buscar pago por paciente, tratamiento o método..." value={busquedaFinanzas} onChange={(e) => setBusquedaFinanzas(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
+                <input type="text" placeholder="Buscar por paciente, DNI, ficha, teléfono, tratamiento o método..." value={busquedaFinanzas} onChange={(e) => setBusquedaFinanzas(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
               </div>
               <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
                 <table className="w-full text-left border-collapse">

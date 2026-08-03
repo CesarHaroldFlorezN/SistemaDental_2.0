@@ -1,56 +1,99 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, JSON
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from typing import Dict, Any, Optional, Literal
-from pydantic import BaseModel, Field
-from datetime import datetime
-import uvicorn
-import os
+from __future__ import annotations
+
 import csv
 import io
-from pathlib import Path
 import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Literal, Optional
 
-# 1. CONFIGURACIÓN DE BASE DE DATOS
-os.makedirs("./data", exist_ok=True) # Asegura que exista la carpeta data/
-DATABASE_URL = "sqlite:///./data/dentalpro.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+import uvicorn
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from sqlalchemy import JSON, Column, Float, Integer, String, Text, create_engine, event, or_
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
+
+
+# =====================================================
+# RUTAS DEL PROYECTO Y BASE DE DATOS
+# =====================================================
+
+if getattr(sys, "frozen", False):
+    # En el ejecutable, la base debe persistir junto a SistemaDental.exe.
+    APP_DIR = Path(sys.executable).resolve().parent
+else:
+    APP_DIR = Path(__file__).resolve().parent
+
+DATA_DIR = APP_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DB_PATH = DATA_DIR / "dentalpro.db"
+DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 15,
+    },
+)
+
+
+@event.listens_for(engine, "connect")
+def configurar_sqlite(dbapi_connection, _connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.execute("PRAGMA busy_timeout = 5000")
+    cursor.close()
+
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
 Base = declarative_base()
 
-# 2. MODELOS SQL (Creación de Tablas)
+
+# =====================================================
+# MODELOS SQLALCHEMY
+# =====================================================
+
 class PacienteDB(Base):
     __tablename__ = "pacientes"
+
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
     cedula = Column(String(50), index=True)
-    fechaNacimiento = Column(String(50))  # Corregido para coincidir con React
+    fechaNacimiento = Column(String(50))
     genero = Column(String(50))
     telefono = Column(String(50))
-    correo = Column(String(100))          # Agregado
+    correo = Column(String(100))
     codigo_ficha = Column(String(50), index=True)
     direccion = Column(String(200))
     alergias = Column(Text)
     medicamentos = Column(Text)
     fechaReg = Column(String(50))
 
+
 class CitaDB(Base):
     __tablename__ = "citas"
+
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
     planId = Column(Integer, nullable=True)
     citaBaseId = Column(Integer, nullable=True)
-    fecha = Column(String(50))
-    hora = Column(String(50))
+    fecha = Column(String(50), index=True)
+    hora = Column(String(50), index=True)
     procedimiento = Column(String(200))
     notas = Column(Text)
     notasFin = Column(Text)
     costo = Column(Float)
     tipoPago = Column(String(50))
-    estado = Column(String(50))
+    estado = Column(String(50), index=True)
     sesionNum = Column(Integer)
     totalSesiones = Column(Integer)
     creadaEn = Column(String(50))
@@ -59,11 +102,13 @@ class CitaDB(Base):
     motivoCancelacion = Column(Text)
     canceladaEn = Column(String(50))
 
+
 class PagoDB(Base):
     __tablename__ = "pagos"
+
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
-    citaId = Column(Integer)
+    citaId = Column(Integer, index=True)
     concepto = Column(String(200))
     fecha = Column(String(50))
     total = Column(Float)
@@ -78,8 +123,10 @@ class PagoDB(Base):
     devuelto = Column(Float)
     creditoFavor = Column(Float)
 
+
 class PlanDB(Base):
     __tablename__ = "planes"
+
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
     nombre = Column(String(150))
@@ -91,15 +138,17 @@ class PlanDB(Base):
     estado = Column(String(50))
     creadoEn = Column(String(50))
 
+
 class PlanPagoDB(Base):
     __tablename__ = "planPagos"
+
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
-    pagoId = Column(Integer)
-    citaId = Column(Integer)
+    pagoId = Column(Integer, index=True)
+    citaId = Column(Integer, index=True)
     concepto = Column(String(200))
     totalAcordado = Column(Float)
-    anticipo = Column(Float)     
+    anticipo = Column(Float)
     metodoPreferido = Column(String(50))
     estado = Column(String(50))
     cuotas = Column(JSON)
@@ -109,18 +158,33 @@ class PlanPagoDB(Base):
     fechaCreacion = Column(String(50))
     creadoEn = Column(String(50))
 
+
 Base.metadata.create_all(bind=engine)
 
-# 3. INICIALIZACIÓN FASTAPI Y CORS
-app = FastAPI(title="API DentalPro")
+
+# =====================================================
+# FASTAPI
+# =====================================================
+
+app = FastAPI(
+    title="API DentalPro",
+    version="1.1.0",
+    description="Backend local para gestión clínica, agenda y finanzas.",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def get_db():
     db = SessionLocal()
@@ -128,34 +192,111 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# =====================================================
+# ESQUEMAS DE VALIDACIÓN
+# =====================================================
+
+EstadoCita = Literal[
+    "pendiente",
+    "confirmada",
+    "en_espera",
+    "en_atencion",
+    "completada",
+    "no_asistio",
+    "cancelada",
+]
+
+TipoPago = Literal[
+    "contado",
+    "completo",
+    "anticipo",
+    "cuotas",
+    "cortesia",
+    "sesion",
+]
+
+
 class CitaPagoPayload(BaseModel):
-    pacienteId: int
+    pacienteId: int = Field(gt=0)
+    planId: Optional[int] = Field(default=None, gt=0)
+    citaBaseId: Optional[int] = Field(default=None, gt=0)
 
-    planId: Optional[int] = None
-    citaBaseId: Optional[int] = None
-
-    fecha: str
-    hora: str
-    procedimiento: str
-
-    notas: str = ""
-    estado: str = "pendiente"
+    fecha: str = Field(min_length=10, max_length=10)
+    hora: str = Field(min_length=5, max_length=5)
+    procedimiento: str = Field(min_length=2, max_length=200)
+    notas: str = Field(default="", max_length=5000)
+    estado: EstadoCita = "pendiente"
 
     costo: float = Field(default=0, ge=0)
-
-    tipoPago: Literal[
-        "contado",
-        "completo",
-        "anticipo",
-        "cuotas",
-        "cortesia"
-    ] = "contado"
-
+    tipoPago: TipoPago = "contado"
     montoPagado: float = Field(default=0, ge=0)
-    metodoPago: str = "Efectivo"
+    metodoPago: str = Field(default="Efectivo", max_length=50)
 
     sesionNum: int = Field(default=1, ge=1)
     totalSesiones: int = Field(default=1, ge=1)
+
+
+class CambioEstadoPayload(BaseModel):
+    estado: EstadoCita
+
+
+class ReprogramarCitaPayload(BaseModel):
+    fecha: str = Field(min_length=10, max_length=10)
+    hora: str = Field(min_length=5, max_length=5)
+
+
+# =====================================================
+# FUNCIONES AUXILIARES
+# =====================================================
+
+MODELOS = {
+    "pacientes": PacienteDB,
+    "citas": CitaDB,
+    "pagos": PagoDB,
+    "planes": PlanDB,
+    "planPagos": PlanPagoDB,
+}
+
+ESTADOS_QUE_BLOQUEAN_HORARIO = {
+    "pendiente",
+    "confirmada",
+    "en_espera",
+    "en_atencion",
+}
+
+TRANSICIONES_ESTADO = {
+    "pendiente": {
+        "confirmada",
+        "en_espera",
+        "en_atencion",
+        "no_asistio",
+        "cancelada",
+    },
+    "confirmada": {
+        "pendiente",
+        "en_espera",
+        "en_atencion",
+        "no_asistio",
+        "cancelada",
+    },
+    "en_espera": {
+        "confirmada",
+        "en_atencion",
+        "no_asistio",
+        "cancelada",
+    },
+    "en_atencion": {"completada", "cancelada"},
+    "no_asistio": {"pendiente"},
+    "cancelada": {"pendiente"},
+    "completada": set(),
+}
+
+
+def ahora_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
 
 def serializar_modelo(registro):
     return {
@@ -164,49 +305,160 @@ def serializar_modelo(registro):
     }
 
 
-def calcular_datos_pago(payload: CitaPagoPayload):
+def validar_fecha_hora(fecha: str, hora: str) -> None:
+    try:
+        datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="La fecha o la hora no tienen un formato válido.",
+        ) from exc
+
+
+def obtener_paciente(db: Session, paciente_id: int) -> PacienteDB:
+    paciente = db.query(PacienteDB).filter(PacienteDB.id == paciente_id).first()
+    if not paciente:
+        raise HTTPException(
+            status_code=404,
+            detail="El paciente seleccionado no existe.",
+        )
+    return paciente
+
+
+def validar_plan(db: Session, plan_id: Optional[int], paciente_id: int) -> None:
+    if not plan_id:
+        return
+
+    plan = db.query(PlanDB).filter(PlanDB.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="El plan de tratamiento no existe.")
+    if int(plan.pacienteId or 0) != int(paciente_id):
+        raise HTTPException(
+            status_code=400,
+            detail="El plan de tratamiento no pertenece al paciente seleccionado.",
+        )
+
+
+def validar_disponibilidad(
+    db: Session,
+    fecha: str,
+    hora: str,
+    estado: str,
+    cita_excluida_id: Optional[int] = None,
+) -> None:
+    """Evita dos citas activas exactamente en el mismo horario."""
+    if estado not in ESTADOS_QUE_BLOQUEAN_HORARIO:
+        return
+
+    consulta = db.query(CitaDB).filter(
+        CitaDB.fecha == fecha,
+        CitaDB.hora == hora,
+        CitaDB.estado.in_(ESTADOS_QUE_BLOQUEAN_HORARIO),
+    )
+
+    if cita_excluida_id:
+        consulta = consulta.filter(CitaDB.id != cita_excluida_id)
+
+    conflicto = consulta.first()
+    if not conflicto:
+        return
+
+    paciente = db.query(PacienteDB).filter(
+        PacienteDB.id == conflicto.pacienteId
+    ).first()
+    nombre = paciente.nombre if paciente else "otro paciente"
+
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"El horario {fecha} a las {hora} ya está ocupado por "
+            f"{nombre} ({conflicto.procedimiento or 'consulta'})."
+        ),
+    )
+
+
+def validar_secuencia_sesion(db: Session, cita: CitaDB) -> None:
+    sesion_num = int(cita.sesionNum or 1)
+    total_sesiones = int(cita.totalSesiones or 1)
+
+    if sesion_num <= 1 or total_sesiones <= 1:
+        return
+
+    base_id = int(cita.citaBaseId or cita.id)
+    grupo = (
+        db.query(CitaDB)
+        .filter(or_(CitaDB.id == base_id, CitaDB.citaBaseId == base_id))
+        .all()
+    )
+
+    anterior = next(
+        (
+            item
+            for item in grupo
+            if int(item.sesionNum or 1) == sesion_num - 1
+        ),
+        None,
+    )
+
+    if anterior and anterior.estado != "completada":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Debes completar primero la sesión {sesion_num - 1} "
+                f"antes de iniciar la sesión {sesion_num}."
+            ),
+        )
+
+
+def calcular_datos_pago(payload: CitaPagoPayload) -> Dict[str, Any]:
     tipo_pago = payload.tipoPago
 
-    if tipo_pago == "cortesia":
+    if tipo_pago in {"cortesia", "sesion"}:
         total = 0.0
         cobrado = 0.0
-
     else:
         total = round(float(payload.costo), 2)
 
         if tipo_pago == "completo":
             cobrado = total
-
         elif tipo_pago == "contado":
             cobrado = 0.0
-
         else:
             cobrado = round(float(payload.montoPagado), 2)
 
     if cobrado > total:
         raise HTTPException(
             status_code=400,
-            detail="El monto pagado no puede superar el costo total."
+            detail="El monto pagado no puede superar el costo total.",
         )
 
     if tipo_pago == "anticipo":
+        if total <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Una cita con anticipo debe tener un costo mayor que cero.",
+            )
         if cobrado <= 0:
             raise HTTPException(
                 status_code=400,
-                detail="Debes ingresar el monto del anticipo."
+                detail="Debes ingresar el monto del anticipo.",
             )
-
         if cobrado >= total:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     "El anticipo debe ser menor al costo total. "
                     "Si pagó todo, selecciona 'Pagado completo'."
-                )
+                ),
             )
 
-    saldo = round(total - cobrado, 2)
+    if tipo_pago == "cuotas" and total <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Una cita en cuotas debe tener un costo mayor que cero.",
+        )
 
+    saldo = round(total - cobrado, 2)
     metodo = (
         payload.metodoPago.strip()
         if cobrado > 0 and payload.metodoPago.strip()
@@ -217,42 +469,55 @@ def calcular_datos_pago(payload: CitaPagoPayload):
         "total": total,
         "cobrado": cobrado,
         "saldo": saldo,
-        "metodo": metodo
+        "metodo": metodo,
     }
-    
-# 4. RUTAS DINÁMICAS (CRUD Universal)
-MODELOS = {
-    "pacientes": PacienteDB,
-    "citas": CitaDB,
-    "pagos": PagoDB,
-    "planes": PlanDB,
-    "planPagos": PlanPagoDB
-}
 
-@app.get("/api/{store}")
-def get_all(store: str, db: Session = Depends(get_db)):
-    if store not in MODELOS:
-        raise HTTPException(status_code=404, detail="Tabla no encontrada")
-    registros = db.query(MODELOS[store]).all()
-    return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in registros]
 
-@app.post("/api/operaciones/citas")
+def limpiar_valor_csv(valor: Any) -> str:
+    return str(valor or "").strip()
+
+
+# =====================================================
+# SALUD DEL SERVIDOR
+# =====================================================
+
+@app.get("/api/salud", tags=["Sistema"])
+def salud():
+    return {
+        "estado": "ok",
+        "base_datos": str(DB_PATH),
+        "version": app.version,
+    }
+
+
+# =====================================================
+# OPERACIONES TRANSACCIONALES DE CITAS
+# =====================================================
+
+@app.post("/api/operaciones/citas", tags=["Citas"])
 def crear_cita_con_pago(
     payload: CitaPagoPayload,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    paciente = db.query(PacienteDB).filter(
-        PacienteDB.id == payload.pacienteId
-    ).first()
+    validar_fecha_hora(payload.fecha, payload.hora)
+    obtener_paciente(db, payload.pacienteId)
+    validar_plan(db, payload.planId, payload.pacienteId)
 
-    if not paciente:
+    if payload.sesionNum > payload.totalSesiones:
         raise HTTPException(
-            status_code=404,
-            detail="El paciente seleccionado no existe."
+            status_code=400,
+            detail="La sesión actual no puede superar el total de sesiones.",
         )
 
+    validar_disponibilidad(
+        db,
+        payload.fecha,
+        payload.hora,
+        payload.estado,
+    )
+
     datos_pago = calcular_datos_pago(payload)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
 
     nueva_cita = CitaDB(
         pacienteId=payload.pacienteId,
@@ -267,13 +532,13 @@ def crear_cita_con_pago(
         estado=payload.estado,
         sesionNum=payload.sesionNum,
         totalSesiones=payload.totalSesiones,
-        creadaEn=ahora
+        creadaEn=ahora,
+        inicio=ahora if payload.estado == "en_atencion" else None,
+        fin=ahora if payload.estado in {"completada", "no_asistio"} else None,
     )
 
     try:
         db.add(nueva_cita)
-
-        # Obtiene el ID sin confirmar todavía la transacción.
         db.flush()
 
         nuevo_pago = PagoDB(
@@ -288,83 +553,72 @@ def crear_cita_con_pago(
             tipoPago=payload.tipoPago,
             cuotas=[],
             creadoEn=ahora,
-            fechaUltPago=(
-                payload.fecha
-                if datos_pago["cobrado"] > 0
-                else None
-            ),
+            fechaUltPago=(payload.fecha if datos_pago["cobrado"] > 0 else None),
             nota="Pago generado automáticamente desde la cita",
             devuelto=0,
-            creditoFavor=0
+            creditoFavor=0,
         )
 
         db.add(nuevo_pago)
-
-        # Cita y pago se confirman juntos.
         db.commit()
-
         db.refresh(nueva_cita)
         db.refresh(nuevo_pago)
 
         return {
-            "message": "Cita y pago registrados correctamente.",
+            "message": "Cita y registro financiero creados correctamente.",
             "cita": serializar_modelo(nueva_cita),
-            "pago": serializar_modelo(nuevo_pago)
+            "pago": serializar_modelo(nuevo_pago),
         }
-
     except HTTPException:
         db.rollback()
         raise
-
     except Exception as error:
         db.rollback()
-
         raise HTTPException(
             status_code=400,
-            detail=f"No se pudo registrar la cita y el pago: {error}"
-        )
+            detail="No se pudo registrar la cita y su pago.",
+        ) from error
 
-@app.put("/api/operaciones/citas/{cita_id}")
+
+@app.put("/api/operaciones/citas/{cita_id}", tags=["Citas"])
 def actualizar_cita_con_pago(
     cita_id: int,
     payload: CitaPagoPayload,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    cita = db.query(CitaDB).filter(
-        CitaDB.id == cita_id
-    ).first()
-
+    cita = db.query(CitaDB).filter(CitaDB.id == cita_id).first()
     if not cita:
+        raise HTTPException(status_code=404, detail="La cita no existe.")
+
+    validar_fecha_hora(payload.fecha, payload.hora)
+    obtener_paciente(db, payload.pacienteId)
+    validar_plan(db, payload.planId, payload.pacienteId)
+
+    if payload.sesionNum > payload.totalSesiones:
         raise HTTPException(
-            status_code=404,
-            detail="La cita no existe."
+            status_code=400,
+            detail="La sesión actual no puede superar el total de sesiones.",
         )
 
-    paciente = db.query(PacienteDB).filter(
-        PacienteDB.id == payload.pacienteId
-    ).first()
+    validar_disponibilidad(
+        db,
+        payload.fecha,
+        payload.hora,
+        payload.estado,
+        cita_excluida_id=cita_id,
+    )
 
-    if not paciente:
-        raise HTTPException(
-            status_code=404,
-            detail="El paciente seleccionado no existe."
-        )
-
-    pago = db.query(PagoDB).filter(
-        PagoDB.citaId == cita_id
-    ).first()
-
+    pago = db.query(PagoDB).filter(PagoDB.citaId == cita_id).first()
     datos_pago = calcular_datos_pago(payload)
-    ahora = datetime.now().isoformat(timespec="seconds")
+    ahora = ahora_iso()
 
-    # Evita eliminar accidentalmente dinero ya cobrado.
     if pago and datos_pago["cobrado"] < float(pago.cobrado or 0):
         raise HTTPException(
             status_code=400,
             detail=(
                 "No puedes reducir un monto ya cobrado desde la cita. "
                 "Primero debes revertir el cobro desde Finanzas."
-            )
+            ),
         )
 
     cita.pacienteId = payload.pacienteId
@@ -380,6 +634,11 @@ def actualizar_cita_con_pago(
     cita.sesionNum = payload.sesionNum
     cita.totalSesiones = payload.totalSesiones
 
+    if payload.estado == "en_atencion" and not cita.inicio:
+        cita.inicio = ahora
+    if payload.estado in {"completada", "no_asistio"} and not cita.fin:
+        cita.fin = ahora
+
     try:
         if not pago:
             pago = PagoDB(
@@ -388,9 +647,8 @@ def actualizar_cita_con_pago(
                 cuotas=[],
                 creadoEn=ahora,
                 devuelto=0,
-                creditoFavor=0
+                creditoFavor=0,
             )
-
             db.add(pago)
 
         pago.pacienteId = payload.pacienteId
@@ -401,257 +659,543 @@ def actualizar_cita_con_pago(
         pago.saldo = datos_pago["saldo"]
         pago.metodo = datos_pago["metodo"]
         pago.tipoPago = payload.tipoPago
-        pago.fechaUltPago = (
-            payload.fecha
-            if datos_pago["cobrado"] > 0
-            else None
-        )
+        pago.fechaUltPago = payload.fecha if datos_pago["cobrado"] > 0 else None
 
         db.commit()
-
         db.refresh(cita)
         db.refresh(pago)
 
         return {
-            "message": "Cita y pago actualizados correctamente.",
+            "message": "Cita y registro financiero actualizados correctamente.",
             "cita": serializar_modelo(cita),
-            "pago": serializar_modelo(pago)
+            "pago": serializar_modelo(pago),
         }
-
     except Exception as error:
         db.rollback()
-
         raise HTTPException(
             status_code=400,
-            detail=f"No se pudo actualizar la cita: {error}"
+            detail="No se pudo actualizar la cita y su pago.",
+        ) from error
+
+
+@app.patch("/api/operaciones/citas/{cita_id}/reprogramar", tags=["Citas"])
+def reprogramar_cita(
+    cita_id: int,
+    payload: ReprogramarCitaPayload,
+    db: Session = Depends(get_db),
+):
+    cita = db.query(CitaDB).filter(CitaDB.id == cita_id).first()
+    if not cita:
+        raise HTTPException(status_code=404, detail="La cita no existe.")
+
+    if cita.estado not in ESTADOS_QUE_BLOQUEAN_HORARIO:
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se pueden reprogramar citas activas.",
         )
-@app.delete("/api/operaciones/citas/{cita_id}")
+
+    validar_fecha_hora(payload.fecha, payload.hora)
+    validar_disponibilidad(
+        db,
+        payload.fecha,
+        payload.hora,
+        cita.estado,
+        cita_excluida_id=cita.id,
+    )
+
+    fecha_anterior = cita.fecha
+    hora_anterior = cita.hora
+    cita.fecha = payload.fecha
+    cita.hora = payload.hora
+
+    try:
+        db.commit()
+        db.refresh(cita)
+        return {
+            "message": (
+                f"Cita reprogramada de {fecha_anterior} {hora_anterior} "
+                f"a {payload.fecha} {payload.hora}."
+            ),
+            "cita": serializar_modelo(cita),
+        }
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo reprogramar la cita.",
+        ) from error
+
+
+@app.patch("/api/operaciones/citas/{cita_id}/estado", tags=["Citas"])
+def cambiar_estado_cita(
+    cita_id: int,
+    payload: CambioEstadoPayload,
+    db: Session = Depends(get_db),
+):
+    cita = db.query(CitaDB).filter(CitaDB.id == cita_id).first()
+    if not cita:
+        raise HTTPException(status_code=404, detail="La cita no existe.")
+
+    estado_actual = cita.estado or "pendiente"
+    estado_nuevo = payload.estado
+
+    if estado_actual == estado_nuevo:
+        return {
+            "message": "La cita ya se encontraba en ese estado.",
+            "cita": serializar_modelo(cita),
+        }
+
+    permitidos = TRANSICIONES_ESTADO.get(estado_actual, set())
+    if estado_nuevo not in permitidos:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No se puede cambiar una cita de '{estado_actual}' "
+                f"a '{estado_nuevo}' desde esta acción."
+            ),
+        )
+
+    if estado_nuevo == "en_atencion":
+        validar_secuencia_sesion(db, cita)
+        validar_disponibilidad(
+            db,
+            cita.fecha,
+            cita.hora,
+            estado_nuevo,
+            cita_excluida_id=cita.id,
+        )
+
+    ahora = ahora_iso()
+    cita.estado = estado_nuevo
+
+    if estado_nuevo == "en_atencion":
+        cita.inicio = ahora
+        cita.fin = None
+    elif estado_nuevo in {"completada", "no_asistio"}:
+        cita.fin = ahora
+    elif estado_nuevo == "cancelada":
+        cita.canceladaEn = ahora
+    elif estado_nuevo == "pendiente":
+        cita.inicio = None
+        cita.fin = None
+        cita.canceladaEn = None
+        cita.motivoCancelacion = None
+
+    try:
+        db.commit()
+        db.refresh(cita)
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo actualizar el estado de la cita.",
+        ) from error
+
+    etiquetas = {
+        "pendiente": "pendiente",
+        "confirmada": "confirmada",
+        "en_espera": "en espera",
+        "en_atencion": "en atención",
+        "completada": "atendida",
+        "no_asistio": "registrada como inasistencia",
+        "cancelada": "cancelada",
+    }
+
+    return {
+        "message": f"La cita quedó {etiquetas.get(estado_nuevo, estado_nuevo)}.",
+        "cita": serializar_modelo(cita),
+    }
+
+
+@app.delete("/api/operaciones/citas/{cita_id}", tags=["Citas"])
 def eliminar_cita_con_pago(
     cita_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    cita = db.query(CitaDB).filter(
-        CitaDB.id == cita_id
-    ).first()
-
+    cita = db.query(CitaDB).filter(CitaDB.id == cita_id).first()
     if not cita:
-        raise HTTPException(
-            status_code=404,
-            detail="La cita no existe."
-        )
+        raise HTTPException(status_code=404, detail="La cita no existe.")
 
-    pago = db.query(PagoDB).filter(
-        PagoDB.citaId == cita_id
-    ).first()
+    pago = db.query(PagoDB).filter(PagoDB.citaId == cita_id).first()
 
     if pago and float(pago.cobrado or 0) > 0:
         raise HTTPException(
             status_code=400,
             detail=(
-                "Esta cita tiene dinero cobrado. "
-                "Debes cancelarla o revertir el cobro; no puedes eliminarla."
-            )
+                "Esta cita tiene dinero cobrado. Debes cancelarla o revertir "
+                "el cobro; no puedes eliminarla."
+            ),
         )
 
     if pago:
         plan_cuotas = db.query(PlanPagoDB).filter(
             PlanPagoDB.pagoId == pago.id
         ).first()
-
         if plan_cuotas:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     "Esta cita está relacionada con un plan de cuotas. "
                     "Primero debes cancelar ese plan."
-                )
+                ),
             )
 
     try:
         if pago:
             db.delete(pago)
-
         db.delete(cita)
         db.commit()
-
-        return {
-            "message": "Cita y pago eliminados correctamente."
-        }
-
+        return {"message": "Cita y registro financiero eliminados correctamente."}
     except Exception as error:
         db.rollback()
-
         raise HTTPException(
             status_code=400,
-            detail=f"No se pudo eliminar la cita: {error}"
-        )
+            detail="No se pudo eliminar la cita.",
+        ) from error
 
-@app.post("/api/{store}")
-def create_record(store: str, data: Dict[str, Any], db: Session = Depends(get_db)):
-    if store not in MODELOS:
-        raise HTTPException(status_code=404, detail="Tabla no encontrada")
-        
+
+# =====================================================
+# CRUD GENERAL
+# =====================================================
+
+@app.get("/api/{store}", tags=["CRUD"])
+def get_all(store: str, db: Session = Depends(get_db)):
+    modelo = MODELOS.get(store)
+    if not modelo:
+        raise HTTPException(status_code=404, detail="Tabla no encontrada.")
+
+    registros = db.query(modelo).all()
+    return [serializar_modelo(registro) for registro in registros]
+
+
+@app.post("/api/{store}", tags=["CRUD"])
+def create_record(
+    store: str,
+    data: Dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    modelo = MODELOS.get(store)
+    if not modelo:
+        raise HTTPException(status_code=404, detail="Tabla no encontrada.")
+
     if store == "pacientes":
-        cedula_nueva = str(data.get("cedula", "")).strip()
-        ficha_nueva = str(data.get("codigo_ficha", "")).strip()
-                
-        if cedula_nueva:
-            if db.query(PacienteDB).filter(PacienteDB.cedula == cedula_nueva).first():
-                raise HTTPException(status_code=400, detail=f"El DNI/Cédula '{cedula_nueva}' ya está registrado.")
-                        
-        if ficha_nueva:
-            if db.query(PacienteDB).filter(PacienteDB.codigo_ficha == ficha_nueva).first():
-                raise HTTPException(status_code=400, detail=f"El código de ficha '{ficha_nueva}' ya existe.")
-                
-    # Filtramos solo las columnas válidas de la tabla de BD
-    valid_columns = {c.name for c in MODELOS[store].__table__.columns}
-    filtered_data = {k: v for k, v in data.items() if k in valid_columns and k != "id"}
-    
-    nuevo_registro = MODELOS[store](**filtered_data)
+        cedula_nueva = str(data.get("cedula", "") or "").strip()
+        ficha_nueva = str(data.get("codigo_ficha", "") or "").strip()
+        nombre = str(data.get("nombre", "") or "").strip()
+
+        if not nombre:
+            raise HTTPException(
+                status_code=400,
+                detail="El nombre del paciente es obligatorio.",
+            )
+
+        if cedula_nueva and db.query(PacienteDB).filter(
+            PacienteDB.cedula == cedula_nueva
+        ).first():
+            raise HTTPException(
+                status_code=400,
+                detail=f"El DNI/Cédula '{cedula_nueva}' ya está registrado.",
+            )
+
+        if ficha_nueva and db.query(PacienteDB).filter(
+            PacienteDB.codigo_ficha == ficha_nueva
+        ).first():
+            raise HTTPException(
+                status_code=400,
+                detail=f"El código de ficha '{ficha_nueva}' ya existe.",
+            )
+
+    columnas_validas = {columna.name for columna in modelo.__table__.columns}
+    datos_filtrados = {
+        clave: valor
+        for clave, valor in data.items()
+        if clave in columnas_validas and clave != "id"
+    }
+
+    nuevo_registro = modelo(**datos_filtrados)
+
     try:
         db.add(nuevo_registro)
         db.commit()
         db.refresh(nuevo_registro)
-    except Exception as e:
+        return serializar_modelo(nuevo_registro)
+    except Exception as error:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error en base de datos: {str(e)}")
-        
-    return {c.name: getattr(nuevo_registro, c.name) for c in nuevo_registro.__table__.columns}
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo guardar el registro.",
+        ) from error
 
-@app.put("/api/{store}/{item_id}")
-def update_record(store: str, item_id: int, data: Dict[str, Any], db: Session = Depends(get_db)):
-    if store not in MODELOS:
-        raise HTTPException(status_code=404, detail="Tabla no encontrada")
-        
-    registro = db.query(MODELOS[store]).filter(MODELOS[store].id == item_id).first()
+
+@app.put("/api/{store}/{item_id}", tags=["CRUD"])
+def update_record(
+    store: str,
+    item_id: int,
+    data: Dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    modelo = MODELOS.get(store)
+    if not modelo:
+        raise HTTPException(status_code=404, detail="Tabla no encontrada.")
+
+    registro = db.query(modelo).filter(modelo.id == item_id).first()
     if not registro:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
+        raise HTTPException(status_code=404, detail="Registro no encontrado.")
 
     if store == "pacientes":
-        cedula_nueva = str(data.get("cedula", "")).strip()
-        ficha_nueva = str(data.get("codigo_ficha", "")).strip()
-                
-        if cedula_nueva:
-            existe_dni = db.query(PacienteDB).filter(
-                PacienteDB.cedula == cedula_nueva, 
-                PacienteDB.id != item_id
-            ).first()
-            if existe_dni:
-                raise HTTPException(status_code=400, detail=f"El DNI '{cedula_nueva}' ya está registrado en otro paciente.")
-                        
-        if ficha_nueva:
-            existe_ficha = db.query(PacienteDB).filter(
-                PacienteDB.codigo_ficha == ficha_nueva, 
-                PacienteDB.id != item_id
-            ).first()
-            if existe_ficha:
-                raise HTTPException(status_code=400, detail=f"El código de ficha '{ficha_nueva}' ya existe en otro paciente.")
-                
-    # Actualizar solo campos que existan en el modelo
-    valid_columns = {c.name for c in MODELOS[store].__table__.columns}
-    for key, value in data.items():
-        if key in valid_columns and key != "id":
-            setattr(registro, key, value)
-            
+        cedula_nueva = str(data.get("cedula", registro.cedula) or "").strip()
+        ficha_nueva = str(
+            data.get("codigo_ficha", registro.codigo_ficha) or ""
+        ).strip()
+
+        if cedula_nueva and db.query(PacienteDB).filter(
+            PacienteDB.cedula == cedula_nueva,
+            PacienteDB.id != item_id,
+        ).first():
+            raise HTTPException(
+                status_code=400,
+                detail=f"El DNI '{cedula_nueva}' ya pertenece a otro paciente.",
+            )
+
+        if ficha_nueva and db.query(PacienteDB).filter(
+            PacienteDB.codigo_ficha == ficha_nueva,
+            PacienteDB.id != item_id,
+        ).first():
+            raise HTTPException(
+                status_code=400,
+                detail=f"La ficha '{ficha_nueva}' ya pertenece a otro paciente.",
+            )
+
+    if store == "citas":
+        fecha = str(data.get("fecha", registro.fecha) or "")
+        hora = str(data.get("hora", registro.hora) or "")
+        estado = str(data.get("estado", registro.estado) or "pendiente")
+        validar_fecha_hora(fecha, hora)
+        validar_disponibilidad(
+            db,
+            fecha,
+            hora,
+            estado,
+            cita_excluida_id=item_id,
+        )
+
+    columnas_validas = {columna.name for columna in modelo.__table__.columns}
+    for clave, valor in data.items():
+        if clave in columnas_validas and clave != "id":
+            setattr(registro, clave, valor)
+
     try:
         db.commit()
-    except Exception as e:
+        db.refresh(registro)
+        return {
+            "message": "Actualizado correctamente.",
+            "registro": serializar_modelo(registro),
+        }
+    except Exception as error:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al actualizar: {str(e)}")
-        
-    return {"message": "Actualizado exitosamente", "id": item_id}
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo actualizar el registro.",
+        ) from error
 
-@app.delete("/api/{store}/{item_id}")
-def delete_record(store: str, item_id: int, db: Session = Depends(get_db)):
-    if store not in MODELOS:
-        raise HTTPException(status_code=404, detail="Tabla no encontrada")
-        
-    registro = db.query(MODELOS[store]).filter(MODELOS[store].id == item_id).first()
+
+@app.delete("/api/{store}/{item_id}", tags=["CRUD"])
+def delete_record(
+    store: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+):
+    modelo = MODELOS.get(store)
+    if not modelo:
+        raise HTTPException(status_code=404, detail="Tabla no encontrada.")
+
+    registro = db.query(modelo).filter(modelo.id == item_id).first()
     if not registro:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-            
-    db.delete(registro)
-    db.commit()
-    return {"message": "Eliminado exitosamente"}
+        raise HTTPException(status_code=404, detail="Registro no encontrado.")
+
+    if store == "pacientes":
+        tiene_historial = any(
+            [
+                db.query(CitaDB).filter(CitaDB.pacienteId == item_id).first(),
+                db.query(PagoDB).filter(PagoDB.pacienteId == item_id).first(),
+                db.query(PlanDB).filter(PlanDB.pacienteId == item_id).first(),
+                db.query(PlanPagoDB).filter(
+                    PlanPagoDB.pacienteId == item_id
+                ).first(),
+            ]
+        )
+        if tiene_historial:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "No puedes eliminar un paciente con historial clínico o "
+                    "financiero. Conserva su ficha para mantener la trazabilidad."
+                ),
+            )
+
+    if store == "pagos" and db.query(PlanPagoDB).filter(
+        PlanPagoDB.pagoId == item_id
+    ).first():
+        raise HTTPException(
+            status_code=409,
+            detail="No puedes eliminar un pago vinculado a un plan de cuotas.",
+        )
+
+    try:
+        db.delete(registro)
+        db.commit()
+        return {"message": "Eliminado correctamente."}
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo eliminar el registro.",
+        ) from error
 
 
-# ==========================================
-# RUTAS DE EXPORTACIÓN E IMPORTACIÓN CSV
-# ==========================================
+# =====================================================
+# IMPORTACIÓN Y EXPORTACIÓN CSV
+# =====================================================
 
-@app.get("/api/exportar/pacientes")
+@app.get("/api/exportar/pacientes", tags=["Pacientes"])
 def exportar_pacientes(db: Session = Depends(get_db)):
-    pacientes = db.query(PacienteDB).all()
-    
-    # Crear un archivo CSV en memoria
+    pacientes = db.query(PacienteDB).order_by(PacienteDB.nombre).all()
     output = io.StringIO()
-    
-    # ¡ESTA ES LA LÍNEA MÁGICA PARA EXCEL! (UTF-8 BOM)
-    output.write('\ufeff') 
-    
-    writer = csv.writer(output, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-    
-    # Escribir la primera fila (los encabezados obligatorios)
-    headers = ["codigo_ficha", "cedula", "nombre", "telefono", "correo", "fechaNacimiento", "genero", "direccion", "alergias", "medicamentos"]
+    output.write("\ufeff")
+
+    writer = csv.writer(output, delimiter=",", quoting=csv.QUOTE_MINIMAL)
+    headers = [
+        "codigo_ficha",
+        "cedula",
+        "nombre",
+        "telefono",
+        "correo",
+        "fechaNacimiento",
+        "genero",
+        "direccion",
+        "alergias",
+        "medicamentos",
+    ]
     writer.writerow(headers)
-    
-    # Escribir los datos de cada paciente
-    for p in pacientes:
-        writer.writerow([
-            p.codigo_ficha or "", p.cedula or "", p.nombre or "", 
-            p.telefono or "", p.correo or "", p.fechaNacimiento or "", 
-            p.genero or "", p.direccion or "", p.alergias or "", p.medicamentos or ""
-        ])
-    
+
+    for paciente in pacientes:
+        writer.writerow(
+            [
+                paciente.codigo_ficha or "",
+                paciente.cedula or "",
+                paciente.nombre or "",
+                paciente.telefono or "",
+                paciente.correo or "",
+                paciente.fechaNacimiento or "",
+                paciente.genero or "",
+                paciente.direccion or "",
+                paciente.alergias or "",
+                paciente.medicamentos or "",
+            ]
+        )
+
     output.seek(0)
-    
-    # Enviar el archivo como descarga automática
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=pacientes_respaldo.csv"}
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": "attachment; filename=pacientes_respaldo.csv"
+        },
     )
 
-@app.post("/api/importar/pacientes")
-async def importar_pacientes(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser formato CSV.")
-    
-    content = await file.read()
-    decoded_content = content.decode('utf-8-sig') # utf-8-sig evita problemas con acentos y caracteres especiales
-    csv_reader = csv.DictReader(io.StringIO(decoded_content), delimiter=',')
-    
-    nuevos, actualizados, omitidos = 0, 0, 0
 
-    for row in csv_reader:
-        nombre = row.get("nombre", "").strip()
-        cedula = row.get("cedula", "").strip()
-        
-        if not nombre:
-            omitidos += 1
-            continue # El nombre es obligatorio, si no hay, saltamos la fila
-            
-        # Buscar si el DNI ya existe para no duplicar
-        paciente_existente = db.query(PacienteDB).filter(PacienteDB.cedula == cedula).first() if cedula else None
-            
-        if paciente_existente:
-            # Si existe, actualizamos sus datos con los del Excel
-            for key, value in row.items():
-                if hasattr(paciente_existente, key) and key != "id" and value.strip():
-                    setattr(paciente_existente, key, value.strip())
-            actualizados += 1
-        else:
-            # Si no existe, creamos uno nuevo
-            nuevo_paciente = PacienteDB(**{k: v.strip() for k, v in row.items() if hasattr(PacienteDB, k) and k != "id"})
-            db.add(nuevo_paciente)
-            nuevos += 1
+@app.post("/api/importar/pacientes", tags=["Pacientes"])
+async def importar_pacientes(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    nombre_archivo = (file.filename or "").lower()
+    if not nombre_archivo.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser CSV.")
+
+    contenido = await file.read()
+    if len(contenido) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="El archivo supera el límite de 5 MB.",
+        )
 
     try:
+        texto = contenido.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="El CSV debe estar codificado en UTF-8.",
+        ) from exc
+
+    lector = csv.DictReader(io.StringIO(texto), delimiter=",")
+    if not lector.fieldnames or "nombre" not in lector.fieldnames:
+        raise HTTPException(
+            status_code=400,
+            detail="El CSV debe contener al menos la columna 'nombre'.",
+        )
+
+    nuevos = 0
+    actualizados = 0
+    omitidos = 0
+
+    try:
+        for fila in lector:
+            datos = {
+                clave: limpiar_valor_csv(valor)
+                for clave, valor in fila.items()
+                if clave
+            }
+
+            nombre = datos.get("nombre", "")
+            cedula = datos.get("cedula", "")
+            ficha = datos.get("codigo_ficha", "")
+
+            if not nombre:
+                omitidos += 1
+                continue
+
+            paciente = None
+            if cedula:
+                paciente = db.query(PacienteDB).filter(
+                    PacienteDB.cedula == cedula
+                ).first()
+            if not paciente and ficha:
+                paciente = db.query(PacienteDB).filter(
+                    PacienteDB.codigo_ficha == ficha
+                ).first()
+
+            if paciente:
+                for clave, valor in datos.items():
+                    if hasattr(paciente, clave) and clave != "id" and valor:
+                        setattr(paciente, clave, valor)
+                actualizados += 1
+            else:
+                columnas_validas = {
+                    columna.name for columna in PacienteDB.__table__.columns
+                }
+                datos_validos = {
+                    clave: valor
+                    for clave, valor in datos.items()
+                    if clave in columnas_validas and clave != "id"
+                }
+                db.add(PacienteDB(**datos_validos))
+                nuevos += 1
+
         db.commit()
-        return {"message": f"Éxito: {nuevos} nuevos, {actualizados} actualizados, {omitidos} omitidos."}
-    except Exception as e:
+    except Exception as error:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al guardar: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo importar el archivo. Revisa duplicados y columnas.",
+        ) from error
+
+    return {
+        "message": (
+            f"Importación completa: {nuevos} nuevos, "
+            f"{actualizados} actualizados y {omitidos} omitidos."
+        )
+    }
 
 
 # =====================================================
@@ -659,28 +1203,15 @@ async def importar_pacientes(file: UploadFile = File(...), db: Session = Depends
 # =====================================================
 
 def obtener_directorio_frontend() -> Path:
-    """
-    Devuelve la ubicación del frontend compilado.
-
-    Desarrollo:
-        frontend-moderno/dist
-
-    PyInstaller:
-        frontend/
-    """
     if getattr(sys, "frozen", False):
-        base_dir = Path(sys._MEIPASS)
-        return base_dir / "frontend"
-
-    return Path(__file__).resolve().parent / "frontend-moderno" / "dist"
+        return Path(sys._MEIPASS) / "frontend"
+    return APP_DIR / "frontend-moderno" / "dist"
 
 
 FRONTEND_DIR = obtener_directorio_frontend()
 FRONTEND_ASSETS = FRONTEND_DIR / "assets"
 
-
 if FRONTEND_DIR.is_dir():
-
     if FRONTEND_ASSETS.is_dir():
         app.mount(
             "/assets",
@@ -694,48 +1225,33 @@ if FRONTEND_DIR.is_dir():
 
     @app.get("/{ruta:path}", include_in_schema=False)
     def mostrar_ruta_react(ruta: str):
-        """
-        Permite que React maneje las futuras rutas internas.
-        Ejemplos:
-            /pacientes
-            /agenda
-            /finanzas
-        """
-
-        # Las rutas API inexistentes deben devolver 404,
-        # no el index.html de React.
         if ruta.startswith("api/"):
-            raise HTTPException(
-                status_code=404,
-                detail="Ruta API no encontrada",
-            )
+            raise HTTPException(status_code=404, detail="Ruta API no encontrada.")
 
         archivo_solicitado = (FRONTEND_DIR / ruta).resolve()
         frontend_resuelto = FRONTEND_DIR.resolve()
 
-        # Protección contra rutas como ../../archivo
         try:
             archivo_solicitado.relative_to(frontend_resuelto)
-        except ValueError:
-            raise HTTPException(status_code=404, detail="Archivo no encontrado")
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Archivo no encontrado.",
+            ) from exc
 
         if archivo_solicitado.is_file():
             return FileResponse(archivo_solicitado)
 
-        # React controla cualquier ruta que no sea un archivo.
         return FileResponse(FRONTEND_DIR / "index.html")
-
 else:
-
     @app.get("/", include_in_schema=False)
     def estado_backend():
         return {
             "message": "API DentalPro activa",
             "frontend": "No compilado",
-            "instruccion": (
-                "Ejecuta npm run dev o compila React con npm run build"
-            ),
+            "instruccion": "Ejecuta npm run dev o npm run build.",
         }
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
