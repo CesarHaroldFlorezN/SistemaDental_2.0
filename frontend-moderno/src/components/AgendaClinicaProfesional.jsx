@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -25,7 +25,6 @@ import {
   Phone,
   PlayCircle,
   Plus,
-  RefreshCw,
   Search,
   Trash2,
   UserRound,
@@ -39,6 +38,8 @@ import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { format, getDay, parse, startOfWeek } from 'date-fns';
 import { es } from 'date-fns/locale';
+import Swal from 'sweetalert2';
+
 
 const locales = { es };
 const localizer = dateFnsLocalizer({
@@ -49,6 +50,44 @@ const localizer = dateFnsLocalizer({
   locales
 });
 
+
+function ToolbarCalendario({ label, onNavigate, onView, view }) {
+  const vistas = [
+    ['month', 'Mes'],
+    ['week', 'Semana'],
+    ['day', 'Día'],
+    ['agenda', 'Agenda']
+  ];
+
+  return (
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-700/80 bg-slate-900/70 p-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => onNavigate('TODAY')} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/20">Hoy</button>
+        <div className="flex overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
+          <button type="button" onClick={() => onNavigate('PREV')} className="border-r border-slate-700 p-2.5 text-slate-300 transition hover:bg-slate-800 hover:text-white" title="Periodo anterior"><ChevronLeft size={17} /></button>
+          <button type="button" onClick={() => onNavigate('NEXT')} className="p-2.5 text-slate-300 transition hover:bg-slate-800 hover:text-white" title="Periodo siguiente"><ChevronRight size={17} /></button>
+        </div>
+        <div className="min-w-[190px] text-sm font-black capitalize text-white">{label}</div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex rounded-xl border border-slate-700 bg-slate-900 p-1">
+          {vistas.map(([valor, etiqueta]) => (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => onView(valor)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${view === valor ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ESTADOS = {
   pendiente: {
     etiqueta: 'Programado',
@@ -57,10 +96,11 @@ const ESTADOS = {
     colorCalendario: '#f59e0b'
   },
   confirmada: {
-    etiqueta: 'Confirmada',
-    corta: 'Programada',
-    clase: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
-    colorCalendario: '#3b82f6'
+    // Compatibilidad con registros antiguos: se presenta dentro de Programado.
+    etiqueta: 'Programado',
+    corta: 'Programado',
+    clase: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    colorCalendario: '#f59e0b'
   },
   en_espera: {
     etiqueta: 'En espera',
@@ -94,6 +134,17 @@ const ESTADOS = {
   }
 };
 
+const normalizarEstadoVisual = (estado) => estado === 'confirmada' ? 'pendiente' : (estado || 'pendiente');
+
+const BORDE_ESTADO = {
+  pendiente: 'border-amber-500/55 hover:border-amber-400/80',
+  en_espera: 'border-violet-500/55 hover:border-violet-400/80',
+  en_atencion: 'border-rose-500/60 hover:border-rose-400/85',
+  completada: 'border-emerald-500/55 hover:border-emerald-400/80',
+  no_asistio: 'border-orange-500/55 hover:border-orange-400/80',
+  cancelada: 'border-slate-600 hover:border-slate-500'
+};
+
 const ESTADOS_ACTIVOS = new Set([
   'pendiente',
   'confirmada',
@@ -104,7 +155,6 @@ const ESTADOS_ACTIVOS = new Set([
 const FILTROS_ESTADO = [
   ['todos', 'Todas'],
   ['pendiente', 'Programadas'],
-  ['confirmada', 'Confirmadas'],
   ['en_espera', 'En espera'],
   ['en_atencion', 'En atención'],
   ['completada', 'Finalizadas'],
@@ -229,10 +279,11 @@ function ServiciosCita({ cita, compacto = false }) {
 }
 
 function BadgeEstado({ estado }) {
-  const info = ESTADOS[estado] || ESTADOS.pendiente;
+  const estadoNormalizado = normalizarEstadoVisual(estado);
+  const info = ESTADOS[estadoNormalizado] || ESTADOS.pendiente;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${info.clase}`}>
-      {estado === 'en_atencion' && (
+      {estadoNormalizado === 'en_atencion' && (
         <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
       )}
       {info.etiqueta}
@@ -409,7 +460,7 @@ function AccionPrincipal({ cita, onCambiarEstado, onCompletar, onCobrar, onVerCu
   return null;
 }
 
-function TarjetaRecepcion({ cita, callbacks, onDetalle }) {
+function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd, arrastrando }) {
   const pago = cita.pago;
   const saldo = Number(pago?.saldo || 0);
   const tipo = pago?.tipoPago || cita.tipoPago;
@@ -417,23 +468,37 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle }) {
   const duracion = obtenerDuracionCita(cita);
 
   return (
-    <article className={`overflow-hidden rounded-2xl border bg-gradient-to-b from-slate-900/95 to-slate-900/70 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl ${cita.estado === 'en_atencion' ? 'border-rose-500/50' : 'border-slate-700'}`}>
+    <article
+      draggable
+      onDragStart={(event) => onDragStart?.(event, cita)}
+      onDragEnd={onDragEnd}
+      className={`overflow-hidden rounded-2xl border bg-gradient-to-b from-slate-900/95 to-slate-900/70 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl ${
+        BORDE_ESTADO[normalizarEstadoVisual(cita.estado)] || BORDE_ESTADO.cancelada
+      } ${arrastrando ? 'scale-[0.98] opacity-45' : ''}`}
+    >
       <div className="p-3.5">
-        <div className="grid grid-cols-[minmax(76px,auto)_minmax(0,1fr)_36px] items-center gap-2">
-          <div className="rounded-xl border border-slate-600 bg-slate-800/90 px-3 py-2 text-center shadow-inner">
-            <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Ficha</div>
-            <div className="mt-0.5 text-xl font-black text-white">{cita.codigoFicha || '—'}</div>
+        <div className="grid grid-cols-[48px_minmax(132px,1fr)_34px] items-center gap-2">
+          <div className="rounded-lg border border-slate-600 bg-slate-800/90 px-1.5 py-1 text-center shadow-inner">
+            <div className="text-[7px] font-black uppercase tracking-[0.12em] text-slate-500">Ficha</div>
+            <div className="mt-0.5 truncate text-sm font-black leading-none text-white">{cita.codigoFicha || '—'}</div>
           </div>
-          <div className="flex min-w-0 items-center justify-center gap-1.5 rounded-xl border border-cyan-500/10 bg-slate-800/70 px-2 py-2">
-            <span className="text-base font-black text-cyan-300">{cita.hora || '—'}</span>
-            <ArrowRight size={16} className="shrink-0 text-cyan-600" />
-            <span className="text-base font-black text-cyan-300">{horaFin}</span>
+
+          <div className="flex min-w-0 items-center justify-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-2 shadow-inner">
+            <span className="whitespace-nowrap text-[13px] font-black tabular-nums text-cyan-200">{cita.hora || '—'}</span>
+            <ArrowRight size={15} className="shrink-0 text-cyan-500" />
+            <span className="whitespace-nowrap text-[13px] font-black tabular-nums text-cyan-200">{horaFin}</span>
           </div>
-          <button type="button" title="Ver detalle" onClick={() => onDetalle(cita)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400 transition hover:border-cyan-500/40 hover:text-cyan-300"><Eye size={18} /></button>
+
+          <button type="button" title="Ver detalle" onClick={() => onDetalle(cita)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 transition hover:border-cyan-500/40 hover:text-cyan-300"><Eye size={16} /></button>
         </div>
 
-        <button type="button" onClick={() => onDetalle(cita)} className="mt-4 block w-full truncate text-left text-lg font-black tracking-tight text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock size={13} /><span>{duracion} min de atención</span></div>
+        <div className="mt-3 flex items-start gap-2">
+          <GripVertical size={16} className="mt-1 shrink-0 cursor-grab text-slate-600 active:cursor-grabbing" />
+          <div className="min-w-0 flex-1">
+            <button type="button" onClick={() => onDetalle(cita)} className="block w-full truncate text-left text-base font-black tracking-tight text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
+            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock size={13} /><span>{duracion} min de atención</span></div>
+          </div>
+        </div>
 
         <div className="mt-3 grid gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <ServiciosCita cita={cita} compacto />
@@ -453,9 +518,31 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle }) {
   );
 }
 
-function ColumnaRecepcion({ titulo, subtitulo, citas, clase, callbacks, onDetalle, vacio }) {
+function ColumnaRecepcion({
+  titulo,
+  subtitulo,
+  citas,
+  clase,
+  callbacks,
+  onDetalle,
+  vacio,
+  estadoDestino,
+  citaArrastradaId,
+  columnaSobre,
+  onDragStart,
+  onDragEnd,
+  onDragEnter,
+  onDrop
+}) {
+  const activa = columnaSobre === estadoDestino;
+
   return (
-    <section className="min-w-0 rounded-2xl border border-slate-700/80 bg-slate-800/60 p-3">
+    <section
+      onDragOver={(event) => event.preventDefault()}
+      onDragEnter={(event) => { event.preventDefault(); onDragEnter?.(estadoDestino); }}
+      onDrop={(event) => { event.preventDefault(); onDrop?.(estadoDestino); }}
+      className={`min-w-0 rounded-2xl border p-3 transition ${activa ? 'border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-500/20' : 'border-slate-700/80 bg-slate-800/60'}`}
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <h3 className={`text-sm font-bold ${clase}`}>{titulo}</h3>
@@ -465,9 +552,17 @@ function ColumnaRecepcion({ titulo, subtitulo, citas, clase, callbacks, onDetall
       </div>
       <div className="space-y-3">
         {citas.length ? citas.map((cita) => (
-          <TarjetaRecepcion key={cita.id} cita={cita} callbacks={callbacks} onDetalle={onDetalle} />
+          <TarjetaRecepcion
+            key={cita.id}
+            cita={cita}
+            callbacks={callbacks}
+            onDetalle={onDetalle}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            arrastrando={Number(citaArrastradaId) === Number(cita.id)}
+          />
         )) : (
-          <div className="rounded-xl border border-dashed border-slate-700 px-3 py-8 text-center text-xs text-slate-600">{vacio}</div>
+          <div className={`rounded-xl border border-dashed px-3 py-8 text-center text-xs ${activa ? 'border-cyan-500/50 text-cyan-300' : 'border-slate-700 text-slate-600'}`}>{activa ? 'Suelta aquí para cambiar el estado' : vacio}</div>
         )}
       </div>
     </section>
@@ -483,6 +578,44 @@ function EventoCalendario({ event }) {
   );
 }
 
+const ORDEN_RESUMEN_MES = [
+  ['pendiente', 'Programado', '#f59e0b'],
+  ['en_espera', 'En espera', '#8b5cf6'],
+  ['en_atencion', 'En atención', '#f43f5e'],
+  ['completada', 'Finalizado', '#10b981'],
+  ['no_asistio', 'No asistió', '#ea580c'],
+  ['cancelada', 'Cancelado', '#64748b']
+];
+
+function EventoResumenMes({ event }) {
+  const visibles = ORDEN_RESUMEN_MES.filter(([estado]) => Number(event.conteos?.[estado] || 0) > 0);
+  return (
+    <div className="dp-month-summary grid gap-1 py-0.5">
+      {visibles.map(([estado, etiqueta, color]) => (
+        <div key={estado} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${color}18`, color }}>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+          <span className="truncate">{event.conteos[estado]} {etiqueta}{event.conteos[estado] === 1 ? '' : 's'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CabeceraFechaMes({ date, label, onAbrirDia }) {
+  const esHoy = fechaLocal(date) === fechaLocal();
+  return (
+    <button
+      type="button"
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAbrirDia?.(date); }}
+      className={`dp-month-date ml-auto flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black transition ${esHoy ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-300/40' : 'text-slate-400 hover:bg-slate-700/60 hover:text-white'}`}
+      title="Abrir vista del día"
+    >
+      {esHoy && <span className="text-[8px] font-black tracking-wider">HOY</span>}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function DetalleRapido({ cita, onClose, callbacks }) {
   if (!cita) return null;
   const pago = cita.pago;
@@ -490,8 +623,8 @@ function DetalleRapido({ cita, onClose, callbacks }) {
   const puedeEliminar = cobrado <= 0 && ['pendiente', 'cancelada', 'no_asistio'].includes(cita.estado);
 
   return (
-    <div className="fixed inset-0 z-[70] flex justify-end bg-black/60 backdrop-blur-sm" onMouseDown={onClose}>
-      <aside className="h-full w-full max-w-lg overflow-y-auto border-l border-slate-700 bg-slate-900 p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[70] flex justify-end bg-black/60 backdrop-blur-sm" onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (event.target === event.currentTarget) onClose?.(); }}>
+      <aside className="h-full w-full max-w-lg overflow-y-auto border-l border-slate-700 bg-slate-900 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div><div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">Detalle de la atención</div><h2 className="mt-1 text-xl font-bold text-white">{cita.nombrePaciente}</h2><div className="mt-1 text-sm text-slate-400">{formatearFecha(cita.fecha, true)} · {cita.hora} → {obtenerHoraFinCita(cita)} · {obtenerDuracionCita(cita)} min</div></div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-800 hover:text-white"><X size={19} /></button>
@@ -530,7 +663,6 @@ export default function AgendaClinicaProfesional({
   onCobrar,
   onVerFicha,
   onEliminarCita,
-  onRecargar,
   onReprogramarCita,
   onVerCuotas
 }) {
@@ -542,6 +674,13 @@ export default function AgendaClinicaProfesional({
   const [fechaRecepcion, setFechaRecepcion] = useState(fechaLocal());
   const [limiteVisible, setLimiteVisible] = useState(30);
   const [citaDetalle, setCitaDetalle] = useState(null);
+  const [vistaCalendario, setVistaCalendario] = useState('week');
+  const [fechaCalendario, setFechaCalendario] = useState(new Date());
+  const [moverCalendarioActivo, setMoverCalendarioActivo] = useState(false);
+  const [citaMoverCalendarioId, setCitaMoverCalendarioId] = useState(null);
+  const [citaArrastradaId, setCitaArrastradaId] = useState(null);
+  const [columnaSobre, setColumnaSobre] = useState(null);
+  const bloquearSeleccionRef = useRef(0);
 
   useEffect(() => setLimiteVisible(30), [busqueda, estadoFiltro, rangoFecha, fechaExacta]);
 
@@ -590,7 +729,8 @@ export default function AgendaClinicaProfesional({
   const citasFiltradas = useMemo(() => {
     const terminos = normalizar(busqueda).split(/\s+/).filter(Boolean);
     return citasEnriquecidas.filter((cita) => {
-      const estadoOk = estadoFiltro === 'todos' || cita.estado === estadoFiltro;
+      const estadoVisual = normalizarEstadoVisual(cita.estado);
+      const estadoOk = estadoFiltro === 'todos' || estadoVisual === estadoFiltro;
       if (!estadoOk) return false;
       if (fechaExacta && cita.fecha !== fechaExacta) return false;
       if (!fechaExacta) {
@@ -643,6 +783,74 @@ export default function AgendaClinicaProfesional({
     };
   }), [citasFiltradas, hoy]);
 
+  const eventosResumenMes = useMemo(() => {
+    const porFecha = new Map();
+    citasFiltradas.forEach((cita) => {
+      if (!cita.fecha) return;
+      if (!porFecha.has(cita.fecha)) {
+        porFecha.set(cita.fecha, {
+          pendiente: 0,
+          en_espera: 0,
+          en_atencion: 0,
+          completada: 0,
+          no_asistio: 0,
+          cancelada: 0
+        });
+      }
+      const estado = normalizarEstadoVisual(cita.estado);
+      const conteos = porFecha.get(cita.fecha);
+      conteos[estado] = Number(conteos[estado] || 0) + 1;
+    });
+
+    return Array.from(porFecha.entries()).map(([fecha, conteos]) => {
+      const date = fechaDesdeString(fecha);
+      return {
+        id: `resumen-${fecha}`,
+        title: 'Resumen del día',
+        start: date,
+        end: sumarDias(date, 1),
+        allDay: true,
+        esResumenMes: true,
+        fecha,
+        conteos
+      };
+    });
+  }, [citasFiltradas]);
+
+  const resumenGlobal = useMemo(() => {
+    const base = {
+      total: citasFiltradas.length,
+      pendiente: 0,
+      en_espera: 0,
+      en_atencion: 0,
+      completada: 0,
+      no_asistio: 0,
+      cancelada: 0,
+      totalFacturado: 0,
+      totalCobrado: 0,
+      saldoPendiente: 0
+    };
+
+    citasFiltradas.forEach((cita) => {
+      const estado = normalizarEstadoVisual(cita.estado);
+      base[estado] = Number(base[estado] || 0) + 1;
+      const total = Number(cita.pago?.total ?? cita.costo ?? 0);
+      const cobrado = Number(cita.pago?.cobrado || 0);
+      const saldo = Number(cita.pago?.saldo ?? Math.max(0, total - cobrado));
+      base.totalFacturado += total;
+      base.totalCobrado += cobrado;
+      base.saldoPendiente += saldo;
+    });
+    return base;
+  }, [citasFiltradas]);
+
+  useEffect(() => {
+    if (modoVista !== 'calendario' || !eventosCalendario.length) return;
+    if (busqueda || estadoFiltro !== 'todos' || rangoFecha !== 'todas' || fechaExacta) {
+      setFechaCalendario(eventosCalendario[0].start);
+    }
+  }, [busqueda, estadoFiltro, eventosCalendario, fechaExacta, modoVista, rangoFecha]);
+
   const gruposLista = useMemo(() => {
     const grupos = new Map();
     citasFiltradas.forEach((cita) => {
@@ -667,6 +875,116 @@ export default function AgendaClinicaProfesional({
   const limpiarFiltros = () => { setBusqueda(''); setEstadoFiltro('todos'); setRangoFecha('todas'); setFechaExacta(''); };
   const hayFiltros = Boolean(busqueda) || estadoFiltro !== 'todos' || rangoFecha !== 'todas' || Boolean(fechaExacta);
 
+  const cerrarDetalleSeguro = () => {
+    bloquearSeleccionRef.current = Date.now() + 350;
+    setCitaDetalle(null);
+  };
+
+  const abrirVistaDia = (date) => {
+    setFechaCalendario(date);
+    setVistaCalendario('day');
+  };
+
+  const seleccionarSlotSeguro = async (slotInfo) => {
+    if (citaDetalle || Date.now() < bloquearSeleccionRef.current) return;
+
+    if (vistaCalendario === 'month') {
+      abrirVistaDia(slotInfo.start);
+      return;
+    }
+
+    if (moverCalendarioActivo) {
+      const cita = citasEnriquecidas.find((item) => Number(item.id) === Number(citaMoverCalendarioId));
+      if (!cita) {
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          title: 'Selecciona primero una cita',
+          text: 'Haz clic en la cita que deseas mover y luego en el horario de destino.',
+          icon: 'info',
+          timer: 2400,
+          showConfirmButton: false,
+          background: '#283652',
+          color: '#E9EDF2'
+        });
+        return;
+      }
+
+      const inicioDestino = slotInfo.start;
+      const finDestino = new Date(inicioDestino.getTime() + obtenerDuracionCita(cita) * 60 * 1000);
+      const confirmacion = await Swal.fire({
+        title: '¿Mover esta cita?',
+        html: `<div style="text-align:left;line-height:1.7"><strong>${cita.nombrePaciente}</strong><br>${format(inicioDestino, 'dd/MM/yyyy')}<br>${format(inicioDestino, 'HH:mm')} → ${format(finDestino, 'HH:mm')}</div>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, reprogramar',
+        cancelButtonText: 'Volver',
+        confirmButtonColor: '#56759E',
+        background: '#283652',
+        color: '#E9EDF2'
+      });
+
+      if (confirmacion.isConfirmed) {
+        await onReprogramarCita?.(cita, inicioDestino);
+        setCitaMoverCalendarioId(null);
+      }
+      return;
+    }
+
+    const inicio = format(slotInfo.start, 'HH:mm') === '00:00' ? '09:00' : format(slotInfo.start, 'HH:mm');
+    const finSeleccionado = format(slotInfo.end, 'HH:mm');
+    const fin = finSeleccionado === '00:00' || finSeleccionado <= inicio
+      ? minutosAHora((horaAMinutos(inicio) || 540) + 60)
+      : finSeleccionado;
+
+    onNuevaCita?.({
+      fecha: format(slotInfo.start, 'yyyy-MM-dd'),
+      hora: inicio,
+      horaFin: fin,
+      duracionMinutos: Math.max(5, (horaAMinutos(fin) || 600) - (horaAMinutos(inicio) || 540))
+    });
+  };
+
+  const seleccionarEventoCalendario = (event) => {
+    if (event?.esResumenMes) {
+      abrirVistaDia(event.start);
+      return;
+    }
+    if (moverCalendarioActivo) {
+      setCitaMoverCalendarioId(event.citaData.id);
+      return;
+    }
+    setCitaDetalle(event.citaData);
+  };
+
+  const iniciarArrastreRecepcion = (event, cita) => {
+    setCitaArrastradaId(cita.id);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(cita.id));
+  };
+
+  const terminarArrastreRecepcion = () => {
+    setCitaArrastradaId(null);
+    setColumnaSobre(null);
+  };
+
+  const soltarEnColumna = (estadoDestino) => {
+    const cita = citasEnriquecidas.find((item) => Number(item.id) === Number(citaArrastradaId));
+    terminarArrastreRecepcion();
+    if (!cita) return;
+
+    const actualNormalizado = ['pendiente', 'confirmada'].includes(cita.estado) ? 'pendiente' : cita.estado;
+    if (actualNormalizado === estadoDestino) return;
+
+    if (estadoDestino === 'completada') {
+      onCompletarCita?.(cita);
+      return;
+    }
+
+    onCambiarEstado?.(cita, estadoDestino);
+  };
+
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -675,7 +993,6 @@ export default function AgendaClinicaProfesional({
           <p className="mt-1 text-sm text-slate-400">Programa, recibe, atiende, finaliza y cobra desde una misma pantalla.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={onRecargar} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:border-cyan-500 hover:text-white"><RefreshCw size={17} /> Actualizar</button>
           <button type="button" onClick={() => onNuevaCita?.(null)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-600/20 hover:bg-cyan-500"><Plus size={18} /> Nueva cita</button>
         </div>
       </div>
@@ -685,7 +1002,7 @@ export default function AgendaClinicaProfesional({
           {[
             ['recepcion', 'Recepción', <LayoutDashboard size={16} />],
             ['calendario', 'Calendario', <CalendarDays size={16} />],
-            ['lista', 'Lista', <LayoutList size={16} />]
+            ['lista', 'Resumen', <LayoutList size={16} />]
           ].map(([modo, etiqueta, icono]) => (
             <button key={modo} type="button" onClick={() => setModoVista(modo)} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition ${modoVista === modo ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>{icono}{etiqueta}</button>
           ))}
@@ -740,11 +1057,15 @@ export default function AgendaClinicaProfesional({
             </div>
           </div>
 
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+            <span className="font-semibold text-cyan-300">Consejo:</span> arrastra una tarjeta entre columnas para cambiar rápidamente el estado del paciente.
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-4">
-            <ColumnaRecepcion titulo="Programadas" subtitulo="Próximas por recibir" citas={columnasRecepcion.programadas} clase="text-amber-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="No hay pacientes programados." />
-            <ColumnaRecepcion titulo="En espera" subtitulo="Ya llegaron a recepción" citas={columnasRecepcion.espera} clase="text-violet-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="Nadie está esperando." />
-            <ColumnaRecepcion titulo="En atención" subtitulo="Actualmente en consulta" citas={columnasRecepcion.atencion} clase="text-rose-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="No hay atención en curso." />
-            <ColumnaRecepcion titulo="Finalizadas" subtitulo="Atendidas durante el día" citas={columnasRecepcion.finalizadas} clase="text-emerald-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="Aún no hay atenciones finalizadas." />
+            <ColumnaRecepcion titulo="Programadas" subtitulo="Próximas por recibir" citas={columnasRecepcion.programadas} clase="text-amber-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="No hay pacientes programados." estadoDestino="pendiente" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
+            <ColumnaRecepcion titulo="En espera" subtitulo="Ya llegaron a recepción" citas={columnasRecepcion.espera} clase="text-violet-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="Nadie está esperando." estadoDestino="en_espera" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
+            <ColumnaRecepcion titulo="En atención" subtitulo="Actualmente en consulta" citas={columnasRecepcion.atencion} clase="text-rose-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="No hay atención en curso." estadoDestino="en_atencion" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
+            <ColumnaRecepcion titulo="Finalizadas" subtitulo="Atendidas durante el día" citas={columnasRecepcion.finalizadas} clase="text-emerald-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="Aún no hay atenciones finalizadas." estadoDestino="completada" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
           </div>
         </>
       )}
@@ -759,25 +1080,108 @@ export default function AgendaClinicaProfesional({
       )}
 
       {modoVista === 'calendario' && (
-        <div className="rounded-2xl border border-slate-700/80 bg-slate-800/80 p-4 shadow-xl">
+        <div className="agenda-calendario-pro rounded-2xl border border-slate-700/80 bg-slate-800/80 p-4 shadow-xl">
+          <style>{`
+            .agenda-calendario-pro .rbc-calendar { color: #e2e8f0; }
+            .agenda-calendario-pro .rbc-toolbar { display: none; }
+            .agenda-calendario-pro .rbc-header { padding: 10px 6px; border-color: #334155; background: rgba(15,23,42,.72); color: #cbd5e1; font-size: 12px; }
+            .agenda-calendario-pro .rbc-time-view,
+            .agenda-calendario-pro .rbc-month-view { border-color: #334155; border-radius: 14px; overflow: hidden; background: rgba(15,23,42,.38); }
+            .agenda-calendario-pro .rbc-time-header-content,
+            .agenda-calendario-pro .rbc-time-content,
+            .agenda-calendario-pro .rbc-timeslot-group,
+            .agenda-calendario-pro .rbc-day-bg,
+            .agenda-calendario-pro .rbc-month-row { border-color: #334155; }
+            .agenda-calendario-pro .rbc-timeslot-group { min-height: 76px; }
+            .agenda-calendario-pro .rbc-time-slot { color: #64748b; font-size: 11px; }
+            .agenda-calendario-pro .rbc-label { color: #94a3b8; font-size: 11px; padding-right: 8px; }
+            .agenda-calendario-pro .rbc-today { background: rgba(6,182,212,.055); }
+            .agenda-calendario-pro .rbc-current-time-indicator { height: 2px; background: #22d3ee; }
+            .agenda-calendario-pro .rbc-event { margin-top: 2px; margin-bottom: 2px; border: 1px solid rgba(255,255,255,.16) !important; border-radius: 10px !important; overflow: hidden; }
+            .agenda-calendario-pro .rbc-day-slot .rbc-event-content { padding: 2px 3px; }
+            .agenda-calendario-pro .rbc-month-view .rbc-event { margin-left: 3px; margin-right: 3px; padding: 3px 6px !important; }
+            .agenda-calendario-pro .rbc-off-range-bg { background: rgba(2,6,23,.45); }
+            .agenda-calendario-pro .rbc-show-more { background: transparent; color: #67e8f9; font-size: 11px; }
+            .agenda-calendario-pro .rbc-agenda-view table.rbc-agenda-table { border-color: #334155; }
+            .agenda-calendario-pro .rbc-agenda-view table.rbc-agenda-table tbody > tr > td,
+            .agenda-calendario-pro .rbc-agenda-view table.rbc-agenda-table thead > tr > th { border-color: #334155; padding: 10px; }
+            .agenda-calendario-pro .rbc-month-view .rbc-date-cell { padding: 5px 6px 1px; }
+            .agenda-calendario-pro .rbc-month-view .rbc-row-content { min-height: 92px; }
+            .agenda-calendario-pro .rbc-month-view .rbc-row-segment { padding: 1px 4px; }
+            .agenda-calendario-pro .rbc-month-view .rbc-event.dp-resumen-evento { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; overflow: visible; }
+            html[data-theme="light"] .agenda-calendario-pro .rbc-calendar { color: #283652; }
+            html[data-theme="light"] .agenda-calendario-pro .rbc-header { background: #E9EDF2; border-color: #C5D0E0; color: #56759E; }
+            html[data-theme="light"] .agenda-calendario-pro .rbc-time-view,
+            html[data-theme="light"] .agenda-calendario-pro .rbc-month-view { background: #fff; border-color: #C5D0E0; }
+            html[data-theme="light"] .agenda-calendario-pro .rbc-time-header-content,
+            html[data-theme="light"] .agenda-calendario-pro .rbc-time-content,
+            html[data-theme="light"] .agenda-calendario-pro .rbc-timeslot-group,
+            html[data-theme="light"] .agenda-calendario-pro .rbc-day-bg,
+            html[data-theme="light"] .agenda-calendario-pro .rbc-month-row { border-color: #C5D0E0; }
+            html[data-theme="light"] .agenda-calendario-pro .rbc-off-range-bg { background: #E9EDF2; }
+            html[data-theme="light"] .agenda-calendario-pro .rbc-today { background: rgba(86,117,158,.10) !important; box-shadow: inset 0 0 0 2px rgba(86,117,158,.32); }
+          `}</style>
+
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/55 p-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300"><CalendarDays size={15} className="text-cyan-400" /> Calendario clínico interactivo</div>
+              <div className="mt-1 text-[11px] text-slate-500">Clic: ver detalle · Doble clic: editar · Selecciona un espacio para programar.</div>
+            </div>
+            <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${moverCalendarioActivo ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-700 bg-slate-900'}`}>
+              <input type="checkbox" checked={moverCalendarioActivo} onChange={(event) => { const activo = event.target.checked; setMoverCalendarioActivo(activo); if (!activo) setCitaMoverCalendarioId(null); }} className="h-4 w-4 accent-cyan-500" />
+              <div><div className={`text-xs font-bold ${moverCalendarioActivo ? 'text-cyan-300' : 'text-slate-300'}`}>Permitir mover citas</div><div className="text-[10px] text-slate-500">Selecciona una cita y luego el nuevo horario</div></div>
+            </label>
+          </div>
+
+          {moverCalendarioActivo && (
+            <div className={`mb-3 rounded-xl border px-3 py-2 text-xs ${citaMoverCalendarioId ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>
+              {citaMoverCalendarioId
+                ? 'Cita seleccionada. Haz clic en el nuevo horario para confirmar el movimiento.'
+                : 'Modo mover activo. Haz clic primero en la cita que deseas reprogramar.'}
+            </div>
+          )}
+
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-400"><CalendarDays size={15} /> Haz clic para ver acciones rápidas. Haz doble clic para editar.</div>
+            <div className="text-xs text-slate-400"><strong className="text-white">{citasFiltradas.length}</strong> cita{citasFiltradas.length === 1 ? '' : 's'} visible{citasFiltradas.length === 1 ? '' : 's'} con los filtros actuales.</div>
             <div className="flex flex-wrap gap-2">{['pendiente','en_espera','en_atencion','completada'].map((estado) => <span key={estado} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ESTADOS[estado].colorCalendario }} />{ESTADOS[estado].corta}</span>)}</div>
           </div>
-          <div style={{ height: '72vh' }}>
+
+          <div style={{ height: '76vh', minHeight: 640 }}>
             <Calendar
               localizer={localizer}
               culture="es"
-              defaultView="week"
+              view={vistaCalendario}
+              onView={setVistaCalendario}
+              date={fechaCalendario}
+              onNavigate={setFechaCalendario}
               views={['month', 'week', 'day', 'agenda']}
-              events={eventosCalendario}
-              components={{ event: EventoCalendario }}
-              messages={{ next: 'Sig. ❯', previous: '❮ Ant.', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día', agenda: 'Lista', date: 'Fecha', time: 'Hora', event: 'Paciente / tratamiento', noEventsInRange: 'No hay citas en este rango.' }}
-              eventPropGetter={(event) => ({ style: { backgroundColor: ESTADOS[event.estado]?.colorCalendario || '#475569', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', padding: '3px 6px', boxShadow: '0 2px 5px rgba(0,0,0,.18)' } })}
-              selectable
-              onSelectEvent={(event) => setCitaDetalle(event.citaData)}
-              onDoubleClickEvent={(event) => onEditarCita?.(event.citaData)}
-              onSelectSlot={(slotInfo) => { const inicio = format(slotInfo.start, 'HH:mm') === '00:00' ? '09:00' : format(slotInfo.start, 'HH:mm'); const finSeleccionado = format(slotInfo.end, 'HH:mm'); const fin = finSeleccionado === '00:00' || finSeleccionado <= inicio ? minutosAHora((horaAMinutos(inicio) || 540) + 60) : finSeleccionado; onNuevaCita?.({ fecha: format(slotInfo.start, 'yyyy-MM-dd'), hora: inicio, horaFin: fin, duracionMinutos: Math.max(5, (horaAMinutos(fin) || 600) - (horaAMinutos(inicio) || 540)) }); }}
+              events={vistaCalendario === 'month' ? eventosResumenMes : eventosCalendario}
+              components={{
+                event: vistaCalendario === 'month' ? EventoResumenMes : EventoCalendario,
+                toolbar: ToolbarCalendario,
+                month: {
+                  dateHeader: (props) => <CabeceraFechaMes {...props} onAbrirDia={abrirVistaDia} />
+                }
+              }}
+              messages={{ next: 'Siguiente', previous: 'Anterior', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día', agenda: 'Agenda', date: 'Fecha', time: 'Hora', event: 'Paciente / tratamiento', noEventsInRange: 'No hay citas en este rango.' }}
+              step={15}
+              timeslots={4}
+              min={new Date(1970, 0, 1, 7, 0, 0)}
+              max={new Date(1970, 0, 1, 21, 0, 0)}
+              popup
+              eventPropGetter={(event) => {
+                if (event.esResumenMes) {
+                  return { className: 'dp-resumen-evento', style: { background: 'transparent', border: 0, boxShadow: 'none', padding: 0, color: 'inherit' } };
+                }
+                const estado = normalizarEstadoVisual(event.estado);
+                return { style: { backgroundColor: ESTADOS[estado]?.colorCalendario || '#64748b', color: '#fff', border: Number(event.id) === Number(citaMoverCalendarioId) ? '2px solid #67e8f9' : '1px solid rgba(255,255,255,.18)', fontSize: '12px', padding: '4px 6px', boxShadow: Number(event.id) === Number(citaMoverCalendarioId) ? '0 0 0 3px rgba(34,211,238,.25)' : '0 5px 12px rgba(0,0,0,.22)' } };
+              }}
+              selectable={!citaDetalle}
+              onSelectEvent={seleccionarEventoCalendario}
+              onDoubleClickEvent={(event) => !moverCalendarioActivo && !event.esResumenMes && onEditarCita?.(event.citaData)}
+              onSelectSlot={seleccionarSlotSeguro}
+              onDrillDown={abrirVistaDia}
+              drilldownView="day"
             />
           </div>
         </div>
@@ -785,7 +1189,23 @@ export default function AgendaClinicaProfesional({
 
       {modoVista === 'lista' && (
         <div className="space-y-5">
-          <div className="flex items-center gap-2 text-sm text-slate-400"><ListChecks size={17} /><strong className="text-white">{citasFiltradas.length}</strong> resultado{citasFiltradas.length === 1 ? '' : 's'}</div>
+          <div className="rounded-2xl border border-slate-700/80 bg-slate-800/80 p-5 shadow-xl">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-cyan-400"><ListChecks size={16} /> Resumen general</div>
+                <h2 className="mt-1 text-xl font-black text-white">Citas, atención y cobros en una sola vista</h2>
+                <p className="mt-1 text-xs text-slate-500">Usa el buscador y los filtros superiores para reducir este resumen.</p>
+              </div>
+              <div className="text-sm text-slate-400"><strong className="text-white">{resumenGlobal.total}</strong> cita{resumenGlobal.total === 1 ? '' : 's'} visible{resumenGlobal.total === 1 ? '' : 's'}</div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Programadas</div><div className="mt-1 text-2xl font-black text-white">{resumenGlobal.pendiente}</div></div>
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-violet-300">En espera / atención</div><div className="mt-1 text-2xl font-black text-white">{resumenGlobal.en_espera + resumenGlobal.en_atencion}</div></div>
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Finalizadas</div><div className="mt-1 text-2xl font-black text-white">{resumenGlobal.completada}</div></div>
+              <div className="rounded-xl border border-slate-600 bg-slate-900/70 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Facturado visible</div><div className="mt-1 text-lg font-black text-white">{moneda(resumenGlobal.totalFacturado)}</div><div className="mt-1 text-[11px] text-slate-500">Cobrado {moneda(resumenGlobal.totalCobrado)} · Saldo {moneda(resumenGlobal.saldoPendiente)}</div></div>
+            </div>
+          </div>
           {!citasFiltradas.length ? (
             <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-14 text-center"><CalendarDays className="mx-auto text-slate-600" size={42} /><h3 className="mt-4 font-semibold text-slate-300">No se encontraron citas</h3><button type="button" onClick={() => onNuevaCita?.(null)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-500"><Plus size={17} /> Agendar cita</button></div>
           ) : gruposLista.map(([fecha, citasGrupo]) => (
@@ -806,7 +1226,7 @@ export default function AgendaClinicaProfesional({
         </div>
       )}
 
-      <DetalleRapido cita={citaDetalle} onClose={() => setCitaDetalle(null)} callbacks={callbacks} />
+      <DetalleRapido cita={citaDetalle} onClose={cerrarDetalleSeguro} callbacks={callbacks} />
     </div>
   );
 }

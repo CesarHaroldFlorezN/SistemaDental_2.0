@@ -827,7 +827,7 @@ export default function App() {
       case 'en_espera':
         return <span className="bg-violet-500/10 text-violet-400 border border-violet-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><Clock size={13}/> En espera</span>;
       case 'confirmada':
-        return <span className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><CheckCircle size={13}/> Confirmada</span>;
+        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Programado</span>;
       case 'no_asistio':
         return <span className="bg-orange-500/10 text-orange-400 border border-orange-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> No asistió</span>;
       case 'cancelada':
@@ -843,18 +843,18 @@ export default function App() {
   };
 
   return (
-    <div className="flex bg-slate-900 min-h-screen text-slate-100 font-sans">
+    <div className="dp-app-shell flex min-h-screen bg-slate-900 font-sans text-slate-100">
       <Sidebar vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
 
-      <main className="flex-1 p-8 overflow-y-auto bg-slate-900 dark:bg-slate-900 light:bg-slate-100 transition-colors duration-200">
+      <main className="dp-main min-w-0 flex-1 overflow-y-auto bg-slate-900 p-4 transition-colors duration-200 sm:p-6 xl:p-8">
         
-        <div className="max-w-6xl mx-auto flex justify-end items-center mb-4">
-          <button onClick={toggleTheme} className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 hover:border-cyan-500 text-slate-300 hover:text-white text-xs font-semibold shadow-md transition duration-200 cursor-pointer select-none">
+        <div className="dp-theme-toolbar sticky top-0 z-30 mx-auto mb-4 flex max-w-[1800px] items-center justify-end py-1">
+          <button onClick={toggleTheme} className="dp-theme-toggle flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold shadow-lg backdrop-blur transition duration-200 cursor-pointer select-none">
             {tema === 'dark' ? <><span role="img" aria-label="claro">☀️</span><span>Modo Claro</span></> : <><span role="img" aria-label="oscuro">🌙</span><span>Modo Oscuro</span></>}
           </button>
         </div>
 
-        <div className="max-w-6xl mx-auto">
+        <div className="mx-auto w-full max-w-[1800px]">
           
           {/* ==============================================
               PANTALLA 0: DASHBOARD
@@ -1046,13 +1046,6 @@ export default function App() {
               onEliminarCita={handleEliminarCita}
               onReprogramarCita={handleReprogramarCita}
               onVerCuotas={handleVerCuotasDesdeAgenda}
-              onRecargar={() => Promise.all([
-                cargarPacientes(),
-                cargarCitas(),
-                cargarPagos(),
-                cargarPlanPagos(),
-                cargarPlanes()
-              ])}
             />
           )}
 

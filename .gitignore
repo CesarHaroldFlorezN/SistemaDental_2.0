@@ -6,52 +6,34 @@ venv/
 
 # Base de datos local
 data/*.db
-
 # React
 frontend-moderno/node_modules/
 frontend-moderno/dist/
-
 # PyInstaller
 build/
 dist/
-
 # Sistema
 .DS_Store
 Thumbs.db
-
 # Bases de datos locales
-data/*.db
 frontend-moderno/data/*.db
-
-# React
-frontend-moderno/node_modules/
-frontend-moderno/dist/
-
-# PyInstaller
-build/
-dist/
-
 # Respaldos automáticos
 respaldos_codigo/
 respaldos/
-
 # Bases de datos
-data/*.db
-frontend-moderno/data/*.db
-
-# React
-frontend-moderno/node_modules/
-frontend-moderno/dist/
-
-# PyInstaller
-build/
-dist/
-
 # Respaldos locales
-respaldos_codigo/
 respaldos/data/
 frontend-moderno/data/
-
 # Datos locales del sistema
 /data/
 /frontend-moderno/data/
+# Datos y bases locales
+/data/**
+/frontend-moderno/data/**
+# Dependencias y compilaciones
+/frontend-moderno/node_modules/
+/frontend-moderno/dist/
+/build/
+/dist/
+/respaldos_codigo/
+/respaldos/

@@ -1,90 +1,170 @@
 @import "tailwindcss";
-@layer base {
-  :root[data-theme="light"] {
-    color-scheme: light;
-  }
-  
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-  }
 
-  /* Ajuste suave del fondo general cuando cambia el atributo */
-  html[data-theme="light"] body {
-    background-color: #f8fafc;
-    color: #0f172a;
-  }
+:root {
+  --dp-navy: #283652;
+  --dp-steel: #56759E;
+  --dp-slate: #8D9FC1;
+  --dp-ice: #C5D0E0;
+  --dp-smoke: #E9EDF2;
+}
+
+@layer base {
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  html, body, #root { min-height: 100%; }
 
   html[data-theme="dark"] body {
-    background-color: #0f172a;
+    background: #0f172a;
     color: #f8fafc;
+  }
+
+  html[data-theme="light"] body {
+    background: var(--dp-smoke);
+    color: var(--dp-navy);
   }
 }
 
-/* ==========================================
-   MODO CLARO (LIGHT THEME AUTOMÁTICO)
-   ========================================== */
-html[data-theme="light"] {
-  color-scheme: light;
+/* =====================================================
+   TEMA CLARO DENTALPRO — PALETA AZUL CLÍNICA
+   ===================================================== */
+html[data-theme="light"] .dp-app-shell,
+html[data-theme="light"] .dp-main {
+  background: linear-gradient(145deg, #E9EDF2 0%, #F7F9FC 52%, #E9EDF2 100%) !important;
+  color: var(--dp-navy) !important;
 }
 
-/* 1. Fondo general de la aplicación */
-html[data-theme="light"] .bg-slate-900 {
-  background-color: #f1f5f9 !important; /* slate-100 */
+html[data-theme="light"] .dp-sidebar {
+  background: linear-gradient(180deg, #283652 0%, #22304A 100%) !important;
+  border-color: rgba(141, 159, 193, .42) !important;
+  box-shadow: 8px 0 26px rgba(40, 54, 82, .15) !important;
 }
 
-/* 2. Tarjetas, menú lateral, modales y encabezados de tabla */
-html[data-theme="light"] .bg-slate-800,
-html[data-theme="light"] .bg-slate-800\/80,
-html[data-theme="light"] .bg-slate-800\/90 {
-  background-color: #ffffff !important; /* blanco limpio */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04) !important;
+html[data-theme="light"] .dp-sidebar .text-slate-400,
+html[data-theme="light"] .dp-sidebar .text-slate-500 {
+  color: var(--dp-ice) !important;
 }
 
-/* 3. Contenedores internos, inputs y filas secundarias */
-html[data-theme="light"] .bg-slate-900\/40,
-html[data-theme="light"] .bg-slate-900\/60,
-html[data-theme="light"] .bg-slate-900\/80 {
-  background-color: #f8fafc !important; /* slate-50 */
+html[data-theme="light"] .dp-sidebar .border-slate-700,
+html[data-theme="light"] .dp-sidebar .border-slate-700\/80 {
+  border-color: rgba(197, 208, 224, .22) !important;
 }
 
-/* 4. Textos principales y títulos */
-html[data-theme="light"] .text-slate-100,
-html[data-theme="light"] .text-slate-200,
-html[data-theme="light"] .text-white:not(button *) {
-  color: #0f172a !important; /* slate-900 oscuro */
+html[data-theme="light"] .dp-sidebar-active {
+  background: var(--dp-steel) !important;
+  box-shadow: 0 9px 22px rgba(86, 117, 158, .35) !important;
 }
 
-/* 5. Textos secundarios y subtítulos */
-html[data-theme="light"] .text-slate-300,
-html[data-theme="light"] .text-slate-400 {
-  color: #475569 !important; /* slate-600 */
+html[data-theme="light"] .dp-theme-toolbar {
+  background: linear-gradient(90deg, transparent, rgba(233,237,242,.88) 40%);
+  border-radius: 999px;
 }
 
-/* 6. Bordes y líneas divisorias */
-html[data-theme="light"] .border-slate-700,
-html[data-theme="light"] .border-slate-700\/50,
-html[data-theme="light"] .border-slate-700\/60,
-html[data-theme="light"] .border-slate-700\/80 {
-  border-color: #e2e8f0 !important; /* slate-200 */
+.dp-theme-toggle {
+  background: rgba(30, 41, 59, .88);
+  border-color: rgba(71, 85, 105, .9);
+  color: #cbd5e1;
 }
 
-/* 7. Mantener el texto blanco legible dentro de los botones de color (Guardar, Agendar, Pagar, etc.) */
-html[data-theme="light"] button.text-white,
-html[data-theme="light"] button .text-white,
-html[data-theme="light"] .bg-cyan-600,
-html[data-theme="light"] .bg-emerald-600,
-html[data-theme="light"] .bg-purple-600,
-html[data-theme="light"] .bg-rose-600 {
-  color: #ffffff !important;
+.dp-theme-toggle:hover {
+  border-color: #22d3ee;
+  color: #fff;
 }
 
-/* ====================================================
-   AJUSTES PARA EL CALENDARIO CLÍNICO (REACT BIG CALENDAR)
-   ==================================================== */
+html[data-theme="light"] .dp-theme-toggle {
+  background: rgba(255, 255, 255, .92) !important;
+  border-color: var(--dp-ice) !important;
+  color: var(--dp-navy) !important;
+  box-shadow: 0 8px 22px rgba(40, 54, 82, .13) !important;
+}
+
+html[data-theme="light"] .dp-theme-toggle:hover {
+  background: var(--dp-navy) !important;
+  border-color: var(--dp-steel) !important;
+  color: #fff !important;
+}
+
+/* Superficies generales. Los selectores por fragmento cubren variantes /40, /60, /80 y /95. */
+html[data-theme="light"] .dp-main [class*="bg-slate-900"] {
+  background-color: #F4F7FA !important;
+}
+
+html[data-theme="light"] .dp-main [class*="bg-slate-800"] {
+  background-color: rgba(255, 255, 255, .96) !important;
+  box-shadow: 0 6px 18px rgba(40, 54, 82, .075);
+}
+
+html[data-theme="light"] .dp-main [class*="border-slate-700"],
+html[data-theme="light"] .dp-main [class*="border-slate-600"] {
+  border-color: var(--dp-ice) !important;
+}
+
+html[data-theme="light"] .dp-main .text-white,
+html[data-theme="light"] .dp-main .text-slate-100,
+html[data-theme="light"] .dp-main .text-slate-200 {
+  color: var(--dp-navy) !important;
+}
+
+html[data-theme="light"] .dp-main .text-slate-300,
+html[data-theme="light"] .dp-main .text-slate-400 {
+  color: var(--dp-steel) !important;
+}
+
+html[data-theme="light"] .dp-main .text-slate-500,
+html[data-theme="light"] .dp-main .text-slate-600 {
+  color: #6C7E9D !important;
+}
+
+html[data-theme="light"] .dp-main input,
+html[data-theme="light"] .dp-main select,
+html[data-theme="light"] .dp-main textarea {
+  color: var(--dp-navy) !important;
+  border-color: var(--dp-ice) !important;
+}
+
+html[data-theme="light"] .dp-main input::placeholder,
+html[data-theme="light"] .dp-main textarea::placeholder {
+  color: #7A8CAA !important;
+}
+
+/* Los botones de acción conservan contraste blanco. */
+html[data-theme="light"] .dp-main button[class*="bg-cyan-"],
+html[data-theme="light"] .dp-main button[class*="bg-emerald-"],
+html[data-theme="light"] .dp-main button[class*="bg-violet-"],
+html[data-theme="light"] .dp-main button[class*="bg-purple-"],
+html[data-theme="light"] .dp-main button[class*="bg-rose-"],
+html[data-theme="light"] .dp-main button[class*="bg-amber-"],
+html[data-theme="light"] .dp-main .bg-cyan-600,
+html[data-theme="light"] .dp-main .bg-emerald-600,
+html[data-theme="light"] .dp-main .bg-violet-600,
+html[data-theme="light"] .dp-main .bg-purple-600,
+html[data-theme="light"] .dp-main .bg-rose-600 {
+  color: #fff !important;
+}
+
+html[data-theme="light"] .dp-main .bg-cyan-600,
+html[data-theme="light"] .dp-main button.bg-cyan-600 {
+  background-color: var(--dp-steel) !important;
+}
+
+html[data-theme="light"] .dp-main .text-cyan-300,
+html[data-theme="light"] .dp-main .text-cyan-400 {
+  color: var(--dp-steel) !important;
+}
+
+html[data-theme="light"] .dp-main .border-cyan-500\/30,
+html[data-theme="light"] .dp-main .border-cyan-500\/40 {
+  border-color: rgba(86, 117, 158, .48) !important;
+}
+
+/* =====================================================
+   REACT BIG CALENDAR — BASE COMPARTIDA
+   ===================================================== */
 .rbc-calendar {
   font-family: inherit;
   color: #f8fafc;
 }
+
 .rbc-header {
   border-bottom: 1px solid #334155 !important;
   border-left: 1px solid #334155 !important;
@@ -94,39 +174,61 @@ html[data-theme="light"] .bg-rose-600 {
   text-transform: capitalize;
   font-size: 13px;
 }
-.rbc-month-view, .rbc-time-view, .rbc-agenda-view {
+
+.rbc-month-view,
+.rbc-time-view,
+.rbc-agenda-view {
   border: 1px solid #334155 !important;
   background-color: #1e293b;
   border-radius: 12px;
   overflow: hidden;
 }
-.rbc-day-bg + .rbc-day-bg, .rbc-month-row + .rbc-month-row {
+
+.rbc-day-bg + .rbc-day-bg,
+.rbc-month-row + .rbc-month-row {
   border-left: 1px solid #334155 !important;
   border-top: 1px solid #334155 !important;
 }
-.rbc-time-content, .rbc-time-header-content {
+
+.rbc-time-content,
+.rbc-time-header-content {
   border-top: 1px solid #334155 !important;
   border-left: 1px solid #334155 !important;
 }
-.rbc-timeslot-group, .rbc-day-slot .rbc-time-slot {
+
+.rbc-timeslot-group,
+.rbc-day-slot .rbc-time-slot {
   border-bottom: 1px solid #334155 !important;
   border-top: 1px solid #334155 !important;
 }
-.rbc-off-range-bg { background-color: #0f172a; }
-.rbc-today { background-color: rgba(6, 182, 212, 0.08) !important; }
 
-/* Botones del Toolbar */
-.rbc-toolbar button {
-  color: #cbd5e1 !important;
-  border-color: #475569 !important;
-  border-radius: 8px !important;
-  margin-right: 4px;
+.rbc-off-range-bg { background-color: #0f172a; }
+.rbc-today { background-color: rgba(6, 182, 212, .08) !important; }
+
+html[data-theme="light"] .rbc-month-view,
+html[data-theme="light"] .rbc-time-view,
+html[data-theme="light"] .rbc-agenda-view {
+  background: #fff !important;
+  border-color: var(--dp-ice) !important;
 }
-.rbc-toolbar button:hover { background-color: #334155 !important; }
-.rbc-toolbar .rbc-active {
-  background-color: #0891b2 !important;
-  color: white !important;
-  border-color: #0891b2 !important;
-  box-shadow: none !important;
+
+html[data-theme="light"] .rbc-header,
+html[data-theme="light"] .rbc-day-bg + .rbc-day-bg,
+html[data-theme="light"] .rbc-month-row + .rbc-month-row,
+html[data-theme="light"] .rbc-time-content,
+html[data-theme="light"] .rbc-time-header-content,
+html[data-theme="light"] .rbc-timeslot-group,
+html[data-theme="light"] .rbc-day-slot .rbc-time-slot {
+  border-color: var(--dp-ice) !important;
 }
-.rbc-toolbar-label { font-weight: bold; font-size: 1.1rem; color: #fff; }
+
+html[data-theme="light"] .rbc-header {
+  color: var(--dp-steel) !important;
+  background: var(--dp-smoke) !important;
+}
+
+html[data-theme="light"] .rbc-off-range-bg { background: #F3F6FA !important; }
+html[data-theme="light"] .rbc-today {
+  background: rgba(86, 117, 158, .10) !important;
+  box-shadow: inset 0 0 0 2px rgba(86, 117, 158, .30);
+}
