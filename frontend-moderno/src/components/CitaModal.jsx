@@ -130,7 +130,11 @@ const crearEstadoInicial = (citaEditar, pagoEditar, pacientes) => {
     duracionMinutos: duracionReal,
     modoDuracion: DURACIONES_RAPIDAS.includes(duracionReal) ? String(duracionReal) : 'libre',
     servicios: serviciosIniciales(citaEditar),
-    tipoPago: citaEditar?.tipoPago || 'contado',
+    // DENTALPRO_V7_PAGOS: la interfaz separa la decisión de cobro del estado calculado.
+    tipoPago: ['completo', 'anticipo'].includes(citaEditar?.tipoPago || pagoEditar?.tipoPago)
+      ? 'pago_ahora'
+      : (citaEditar?.tipoPago || pagoEditar?.tipoPago || 'contado'),
+    motivoSinCosto: 'Cortesía profesional',
     montoPagado: pagoEditar?.cobrado ?? 0,
     metodoPago:
       pagoEditar?.metodo && !['Pendiente', '—'].includes(pagoEditar.metodo)
@@ -227,11 +231,20 @@ export default function CitaModal({
   if (!isOpen) return null;
 
   const sinCosto = ['cortesia', 'sesion'].includes(formData.tipoPago);
-  const costoNumerico = sinCosto ? 0 : costoServicios;
-  let cobradoPreview = Math.max(0, Number(formData.montoPagado) || 0);
-  if (formData.tipoPago === 'completo') cobradoPreview = costoNumerico;
-  if (['contado', 'cortesia', 'sesion'].includes(formData.tipoPago)) cobradoPreview = 0;
-  const saldoPreview = Math.max(0, costoNumerico - cobradoPreview);
+  const costoNumerico = costoServicios;
+  const totalCobroPreview = sinCosto ? 0 : costoNumerico;
+  let cobradoPreview = ['pago_ahora', 'cuotas'].includes(formData.tipoPago)
+    ? Math.max(0, Number(formData.montoPagado) || 0)
+    : 0;
+  cobradoPreview = Math.min(cobradoPreview, totalCobroPreview);
+  const saldoPreview = Math.max(0, totalCobroPreview - cobradoPreview);
+  const estadoPagoPreview = sinCosto
+    ? 'Sin costo'
+    : cobradoPreview <= 0
+      ? 'Pendiente'
+      : saldoPreview <= 0
+        ? 'Pagado'
+        : 'Pago parcial';
   const duracionActual = calcularDuracion(formData.hora, formData.horaFin);
 
   const seleccionarPaciente = (paciente) => {
@@ -273,7 +286,12 @@ export default function CitaModal({
     setFormData((prev) => {
       const siguiente = { ...prev, [name]: value };
       if (name === 'tipoPago') {
-        if (value === 'completo') siguiente.montoPagado = costoServicios;
+        if (value === 'pago_ahora' && Number(siguiente.montoPagado || 0) <= 0) {
+          siguiente.montoPagado = costoServicios;
+        }
+        if (value === 'cuotas' && Number(siguiente.montoPagado || 0) < 0) {
+          siguiente.montoPagado = 0;
+        }
         if (['contado', 'cortesia', 'sesion'].includes(value)) siguiente.montoPagado = 0;
       }
       return siguiente;
@@ -354,7 +372,9 @@ export default function CitaModal({
       nombre: servicio.seleccion === 'Otro'
         ? servicio.nombreOtro.trim()
         : servicio.seleccion.trim(),
-      costo: sinCosto ? 0 : Math.max(0, Number(servicio.costo) || 0)
+      costo: formData.tipoPago === 'sesion'
+        ? 0
+        : Math.max(0, Number(servicio.costo) || 0)
     })).filter((servicio) => servicio.nombre);
 
     if (!pacienteId) return setErrorFormulario('Selecciona un paciente de la lista de resultados.');
@@ -367,14 +387,26 @@ export default function CitaModal({
     }
     if (!servicios.length) return setErrorFormulario('Debes agregar por lo menos un servicio.');
 
+    let tipoPagoBackend = formData.tipoPago;
+
     if (formData.tipoPago === 'contado') montoPagado = 0;
-    if (formData.tipoPago === 'completo') montoPagado = costoNumerico;
     if (sinCosto) montoPagado = 0;
 
-    if (montoPagado > costoNumerico) return setErrorFormulario('El monto pagado no puede superar el costo total.');
-    if (formData.tipoPago === 'anticipo' && montoPagado <= 0) return setErrorFormulario('Debes ingresar el anticipo.');
-    if (formData.tipoPago === 'anticipo' && montoPagado >= costoNumerico) return setErrorFormulario('El anticipo debe ser menor al total.');
-    if (formData.tipoPago === 'cuotas' && costoNumerico <= 0) return setErrorFormulario('Una atención en cuotas debe tener costo.');
+    if (formData.tipoPago === 'pago_ahora') {
+      if (costoNumerico <= 0) return setErrorFormulario('La atención debe tener un costo para registrar un pago.');
+      if (montoPagado <= 0) return setErrorFormulario('Ingresa el monto recibido hoy.');
+      if (montoPagado > costoNumerico) return setErrorFormulario('El monto recibido no puede superar el total.');
+      tipoPagoBackend = montoPagado >= costoNumerico ? 'completo' : 'anticipo';
+    }
+
+    if (formData.tipoPago === 'cuotas') {
+      if (costoNumerico <= 0) return setErrorFormulario('Un plan de pagos debe tener un costo mayor que cero.');
+      if (montoPagado > costoNumerico) return setErrorFormulario('El pago inicial no puede superar el total.');
+      tipoPagoBackend = montoPagado >= costoNumerico ? 'completo' : 'cuotas';
+    }
+
+    if (formData.tipoPago === 'cortesia') tipoPagoBackend = 'cortesia';
+    if (formData.tipoPago === 'sesion') tipoPagoBackend = 'sesion';
 
     const sesionNum = Math.max(1, Number.parseInt(formData.sesionNum, 10) || 1);
     const totalSesiones = Math.max(1, Number.parseInt(formData.totalSesiones, 10) || 1);
@@ -392,13 +424,18 @@ export default function CitaModal({
       procedimiento,
       servicios,
       costo: costoNumerico,
-      tipoPago: formData.tipoPago,
+      tipoPago: tipoPagoBackend,
       montoPagado,
       metodoPago: montoPagado > 0 ? formData.metodoPago : 'Pendiente',
       estado: formData.estado,
       sesionNum,
       totalSesiones,
-      notas: formData.notas.trim()
+      notas: [
+        formData.notas.trim(),
+        formData.tipoPago === 'cortesia'
+          ? `Motivo sin costo: ${formData.motivoSinCosto || 'Cortesía profesional'}`
+          : ''
+      ].filter(Boolean).join('\n')
     };
 
     try {
@@ -507,7 +544,7 @@ export default function CitaModal({
                   <div className="grid gap-3 md:grid-cols-[92px_minmax(0,1fr)_150px_42px] md:items-end">
                     <div className="pb-2 text-xs font-black uppercase tracking-wider text-cyan-300">Servicio {indice + 1}</div>
                     <label className="text-xs font-medium text-slate-400">Procedimiento<select value={servicio.seleccion} onChange={(event) => actualizarServicio(servicio.clave, 'seleccion', event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-cyan-500">{PROCEDIMIENTOS.map((procedimiento) => <option key={procedimiento} value={procedimiento}>{procedimiento}</option>)}<option value="Otro">Otro servicio</option></select></label>
-                    <label className="text-xs font-medium text-slate-400">Costo (S/.)<input type="number" min="0" step="0.01" disabled={sinCosto} value={sinCosto ? 0 : servicio.costo} onChange={(event) => actualizarServicio(servicio.clave, 'costo', event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-right font-bold text-white outline-none focus:border-cyan-500 disabled:opacity-50" /></label>
+                    <label className="text-xs font-medium text-slate-400">Costo (S/.)<input type="number" min="0" step="0.01" disabled={formData.tipoPago === 'sesion'} value={formData.tipoPago === 'sesion' ? 0 : servicio.costo} onChange={(event) => actualizarServicio(servicio.clave, 'costo', event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-right font-bold text-white outline-none focus:border-cyan-500 disabled:opacity-50" /></label>
                     <button type="button" disabled={formData.servicios.length === 1} onClick={() => quitarServicio(servicio.clave)} title="Eliminar servicio" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 text-slate-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-30"><Trash2 size={16} /></button>
                   </div>
                   {servicio.seleccion === 'Otro' && <label className="mt-3 block text-xs font-medium text-slate-400 md:ml-[104px]">Nombre del servicio<input type="text" value={servicio.nombreOtro} onChange={(event) => actualizarServicio(servicio.clave, 'nombreOtro', event.target.value)} placeholder="Escribe el nombre del servicio..." className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-cyan-500" /></label>}
@@ -517,14 +554,80 @@ export default function CitaModal({
             <div className="mt-3 flex items-center justify-between rounded-xl border border-cyan-500/20 bg-slate-950/50 px-4 py-3"><span className="text-sm font-semibold text-slate-300">Total de servicios</span><span className="text-xl font-black text-cyan-300">S/. {costoNumerico.toFixed(2)}</span></div>
           </section>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><CreditCard size={15} className="text-cyan-400" />Modalidad de pago</span><select name="tipoPago" value={formData.tipoPago} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500"><option value="contado">Pagar después / al finalizar</option><option value="completo">Pagado completo hoy</option><option value="anticipo">Con anticipo</option><option value="cuotas">En cuotas</option><option value="cortesia">Cortesía / sin costo</option>{(citaEditar?.citaBaseId || formData.tipoPago === 'sesion') && <option value="sesion">Sesión incluida en plan</option>}</select></label>
-            <label className="font-medium text-slate-300"><span className="mb-1.5 block">Estado</span><select name="estado" value={formData.estado} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500"><option value="pendiente">Programado</option><option value="confirmada">Confirmado</option><option value="en_espera">En espera</option><option value="en_atencion">En atención</option><option value="completada">Finalizado</option><option value="no_asistio">No asistió</option><option value="cancelada">Cancelado</option></select></label>
-          </div>
+          <section className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
+            <div className="mb-4">
+              <h3 className="flex items-center gap-2 font-bold text-white"><CreditCard size={17} className="text-violet-300" /> ¿Cómo se manejará el cobro?</h3>
+              <p className="mt-1 text-xs text-slate-500">El sistema calculará automáticamente si queda pendiente, pago parcial o pagado.</p>
+            </div>
 
-          {['completo', 'anticipo', 'cuotas'].includes(formData.tipoPago) && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="font-medium text-slate-300">Monto pagado hoy<input type="number" min="0" max={costoNumerico} step="0.01" name="montoPagado" value={formData.tipoPago === 'completo' ? costoNumerico : formData.montoPagado} disabled={formData.tipoPago === 'completo'} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500 disabled:opacity-60" /></label><label className="font-medium text-slate-300">Método de pago<select name="metodoPago" value={formData.metodoPago} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500"><option>Efectivo</option><option>Yape</option><option>Plin</option><option value="Transferencia">Transferencia bancaria</option><option>Tarjeta</option></select></label></div>}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ['contado', 'Cobrar al finalizar', 'No ingresa dinero ahora.'],
+                ['pago_ahora', 'Registrar pago ahora', 'Pago total o parcial.'],
+                ['cuotas', 'Plan de pagos', 'Saldo financiado con pago inicial opcional.'],
+                ['cortesia', 'Sin costo', 'Cortesía, promoción o garantía.']
+              ].map(([valor, titulo, descripcion]) => (
+                <button key={valor} type="button" onClick={() => handleChange({ target: { name: 'tipoPago', value: valor } })} className={`rounded-xl border p-3 text-left transition ${formData.tipoPago === valor ? 'border-violet-500 bg-violet-500/15 ring-2 ring-violet-500/10' : 'border-slate-700 bg-slate-900/70 hover:border-slate-600'}`}>
+                  <div className={`text-sm font-bold ${formData.tipoPago === valor ? 'text-violet-200' : 'text-white'}`}>{titulo}</div>
+                  <div className="mt-1 text-[11px] leading-relaxed text-slate-500">{descripcion}</div>
+                </button>
+              ))}
+              {(citaEditar?.citaBaseId || formData.tipoPago === 'sesion') && (
+                <button type="button" onClick={() => handleChange({ target: { name: 'tipoPago', value: 'sesion' } })} className={`rounded-xl border p-3 text-left transition ${formData.tipoPago === 'sesion' ? 'border-cyan-500 bg-cyan-500/15' : 'border-slate-700 bg-slate-900/70'}`}>
+                  <div className="text-sm font-bold text-white">Incluido en plan</div>
+                  <div className="mt-1 text-[11px] text-slate-500">La sesión ya está cubierta por un tratamiento.</div>
+                </button>
+              )}
+            </div>
 
-          <div className="grid grid-cols-3 gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-center"><div><div className="text-[11px] uppercase text-slate-500">Total</div><div className="font-bold text-white">S/. {costoNumerico.toFixed(2)}</div></div><div><div className="text-[11px] uppercase text-slate-500">Cobrado</div><div className="font-bold text-emerald-400">S/. {Math.min(cobradoPreview, costoNumerico).toFixed(2)}</div></div><div><div className="text-[11px] uppercase text-slate-500">Saldo</div><div className="font-bold text-rose-400">S/. {saldoPreview.toFixed(2)}</div></div></div>
+            {['pago_ahora', 'cuotas'].includes(formData.tipoPago) && (
+              <div className="mt-4 grid gap-4 rounded-xl border border-violet-500/20 bg-slate-900/55 p-4 sm:grid-cols-2">
+                <label className="font-medium text-slate-300">
+                  {formData.tipoPago === 'cuotas' ? 'Pago inicial hoy (opcional)' : 'Monto recibido hoy'}
+                  <input type="number" min="0" max={costoNumerico} step="0.01" name="montoPagado" value={formData.montoPagado} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-right text-lg font-black text-violet-200 outline-none focus:border-violet-500" />
+                </label>
+                <label className="font-medium text-slate-300">Método de pago
+                  <select name="metodoPago" value={formData.metodoPago} onChange={handleChange} disabled={Number(formData.montoPagado || 0) <= 0} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-violet-500 disabled:opacity-40">
+                    <option>Efectivo</option><option>Yape</option><option>Plin</option><option value="Transferencia">Transferencia bancaria</option><option>Tarjeta</option>
+                  </select>
+                </label>
+              </div>
+            )}
+
+            {formData.tipoPago === 'cortesia' && (
+              <label className="mt-4 block font-medium text-slate-300">Motivo de la atención sin costo
+                <select name="motivoSinCosto" value={formData.motivoSinCosto} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-amber-500">
+                  <option>Cortesía profesional</option>
+                  <option>Promoción</option>
+                  <option>Garantía / retratamiento</option>
+                  <option>Descuento autorizado al 100 %</option>
+                  <option>Otro motivo autorizado</option>
+                </select>
+              </label>
+            )}
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-end">
+              <label className="font-medium text-slate-300">Estado de la atención
+                <select name="estado" value={formData.estado} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500">
+                  <option value="pendiente">Programado</option>
+                  <option value="en_espera">En espera</option>
+                  <option value="en_atencion">En atención</option>
+                  <option value="completada">Finalizado</option>
+                  <option value="no_asistio">No asistió</option>
+                  <option value="cancelada">Cancelado</option>
+                </select>
+              </label>
+              <div className="rounded-xl border border-slate-700 bg-slate-900/55 px-4 py-3 text-xs leading-relaxed text-slate-400">Para la agenda normal, conserva <strong className="text-white">Programado</strong>. Recepción cambiará luego el estado a En espera, En atención y Finalizado.</div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-center"><div className="text-[10px] uppercase text-slate-500">Valor servicios</div><div className="mt-1 font-bold text-white">S/. {costoNumerico.toFixed(2)}</div></div>
+              <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-center"><div className="text-[10px] uppercase text-slate-500">Cobrado</div><div className="mt-1 font-bold text-emerald-400">S/. {cobradoPreview.toFixed(2)}</div></div>
+              <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-center"><div className="text-[10px] uppercase text-slate-500">Saldo</div><div className="mt-1 font-bold text-rose-400">S/. {saldoPreview.toFixed(2)}</div></div>
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3 text-center"><div className="text-[10px] uppercase text-violet-300">Estado calculado</div><div className="mt-1 font-bold text-white">{estadoPagoPreview}</div></div>
+            </div>
+          </section>
+
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Layers size={15} className="text-cyan-400" />Sesión actual</span><input type="number" min="1" name="sesionNum" value={formData.sesionNum} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label><label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Layers size={15} className="text-cyan-400" />Total de sesiones</span><input type="number" min="1" name="totalSesiones" value={formData.totalSesiones} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label></div>
 

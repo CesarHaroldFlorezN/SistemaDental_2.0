@@ -112,6 +112,39 @@ export const api = {
   eliminarPago: (id) =>
     request(`${API_URL}/pagos/${id}`, { method: 'DELETE' }),
 
+  // DENTALPRO_V8_CUENTA: operaciones financieras auditables.
+  registrarPago: (id, data) =>
+    request(`${API_URL}/operaciones/pagos/${id}/registrar`, jsonOptions('POST', data)),
+
+  anularPago: (id, data) =>
+    request(`${API_URL}/operaciones/pagos/${id}/anular`, jsonOptions('POST', data)),
+
+  devolverPago: (id, data) =>
+    request(`${API_URL}/operaciones/pagos/${id}/devolver`, jsonOptions('POST', data)),
+
+  getCuentaPaciente: (pacienteId) =>
+    request(`${API_URL}/pacientes/${pacienteId}/cuenta`),
+
+  crearMovimientoCuenta: (data) =>
+    request(`${API_URL}/movimientosCuenta`, jsonOptions('POST', data)),
+
+  getDocumentosPaciente: (pacienteId) =>
+    request(`${API_URL}/pacientes/${pacienteId}/documentos`),
+
+  subirDocumentoPaciente: (pacienteId, file, descripcion = '') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('descripcion', descripcion);
+    return request(`${API_URL}/pacientes/${pacienteId}/documentos`, { method: 'POST', body: formData });
+  },
+
+  descargarDocumentoPaciente: (pacienteId, documentoId) => {
+    window.open(`${API_URL}/pacientes/${pacienteId}/documentos/${documentoId}/descargar`, '_blank', 'noopener,noreferrer');
+  },
+
+  eliminarDocumentoPaciente: (pacienteId, documentoId) =>
+    request(`${API_URL}/pacientes/${pacienteId}/documentos/${documentoId}`, { method: 'DELETE' }),
+
   // ===================================================
   // PLANES DE PAGO
   // ===================================================

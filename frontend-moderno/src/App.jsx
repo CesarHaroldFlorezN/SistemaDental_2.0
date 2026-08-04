@@ -1,13 +1,14 @@
-import CompletarCitaModal from './components/CompletarCitaModal';
-import CancelarCitaModal from './components/CancelarCitaModal';
-import FichaPacienteModal from './components/FichaPacienteModal';
+import CompletarCitaModal from './components/CompletarCitaModalV8';
+import CancelarCitaModal from './components/CancelarCitaModalV8';
+import FichaPacienteModal from './components/FichaPaciente360Modal';
 import PlanPagoModal from './components/PlanPagoModal';
 import PlanTratamientoModal from './components/PlanTratamientoModal';
 import { useState, useEffect } from 'react';
 import { api } from './services/api';
 import PacienteModal from './components/PacienteModal';
 import CitaModal from './components/CitaModal';
-import AgendaClinicaProfesional from './components/AgendaClinicaProfesional';
+import AgendaClinicaProfesional from './components/AgendaClinicaProfesionalV8';
+// DENTALPRO_V8_INTEGRAL
 import Sidebar from './components/Sidebar';
 import { 
   Search, Edit, Trash2, UserPlus, 
@@ -381,44 +382,60 @@ export default function App() {
     }
   };
 
-  const handleReprogramarCita = async (cita, nuevaFechaHora) => {
+  const handleReprogramarCita = async (cita, nuevaFechaHora, nuevaHoraFinDate = null) => {
     const nuevaFecha = format(nuevaFechaHora, 'yyyy-MM-dd');
     const nuevaHora = format(nuevaFechaHora, 'HH:mm');
-    const duracionMinutos = Number(cita.duracionMinutos || 60);
-    const finDate = new Date(nuevaFechaHora.getTime() + duracionMinutos * 60 * 1000);
-    const nuevaHoraFin = format(finDate, 'HH:mm');
+    const duracionAnterior = Number(cita.duracionMinutos || 60);
+    const finDestino = nuevaHoraFinDate instanceof Date
+      ? nuevaHoraFinDate
+      : new Date(nuevaFechaHora.getTime() + duracionAnterior * 60 * 1000);
+    const nuevaHoraFin = format(finDestino, 'HH:mm');
+    const duracionNueva = Math.max(5, Math.round((finDestino.getTime() - nuevaFechaHora.getTime()) / 60000));
 
-    if (cita.fecha === nuevaFecha && cita.hora === nuevaHora) return;
+    if (cita.fecha === nuevaFecha && cita.hora === nuevaHora && (cita.horaFin || '') === nuevaHoraFin) return;
+
+    const anterior = {
+      fecha: cita.fecha,
+      hora: cita.hora,
+      horaFin: cita.horaFin || (() => {
+        const inicio = new Date(`${cita.fecha}T${cita.hora}:00`);
+        return format(new Date(inicio.getTime() + duracionAnterior * 60000), 'HH:mm');
+      })(),
+      duracionMinutos: duracionAnterior
+    };
 
     try {
-      const respuesta = await api.reprogramarCita(cita.id, {
+      await api.reprogramarCita(cita.id, {
         fecha: nuevaFecha,
         hora: nuevaHora,
         horaFin: nuevaHoraFin,
-        duracionMinutos
+        duracionMinutos: duracionNueva
       });
       await cargarCitas();
 
-      Swal.fire({
+      const resultado = await Swal.fire({
         toast: true,
         position: 'top-end',
-        title: 'Cita reprogramada',
-        text: respuesta?.message || `${nuevaFecha} a las ${nuevaHora}`,
+        title: nuevaHora === cita.hora && nuevaFecha === cita.fecha ? 'Duracion actualizada' : 'Cita reprogramada',
+        text: `${nuevaFecha} · ${nuevaHora} a ${nuevaHoraFin}`,
         icon: 'success',
-        timer: 2200,
-        showConfirmButton: false,
+        showConfirmButton: true,
+        confirmButtonText: 'Deshacer',
+        timer: 5000,
+        timerProgressBar: true,
         background: '#1e293b',
         color: '#fff'
       });
+
+      if (resultado.isConfirmed) {
+        await api.reprogramarCita(cita.id, anterior);
+        await cargarCitas();
+        Swal.fire({ toast: true, position: 'top-end', title: 'Cambio deshecho', icon: 'info', timer: 1600, showConfirmButton: false, background: '#1e293b', color: '#fff' });
+      }
     } catch (error) {
       await cargarCitas();
-      Swal.fire({
-        title: 'No se pudo reprogramar',
-        text: error.message || 'El horario seleccionado no está disponible.',
-        icon: 'error',
-        background: '#1e293b',
-        color: '#fff'
-      });
+      Swal.fire({ title: 'No se pudo cambiar el horario', text: error.message || 'El horario seleccionado no está disponible.', icon: 'error', background: '#1e293b', color: '#fff' });
+      throw error;
     }
   };
 
@@ -441,178 +458,368 @@ export default function App() {
     setModalCancelarAbierto(true);
   };
 
-  const handleGuardarCompletado = async ({ citaId, pacienteId, citaBaseId, procedimiento, costoExtra, modoPagoExtra, notasFin }) => {
+  // DENTALPRO_V7_CIERRE: cierre clínico y financiero por servicios reales.
+  const handleGuardarCompletado = async ({
+    citaId,
+    pacienteId,
+    serviciosRealizados = [],
+    serviciosNoRealizados = [],
+    procedimiento,
+    subtotal = 0,
+    ajuste = {},
+    totalFinal = 0,
+    pagadoAnterior = 0,
+    accionSaldo = 'dejar_pendiente',
+    cobroHoy = 0,
+    metodoPago = 'Pendiente',
+    pagosMixtos = [],
+    notasFin = ''
+  }) => {
     try {
-      const citaActual = citas.find(c => c.id === citaId);
-      if (!citaActual) return;
-      if (costoExtra > 0) {
-        if (citaBaseId) {
-          if (modoPagoExtra === 'separado') {
-            await api.crearPago({ pacienteId, citaId, concepto: `Adicional: ${procedimiento}`, fecha: new Date().toISOString().split('T')[0], total: costoExtra, cobrado: 0, saldo: costoExtra, metodo: '—', tipoPago: 'contado', cuotas: [], creadoEn: new Date().toISOString() });
-          } else if (modoPagoExtra === 'sumar_plan') {
-            const pagoPadre = pagos.find(p => p.citaId === citaBaseId);
-            if (pagoPadre) await api.actualizarPago(pagoPadre.id, { ...pagoPadre, total: parseFloat(pagoPadre.total || 0) + costoExtra, saldo: parseFloat(pagoPadre.saldo || 0) + costoExtra });
-          }
-        } else {
-          const nuevoCosto = (parseFloat(citaActual.costo || 0) + costoExtra);
-          citaActual.costo = nuevoCosto;
-          const pagoCita = pagos.find(p => p.citaId === citaId);
-          if (pagoCita) await api.actualizarPago(pagoCita.id, { ...pagoCita, total: nuevoCosto, saldo: parseFloat(pagoCita.saldo || 0) + costoExtra });
-        }
+      const citaActual = citas.find((cita) => Number(cita.id) === Number(citaId));
+      if (!citaActual) throw new Error('No se encontró la cita que se desea finalizar.');
+
+      const pagoActual = pagos.find((pago) => Number(pago.citaId) === Number(citaId)) || null;
+      const cobradoPrevio = Math.max(0, Number(pagoActual?.cobrado ?? pagadoAnterior ?? 0));
+      const cobroRegistrado = accionSaldo === 'cobrar_ahora'
+        ? Math.max(0, Number(cobroHoy || 0))
+        : 0;
+      const total = Math.max(0, Number(totalFinal || 0));
+      const nuevoCobrado = Number((cobradoPrevio + cobroRegistrado).toFixed(2));
+      const nuevoSaldo = Number(Math.max(0, total - nuevoCobrado).toFixed(2));
+      const creditoFavor = Number(Math.max(0, nuevoCobrado - total).toFixed(2));
+
+      let tipoPagoFinal = 'contado';
+      if (total <= 0) tipoPagoFinal = 'cortesia';
+      else if (accionSaldo === 'agregar_plan' && nuevoSaldo > 0) tipoPagoFinal = 'cuotas';
+      else if (nuevoSaldo <= 0) tipoPagoFinal = 'completo';
+      else if (nuevoCobrado > 0) tipoPagoFinal = 'anticipo';
+
+      const detalleMixto = pagosMixtos
+        .filter((parte) => Number(parte.monto || 0) > 0)
+        .map((parte) => `${parte.metodo}: ${fMon(parte.monto)}`)
+        .join(' + ');
+      const metodoCompleto = metodoPago === 'Mixto' && detalleMixto
+        ? `Mixto — ${detalleMixto}`
+        : metodoPago;
+      const metodoRegistro = cobroRegistrado > 0
+        ? String(metodoCompleto || 'Efectivo').slice(0, 50)
+        : (pagoActual?.metodo || 'Pendiente');
+
+      const detalleAjuste = Number(ajuste?.monto || 0) > 0
+        ? `${ajuste.tipo || 'ajuste'}: -${fMon(ajuste.monto)} (${ajuste.motivo || 'sin detalle'})`
+        : '';
+      const detalleNoRealizados = serviciosNoRealizados.length
+        ? `No realizados: ${serviciosNoRealizados.map((servicio) => servicio.nombre).join(', ')}`
+        : '';
+      const notasFinCompletas = [
+        notasFin,
+        detalleAjuste ? `Ajuste financiero: ${detalleAjuste}` : '',
+        detalleNoRealizados
+      ].filter(Boolean).join('\n');
+
+      const serviciosLimpios = serviciosRealizados.map((servicio) => ({
+        nombre: servicio.nombre,
+        costo: Number(servicio.costo || 0),
+        origen: servicio.origen || 'realizado'
+      }));
+
+      await api.actualizarCita(citaId, {
+        ...citaActual,
+        procedimiento: procedimiento || serviciosLimpios.map((servicio) => servicio.nombre).join(' + '),
+        servicios: serviciosLimpios,
+        costo: total,
+        tipoPago: tipoPagoFinal,
+        estado: 'completada',
+        notasFin: notasFinCompletas,
+        fin: new Date().toISOString()
+      });
+
+      const notaPago = [
+        `Subtotal realizado: ${fMon(subtotal)}`,
+        detalleAjuste ? `Ajuste: ${detalleAjuste}` : '',
+        cobroRegistrado > 0 ? `Cobrado al cierre: ${fMon(cobroRegistrado)} por ${metodoCompleto}` : '',
+        creditoFavor > 0 ? `Crédito a favor: ${fMon(creditoFavor)}` : '',
+        accionSaldo === 'agregar_plan' ? 'Saldo asignado a plan de pagos' : ''
+      ].filter(Boolean).join(' | ');
+
+      const datosPago = {
+        ...(pagoActual || {}),
+        pacienteId,
+        citaId,
+        concepto: procedimiento || citaActual.procedimiento || 'Atención dental',
+        fecha: pagoActual?.fecha || citaActual.fecha || obtenerFechaLocal(),
+        total,
+        cobrado: nuevoCobrado,
+        saldo: nuevoSaldo,
+        metodo: metodoRegistro,
+        tipoPago: tipoPagoFinal,
+        cuotas: pagoActual?.cuotas || [],
+        creadoEn: pagoActual?.creadoEn || new Date().toISOString(),
+        fechaUltPago: cobroRegistrado > 0 ? obtenerFechaLocal() : (pagoActual?.fechaUltPago || null),
+        nota: [pagoActual?.nota, notaPago].filter(Boolean).join(' | '),
+        devuelto: Number(pagoActual?.devuelto || 0),
+        creditoFavor
+      };
+
+      let pagoGuardado = pagoActual;
+      if (pagoActual) {
+        await api.actualizarPago(pagoActual.id, datosPago);
+      } else {
+        pagoGuardado = await api.crearPago(datosPago);
       }
-      const citaActualizada = { ...citaActual, procedimiento, estado: 'completada', notasFin, fin: new Date().toISOString() };
-      await api.actualizarCita(citaId, citaActualizada);
+
+      if (cobroRegistrado > 0) {
+        await api.crearMovimientoCuenta({
+          pacienteId,
+          citaId,
+          pagoId: pagoGuardado?.id || pagoActual?.id || null,
+          tipo: 'pago',
+          descripcion: `Pago al cierre: ${procedimiento || citaActual.procedimiento || 'Atencion dental'}`,
+          cargo: 0,
+          abono: cobroRegistrado,
+          fecha: obtenerFechaLocal(),
+          metodo: metodoCompleto,
+          referencia: '',
+          motivo: 'Cobro registrado al finalizar la atencion',
+          usuario: 'Administrador',
+          creadoEn: new Date().toISOString()
+        });
+      }
+
+      const planVinculado = pagoActual
+        ? planPagos.find((plan) => Number(plan.pagoId) === Number(pagoActual.id))
+        : null;
+
+      if (accionSaldo === 'agregar_plan' && planVinculado) {
+        const cuotas = Array.isArray(planVinculado.cuotas)
+          ? planVinculado.cuotas.map((cuota) => ({ ...cuota }))
+          : [];
+        const pendientes = cuotas
+          .map((cuota, indice) => ({ cuota, indice }))
+          .filter(({ cuota }) => !cuota.pagado && cuota.tipo !== 'anticipo');
+
+        if (pendientes.length) {
+          const base = Math.floor((nuevoSaldo / pendientes.length) * 100) / 100;
+          let acumulado = 0;
+          pendientes.forEach(({ cuota }, posicion) => {
+            const monto = posicion === pendientes.length - 1
+              ? Number((nuevoSaldo - acumulado).toFixed(2))
+              : Number(base.toFixed(2));
+            cuota.monto = Math.max(0, monto);
+            acumulado += cuota.monto;
+          });
+        } else if (nuevoSaldo > 0) {
+          const fecha = new Date();
+          fecha.setDate(fecha.getDate() + 30);
+          cuotas.push({
+            num: cuotas.filter((cuota) => cuota.tipo !== 'anticipo').length + 1,
+            tipo: 'cuota',
+            fecha: fecha.toISOString().split('T')[0],
+            monto: nuevoSaldo,
+            pagado: false,
+            fechaPago: null,
+            metodoPago: null
+          });
+        }
+
+        await api.actualizarPlanPago(planVinculado.id, {
+          ...planVinculado,
+          concepto: procedimiento || planVinculado.concepto,
+          totalAcordado: total,
+          totalCuotas: cuotas.reduce((suma, cuota) => suma + Number(cuota.monto || 0), 0),
+          cobrado: Math.min(total, nuevoCobrado),
+          saldo: nuevoSaldo,
+          estado: nuevoSaldo <= 0 ? 'completado' : 'activo',
+          cuotas
+        });
+      }
+
       setModalCompletarAbierto(false);
-      cargarCitas();
-      cargarPagos();
-      Swal.fire({ title: 'Atención Completada', icon: 'success', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
+      setCitaParaAccion(null);
+      setPagoParaAccion(null);
+
+      await Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos()]);
+
+      if (accionSaldo === 'agregar_plan' && nuevoSaldo > 0 && !planVinculado) {
+        const paciente = pacientes.find((item) => Number(item.id) === Number(pacienteId));
+        setBusquedaPP(paciente?.nombre || '');
+        setVistaActiva('planPagos');
+        Swal.fire({
+          title: 'Atención finalizada',
+          text: `El saldo de ${fMon(nuevoSaldo)} quedó preparado. Crea o completa ahora el plan de pagos del paciente.`,
+          icon: 'info',
+          background: '#1e293b',
+          color: '#fff'
+        });
+        return;
+      }
+
+      Swal.fire({
+        title: 'Atención finalizada',
+        text: nuevoSaldo > 0
+          ? `Queda un saldo pendiente de ${fMon(nuevoSaldo)}.`
+          : creditoFavor > 0
+            ? `Pago completo. Crédito a favor: ${fMon(creditoFavor)}.`
+            : 'Los servicios y el pago quedaron actualizados.',
+        icon: 'success',
+        background: '#1e293b',
+        color: '#fff',
+        timer: 2400,
+        showConfirmButton: false
+      });
     } catch (error) {
-      Swal.fire({ title: 'Error', text: 'No se pudo guardar la atención.', icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({
+        title: 'No se pudo finalizar la atención',
+        text: error.message || 'Ocurrió un error al actualizar los servicios y el pago.',
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
     }
   };
 
+
   const handleGuardarCancelacion = async ({ citaId, pagoId, motivoCancelacion, opcionDevolucion, montoCobrado }) => {
     try {
-      const citaActual = citas.find(c => c.id === citaId);
-      if (!citaActual) return;
-      if (pagoId && montoCobrado > 0) {
-        const pagoActual = pagos.find(p => p.id === pagoId);
-        if (pagoActual) {
-          let cambiosPago = { ...pagoActual, tipoPago: `cancelado_${opcionDevolucion}` };
-          if (opcionDevolucion === 'total_dev') cambiosPago = { ...cambiosPago, cobrado: 0, saldo: 0, devuelto: montoCobrado, nota: 'Devuelto' };
-          else if (opcionDevolucion === 'credito') cambiosPago = { ...cambiosPago, creditoFavor: montoCobrado, saldo: 0, nota: 'Crédito' };
-          await api.actualizarPago(pagoId, cambiosPago);
+      const citaActual = citas.find((cita) => Number(cita.id) === Number(citaId));
+      if (!citaActual) throw new Error('No se encontro la cita que se desea cancelar.');
+      if (!String(motivoCancelacion || '').trim()) throw new Error('El motivo de la cancelacion es obligatorio.');
+
+      const pagoActual = pagoId ? pagos.find((pago) => Number(pago.id) === Number(pagoId)) : null;
+      const cobrado = Math.max(0, Number(montoCobrado || pagoActual?.cobrado || 0));
+      const motivo = `Cancelacion de cita: ${motivoCancelacion}`;
+
+      if (pagoActual) {
+        if (opcionDevolucion === 'total_dev' && cobrado > 0) {
+          await api.devolverPago(pagoActual.id, {
+            monto: cobrado,
+            metodo: pagoActual.metodo || 'Pago original',
+            motivo,
+            usuario: 'Administrador'
+          });
+          await api.actualizarPago(pagoActual.id, {
+            ...pagoActual,
+            total: 0,
+            cobrado: 0,
+            saldo: 0,
+            devuelto: Number(pagoActual.devuelto || 0) + cobrado,
+            tipoPago: 'cancelado_devuelto',
+            nota: [pagoActual.nota, motivo, `Devolucion: ${fMon(cobrado)}`].filter(Boolean).join(' | ')
+          });
+        } else if (opcionDevolucion === 'credito' && cobrado > 0) {
+          await api.actualizarPago(pagoActual.id, {
+            ...pagoActual,
+            total: 0,
+            cobrado,
+            saldo: 0,
+            creditoFavor: Number(pagoActual.creditoFavor || 0) + cobrado,
+            tipoPago: 'cancelado_credito',
+            nota: [pagoActual.nota, motivo, `Credito a favor: ${fMon(cobrado)}`].filter(Boolean).join(' | ')
+          });
+          await api.crearMovimientoCuenta({
+            pacienteId: pagoActual.pacienteId,
+            citaId,
+            pagoId: pagoActual.id,
+            tipo: 'credito_favor',
+            descripcion: `Credito a favor por cancelacion: ${pagoActual.concepto || 'Atencion dental'}`,
+            cargo: 0,
+            abono: 0,
+            fecha: obtenerFechaLocal(),
+            metodo: pagoActual.metodo || 'Pago original',
+            motivo,
+            usuario: 'Administrador',
+            creadoEn: new Date().toISOString()
+          });
+        } else if (opcionDevolucion === 'retener' && cobrado > 0) {
+          await api.actualizarPago(pagoActual.id, {
+            ...pagoActual,
+            total: cobrado,
+            cobrado,
+            saldo: 0,
+            tipoPago: 'cancelado_retenido',
+            concepto: `Cargo por cancelacion: ${pagoActual.concepto || citaActual.procedimiento || 'Atencion dental'}`,
+            nota: [pagoActual.nota, motivo, `Importe retenido: ${fMon(cobrado)}`].filter(Boolean).join(' | ')
+          });
+        } else {
+          await api.actualizarPago(pagoActual.id, {
+            ...pagoActual,
+            total: 0,
+            cobrado: 0,
+            saldo: 0,
+            tipoPago: 'cancelado_sin_cobro',
+            nota: [pagoActual.nota, motivo].filter(Boolean).join(' | ')
+          });
         }
+
+        await api.crearMovimientoCuenta({
+          pacienteId: pagoActual.pacienteId,
+          citaId,
+          pagoId: pagoActual.id,
+          tipo: 'cancelacion_cita',
+          descripcion: `Cita cancelada: ${pagoActual.concepto || citaActual.procedimiento || 'Atencion dental'}`,
+          cargo: 0,
+          abono: 0,
+          fecha: obtenerFechaLocal(),
+          metodo: opcionDevolucion,
+          motivo,
+          usuario: 'Administrador',
+          creadoEn: new Date().toISOString()
+        });
       }
-      await api.actualizarCita(citaId, { ...citaActual, estado: 'cancelada', motivoCancelacion, canceladaEn: new Date().toISOString() });
+
+      await api.actualizarCita(citaId, {
+        ...citaActual,
+        estado: 'cancelada',
+        motivoCancelacion,
+        canceladaEn: new Date().toISOString()
+      });
+
       setModalCancelarAbierto(false);
-      cargarCitas();
-      cargarPagos();
-      Swal.fire({ title: 'Cita Cancelada', icon: 'warning', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
+      setCitaParaAccion(null);
+      setPagoParaAccion(null);
+      await Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos()]);
+      Swal.fire({ title: 'Cita cancelada', text: 'La decision clinica y el movimiento financiero quedaron registrados.', icon: 'success', background: '#1e293b', color: '#fff', timer: 2200, showConfirmButton: false });
     } catch (error) {
-      Swal.fire({ title: 'Error', text: 'No se pudo procesar la cancelación.', icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({ title: 'No se pudo cancelar', text: error.message || 'Ocurrio un error al procesar la cancelacion.', icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
   const handleCobrarSaldo = async (pago, nombrePaciente) => {
     const saldoActual = Number(pago?.saldo || 0);
     if (saldoActual <= 0) {
-      Swal.fire({
-        title: 'Pago completo',
-        text: 'Este tratamiento ya no tiene saldo pendiente.',
-        icon: 'success',
-        background: '#1e293b',
-        color: '#fff'
-      });
+      Swal.fire({ title: 'Pago completo', text: 'Este tratamiento ya no tiene saldo pendiente.', icon: 'success', background: '#1e293b', color: '#fff' });
       return;
     }
 
-    const planVinculado = planPagos.find(
-      (plan) => Number(plan.pagoId) === Number(pago.id)
-    );
-
+    const planVinculado = planPagos.find((plan) => Number(plan.pagoId) === Number(pago.id));
     if ((pago.tipoPago || '').toLowerCase() === 'cuotas' && planVinculado) {
       setBusquedaPP(nombrePaciente || '');
       setVistaActiva('planPagos');
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        title: 'Plan de cuotas abierto',
-        text: 'Selecciona la cuota que deseas registrar.',
-        icon: 'info',
-        timer: 2200,
-        showConfirmButton: false,
-        background: '#1e293b',
-        color: '#fff'
-      });
       return;
     }
 
     const resultado = await Swal.fire({
       title: `Registrar pago de ${nombrePaciente}`,
-      html: `
-        <div style="text-align:left; display:grid; gap:12px;">
-          <div style="padding:12px; border-radius:10px; background:#0f172a; color:#cbd5e1;">
-            Saldo pendiente: <strong style="color:#fb7185;">${fMon(saldoActual)}</strong>
-          </div>
-          <label style="font-size:13px; color:#cbd5e1;">
-            Monto a cobrar
-            <input id="dp-monto-cobro" type="number" min="0.01" max="${saldoActual}" step="0.01" value="${saldoActual}" class="swal2-input" style="margin:6px 0 0; width:100%;" />
-          </label>
-          <label style="font-size:13px; color:#cbd5e1;">
-            Método de pago
-            <select id="dp-metodo-cobro" class="swal2-select" style="margin:6px 0 0; width:100%;">
-              <option value="Efectivo">Efectivo</option>
-              <option value="Yape">Yape</option>
-              <option value="Plin">Plin</option>
-              <option value="Transferencia">Transferencia</option>
-              <option value="Tarjeta">Tarjeta</option>
-            </select>
-          </label>
-        </div>
-      `,
+      html: `<div style="text-align:left;display:grid;gap:12px"><div>Saldo pendiente: <strong>${fMon(saldoActual)}</strong></div><input id="dp-monto-cobro" type="number" min="0.01" max="${saldoActual}" step="0.01" value="${saldoActual}" class="swal2-input" style="margin:0;width:100%"><select id="dp-metodo-cobro" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-cobro" class="swal2-input" placeholder="Referencia u operacion (opcional)" style="margin:0;width:100%"></div>`,
       showCancelButton: true,
       confirmButtonText: 'Registrar pago',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#0891b2',
       background: '#1e293b',
       color: '#fff',
-      focusConfirm: false,
       preConfirm: () => {
         const monto = Number(document.getElementById('dp-monto-cobro')?.value || 0);
-        const metodo = document.getElementById('dp-metodo-cobro')?.value || 'Efectivo';
-
-        if (monto <= 0) {
-          Swal.showValidationMessage('El monto debe ser mayor que cero.');
-          return false;
-        }
-        if (monto > saldoActual) {
-          Swal.showValidationMessage('El monto no puede superar el saldo pendiente.');
-          return false;
-        }
-
-        return { monto, metodo };
+        if (monto <= 0 || monto > saldoActual) return Swal.showValidationMessage('El monto no es valido.');
+        return { monto, metodo: document.getElementById('dp-metodo-cobro')?.value || 'Efectivo', referencia: document.getElementById('dp-ref-cobro')?.value || '', usuario: 'Administrador' };
       }
     });
-
-    if (!resultado.isConfirmed || !resultado.value) return;
-
+    if (!resultado.isConfirmed) return;
     try {
-      const { monto, metodo } = resultado.value;
-      const nuevoCobrado = Number(pago.cobrado || 0) + monto;
-      const nuevoSaldo = Math.max(0, Number(pago.total || 0) - nuevoCobrado);
-
-      await api.actualizarPago(pago.id, {
-        ...pago,
-        cobrado: Number(nuevoCobrado.toFixed(2)),
-        saldo: Number(nuevoSaldo.toFixed(2)),
-        metodo,
-        fechaUltPago: format(new Date(), 'yyyy-MM-dd'),
-        tipoPago:
-          nuevoSaldo === 0 && pago.tipoPago !== 'cuotas'
-            ? 'completo'
-            : pago.tipoPago
-      });
-
+      await api.registrarPago(pago.id, resultado.value);
       await Promise.all([cargarPagos(), cargarPlanPagos()]);
-
-      Swal.fire({
-        title: 'Pago registrado',
-        text: `${fMon(monto)} mediante ${metodo}. Saldo: ${fMon(nuevoSaldo)}.`,
-        icon: 'success',
-        background: '#1e293b',
-        color: '#fff',
-        timer: 2200,
-        showConfirmButton: false
-      });
+      Swal.fire({ title: 'Pago registrado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
     } catch (error) {
-      Swal.fire({
-        title: 'No se pudo registrar el pago',
-        text: error.message || 'Ocurrió un error al guardar el cobro.',
-        icon: 'error',
-        background: '#1e293b',
-        color: '#fff'
-      });
+      Swal.fire({ title: 'No se pudo registrar', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
@@ -1281,6 +1488,18 @@ export default function App() {
         paciente={pacienteSeleccionado}
         citas={citas}
         pagos={pagos}
+        planes={planes}
+        planPagos={planPagos}
+        onDatosActualizados={() => Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos(), cargarPlanes()])}
+        onCrearPlan={(paciente) => {
+          setPlanSeleccionado({ pacienteId: paciente?.id || null });
+          setModalPlanAbierto(true);
+        }}
+        onVerPlanPagos={(paciente) => {
+          setBusquedaPP(paciente?.nombre || '');
+          setVistaActiva('planPagos');
+          setModalFichaAbierto(false);
+        }}
         onNuevaCita={(paciente) => {
           setCitaSeleccionada({ pacienteId: paciente?.id || null });
           setModalCitaAbierto(true);
