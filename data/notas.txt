@@ -1,0 +1,5 @@
+data/
+├── dentalpro.db              ← base activa que usa el sistema
+├── dentalpro_original.db     ← respaldo de tus datos principales
+├── dentalpro_pruebas.db      ← datos creados durante pruebas
+└── dentalpro_vacia.db        ← plantilla limpia opcional

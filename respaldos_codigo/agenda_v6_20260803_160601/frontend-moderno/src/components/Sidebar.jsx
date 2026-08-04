@@ -1,0 +1,89 @@
+import { useState } from 'react';
+import {
+  Activity,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  DollarSign,
+  FolderKanban,
+  LayoutDashboard,
+  Users
+} from 'lucide-react';
+
+export default function Sidebar({ vistaActiva, setVistaActiva }) {
+  const [contraido, setContraido] = useState(() => localStorage.getItem('dp-sidebar-contraido') === '1');
+
+  const menuItems = [
+    { id: 'dashboard', nombre: 'Dashboard', icono: LayoutDashboard },
+    { id: 'pacientes', nombre: 'Pacientes', icono: Users },
+    { id: 'citas', nombre: 'Agenda / Citas', icono: Calendar },
+    { id: 'planes', nombre: 'Planes Tratamiento', icono: FolderKanban },
+    { id: 'finanzas', nombre: 'Finanzas', icono: DollarSign },
+    { id: 'planpagos', nombre: 'Planes de Pago', icono: CreditCard }
+  ];
+
+  const alternar = () => {
+    setContraido((actual) => {
+      const siguiente = !actual;
+      localStorage.setItem('dp-sidebar-contraido', siguiente ? '1' : '0');
+      return siguiente;
+    });
+  };
+
+  return (
+    <aside className={`${contraido ? 'w-[76px]' : 'w-64'} sticky top-0 z-40 flex h-screen shrink-0 select-none flex-col justify-between border-r border-slate-700/80 bg-slate-800/95 p-3 shadow-xl transition-[width] duration-300`}>
+      <div className="min-w-0">
+        <div className={`relative mb-5 flex items-center border-b border-slate-700/80 py-4 ${contraido ? 'justify-center px-1' : 'gap-3 px-2'}`}>
+          <div className="shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-400">
+            <Activity size={23} />
+          </div>
+
+          {!contraido && (
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-bold leading-tight text-white">DentalPro</h2>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">Sistema clínico</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={alternar}
+            title={contraido ? 'Desplegar menú' : 'Ocultar menú'}
+            className={`absolute flex h-7 w-7 items-center justify-center rounded-full border border-slate-600 bg-slate-900 text-slate-400 shadow-lg transition hover:border-cyan-500 hover:text-cyan-300 ${contraido ? '-right-6 top-5' : '-right-6 top-5'}`}
+          >
+            {contraido ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          </button>
+        </div>
+
+        <nav className="space-y-1.5">
+          {menuItems.map((item) => {
+            const Icono = item.icono;
+            const activo = vistaActiva === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setVistaActiva(item.id)}
+                title={contraido ? item.nombre : undefined}
+                className={`group flex w-full items-center rounded-xl py-3 text-sm font-semibold transition duration-200 ${contraido ? 'justify-center px-2' : 'gap-3 px-3.5'} ${
+                  activo
+                    ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/20'
+                    : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
+                }`}
+              >
+                <Icono size={19} className="shrink-0" />
+                {!contraido && <span className="truncate">{item.nombre}</span>}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className={`border-t border-slate-700/80 py-4 text-xs text-slate-500 ${contraido ? 'flex justify-center px-1' : 'flex items-center justify-between px-2'}`}>
+        {!contraido && <span>Versión 2.0</span>}
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_9px_rgba(16,185,129,.6)]" title="Backend conectado" />
+      </div>
+    </aside>
+  );
+}

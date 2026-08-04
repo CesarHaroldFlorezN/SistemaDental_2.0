@@ -1,39 +1,22 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 venv/
 
-# Base de datos local
-data/*.db
-# React
-frontend-moderno/node_modules/
-frontend-moderno/dist/
-# PyInstaller
+# Node / frontend
+node_modules/
+
+# Archivos generados
 build/
 dist/
-# Sistema
-.DS_Store
-Thumbs.db
-# Bases de datos locales
-frontend-moderno/data/*.db
-# Respaldos automáticos
-respaldos_codigo/
-respaldos/
-# Bases de datos
-# Respaldos locales
-respaldos/data/
-frontend-moderno/data/
-# Datos locales del sistema
-/data/
-/frontend-moderno/data/
-# Datos y bases locales
-/data/**
-/frontend-moderno/data/**
-# Dependencias y compilaciones
-/frontend-moderno/node_modules/
-/frontend-moderno/dist/
-/build/
-/dist/
-/respaldos_codigo/
-/respaldos/
+
+# Información privada
+.env
+*.db
+*.sqlite
+*.sqlite3
+
+# Visual Studio Code
+.vscode/
