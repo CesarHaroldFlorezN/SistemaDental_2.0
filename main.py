@@ -1658,7 +1658,7 @@ async def importar_pacientes(
 def obtener_directorio_frontend() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS) / "frontend"
-    return APP_DIR / "frontend-moderno" / "dist"
+    return APP_DIR / "frontend" / "dist"
 
 
 FRONTEND_DIR = obtener_directorio_frontend()

@@ -1,24 +1,15 @@
-import CompletarCitaModal from './components/CompletarCitaModalV8';
-import CancelarCitaModal from './components/CancelarCitaModalV8';
-import FichaPacienteModal from './components/FichaPaciente360Modal';
-import PlanPagoModal from './components/PlanPagoModal';
-import PlanTratamientoModal from './components/PlanTratamientoModal';
-import { useState, useEffect } from 'react';
+import CompletarCitaModal from './features/finanzas/components/CompletarCitaModal';
+import CancelarCitaModal from './features/agenda/components/CancelarCitaModal';
+import FichaPacienteModal from './features/pacientes/components/FichaPaciente360Modal';
+import PlanPagoModal from './features/finanzas/components/PlanPagoModal';
+import PlanTratamientoModal from './features/tratamientos/components/PlanTratamientoModal';
+import PacienteModal from './features/pacientes/components/PacienteModal';
+import CitaModal from './features/agenda/components/CitaModal';
+import AgendaClinicaProfesional from './features/agenda/components/AgendaClinicaProfesional';
+import Sidebar from './shared/components/Sidebar';
+
+import { useEffect, useState } from 'react';
 import { api } from './services/api';
-import PacienteModal from './components/PacienteModal';
-import CitaModal from './components/CitaModal';
-import AgendaClinicaProfesional from './components/AgendaClinicaProfesionalV8';
-// DENTALPRO_V8_INTEGRAL
-import Sidebar from './components/Sidebar';
-import { 
-  Search, Edit, Trash2, UserPlus, 
-  CalendarPlus, Calendar as CalendarIcon, Clock, 
-  CheckCircle, XCircle, AlertCircle,
-  DollarSign, TrendingUp, CreditCard, AlertTriangle, PlusCircle, Lock, Undo2, FolderPlus, FolderKanban,
-  Download, Upload
-} from 'lucide-react';
-import Swal from 'sweetalert2';
-import { format } from 'date-fns';
 
 const obtenerFechaLocal = (fecha = new Date()) => {
   const year = fecha.getFullYear();

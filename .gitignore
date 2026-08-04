@@ -1,22 +1,40 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
 .venv/
 venv/
 
-# Node / frontend
+# Node
 node_modules/
+frontend/node_modules/
 
-# Archivos generados
+# Compilados
 build/
 dist/
+frontend/dist/
+*.exe
 
-# Información privada
+# Datos privados
 .env
 *.db
 *.sqlite
 *.sqlite3
+data/documentos/
+data/*.csv
 
-# Visual Studio Code
+# Respaldos locales
+respaldos_codigo/
+
+# Editores
 .vscode/
+.idea/
+
+# Sistema operativo
+Thumbs.db
+.DS_Store
+
+# Cobertura
+.coverage
+htmlcov/

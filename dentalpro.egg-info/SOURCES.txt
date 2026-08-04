@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+backend/app/config.py
+backend/app/database.py
+backend/app/main.py
+backend/app/utils.py
+backend/app/routers/citas.py
+backend/app/routers/documentos.py
+backend/app/routers/finanzas.py
+backend/app/routers/pacientes.py
+backend/tests/test_salud.py
+dentalpro.egg-info/PKG-INFO
+dentalpro.egg-info/SOURCES.txt
+dentalpro.egg-info/dependency_links.txt
+dentalpro.egg-info/requires.txt
+dentalpro.egg-info/top_level.txt
