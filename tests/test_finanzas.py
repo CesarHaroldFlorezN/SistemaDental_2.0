@@ -28,7 +28,11 @@ def crear_cita_financiera(
             "pacienteId": paciente_id,
             "fecha": "2036-07-20",
             "hora": hora,
-            "horaFin": ("10:00" if hora == "09:00" else "14:00"),
+            "horaFin": {
+                "09:00": "10:00",
+                "13:00": "14:00",
+                "15:00": "16:00",
+            }[hora],
             "duracionMinutos": 60,
             "procedimiento": "Tratamiento dental",
             "servicios": [
@@ -174,3 +178,129 @@ def test_no_modificar_ni_eliminar_movimiento_financiero() -> None:
         movimiento.get("id") == movimiento_id
         for movimiento in respuesta_cuenta.json()["movimientos"]
     )
+
+
+def test_crud_de_recursos_financieros() -> None:
+    paciente_id, cita_id, pago_id = crear_cita_financiera(
+        sufijo="003",
+        hora="15:00",
+    )
+
+    respuesta_listar_pagos = client.get("/api/pagos")
+
+    assert respuesta_listar_pagos.status_code == 200
+    assert any(pago["id"] == pago_id for pago in respuesta_listar_pagos.json())
+
+    respuesta_actualizar_pago = client.put(
+        f"/api/pagos/{pago_id}",
+        json={
+            "nota": "Pago revisado durante las pruebas",
+        },
+    )
+
+    assert respuesta_actualizar_pago.status_code == 200
+    assert (
+        respuesta_actualizar_pago.json()["registro"]["nota"]
+        == "Pago revisado durante las pruebas"
+    )
+
+    respuesta_pago_manual = client.post(
+        "/api/pagos",
+        json={
+            "pacienteId": paciente_id,
+            "concepto": "Pago manual de prueba",
+            "fecha": "2036-07-20",
+            "total": 50,
+            "cobrado": 0,
+            "saldo": 50,
+            "metodo": "Efectivo",
+            "tipoPago": "contado",
+            "cuotas": [],
+            "devuelto": 0,
+            "creditoFavor": 0,
+        },
+    )
+
+    assert respuesta_pago_manual.status_code == 200
+    pago_manual_id = respuesta_pago_manual.json()["id"]
+
+    respuesta_plan = client.post(
+        "/api/planes",
+        json={
+            "pacienteId": paciente_id,
+            "nombre": "Plan dental de prueba",
+            "tipo": "Tratamiento",
+            "duracion": "3 meses",
+            "costo": 600,
+            "nSesiones": 3,
+            "descripcion": "Plan creado durante las pruebas",
+            "estado": "activo",
+        },
+    )
+
+    assert respuesta_plan.status_code == 200
+    plan_id = respuesta_plan.json()["id"]
+
+    respuesta_listar_planes = client.get("/api/planes")
+
+    assert respuesta_listar_planes.status_code == 200
+    assert any(plan["id"] == plan_id for plan in respuesta_listar_planes.json())
+
+    respuesta_actualizar_plan = client.put(
+        f"/api/planes/{plan_id}",
+        json={
+            "estado": "completado",
+        },
+    )
+
+    assert respuesta_actualizar_plan.status_code == 200
+    assert respuesta_actualizar_plan.json()["registro"]["estado"] == "completado"
+
+    respuesta_plan_pago = client.post(
+        "/api/planPagos",
+        json={
+            "pacienteId": paciente_id,
+            "pagoId": pago_id,
+            "citaId": cita_id,
+            "concepto": "Plan de cuotas de prueba",
+            "totalAcordado": 200,
+            "anticipo": 0,
+            "metodoPreferido": "Efectivo",
+            "estado": "activo",
+            "cuotas": [],
+            "totalCuotas": 2,
+            "cobrado": 0,
+            "saldo": 200,
+            "fechaCreacion": "2036-07-20",
+        },
+    )
+
+    assert respuesta_plan_pago.status_code == 200
+    plan_pago_id = respuesta_plan_pago.json()["id"]
+
+    respuesta_listar_plan_pagos = client.get("/api/planPagos")
+
+    assert respuesta_listar_plan_pagos.status_code == 200
+    assert any(
+        plan["id"] == plan_pago_id for plan in respuesta_listar_plan_pagos.json()
+    )
+
+    respuesta_actualizar_plan_pago = client.put(
+        f"/api/planPagos/{plan_pago_id}",
+        json={
+            "estado": "finalizado",
+        },
+    )
+
+    assert respuesta_actualizar_plan_pago.status_code == 200
+    assert respuesta_actualizar_plan_pago.json()["registro"]["estado"] == "finalizado"
+
+    assert client.delete(f"/api/planPagos/{plan_pago_id}").status_code == 200
+
+    assert client.delete(f"/api/planes/{plan_id}").status_code == 200
+
+    assert client.delete(f"/api/pagos/{pago_manual_id}").status_code == 200
+
+    assert client.delete(f"/api/operaciones/citas/{cita_id}").status_code == 200
+
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
