@@ -33,7 +33,6 @@ from backend.app.models import (
 from backend.app.schemas import (
     CambioEstadoPayload,
     CitaPagoPayload,
-    OperacionPagoPayload,
     ReprogramarCitaPayload,
 )
 
@@ -52,11 +51,9 @@ from backend.app.services import (
     validar_disponibilidad,
     validar_plan,
     validar_secuencia_sesion,
-    anular_pago,
-    construir_cuenta_paciente,
-    devolver_pago,
-    registrar_pago,
 )
+from backend.app.routers import finanzas_router
+from backend.app.services.finanzas import anular_pago
 
 # =====================================================
 # RUTAS DEL PROYECTO
@@ -118,7 +115,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+app.include_router(finanzas_router)
 
 # =====================================================
 # FUNCIONES AUXILIARES
@@ -769,55 +766,6 @@ def delete_record(
 
 
 
-
-@app.post(
-    "/api/operaciones/pagos/{pago_id}/registrar",
-    tags=["Finanzas"],
-)
-def registrar_pago_auditable(
-    pago_id: int,
-    payload: OperacionPagoPayload,
-    db: Session = Depends(get_db),
-):
-    return registrar_pago(db, pago_id, payload)
-
-
-@app.post(
-    "/api/operaciones/pagos/{pago_id}/anular",
-    tags=["Finanzas"],
-)
-def anular_pago_auditable(
-    pago_id: int,
-    payload: OperacionPagoPayload,
-    db: Session = Depends(get_db),
-):
-    return anular_pago(db, pago_id, payload)
-
-
-@app.post(
-    "/api/operaciones/pagos/{pago_id}/devolver",
-    tags=["Finanzas"],
-)
-def devolver_pago_auditable(
-    pago_id: int,
-    payload: OperacionPagoPayload,
-    db: Session = Depends(get_db),
-):
-    return devolver_pago(db, pago_id, payload)
-
-
-@app.get(
-    "/api/pacientes/{paciente_id}/cuenta",
-    tags=["Finanzas"],
-)
-def obtener_cuenta_paciente(
-    paciente_id: int,
-    db: Session = Depends(get_db),
-):
-    return construir_cuenta_paciente(
-        db,
-        paciente_id,
-    )
 
 DOCUMENTOS_DIR = DATA_DIR / "documentos"
 DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)
