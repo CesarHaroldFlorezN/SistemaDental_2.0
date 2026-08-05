@@ -8,7 +8,6 @@ from ..models import (
     CitaDB,
     DocumentoPacienteDB,
     MovimientoCuentaDB,
-    PacienteDB,
     PagoDB,
     PlanDB,
     PlanPagoDB,
@@ -19,7 +18,6 @@ router = APIRouter()
 
 
 MODELOS = {
-    "pacientes": PacienteDB,
     "citas": CitaDB,
     "pagos": PagoDB,
     "planes": PlanDB,
@@ -58,39 +56,6 @@ def create_record(
             status_code=404,
             detail="Tabla no encontrada.",
         )
-
-    if store == "pacientes":
-        cedula_nueva = str(data.get("cedula", "") or "").strip()
-
-        ficha_nueva = str(data.get("codigo_ficha", "") or "").strip()
-
-        nombre = str(data.get("nombre", "") or "").strip()
-
-        if not nombre:
-            raise HTTPException(
-                status_code=400,
-                detail="El nombre del paciente es obligatorio.",
-            )
-
-        if (
-            cedula_nueva
-            and db.query(PacienteDB).filter(PacienteDB.cedula == cedula_nueva).first()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(f"El DNI/Cédula '{cedula_nueva}' ya está registrado."),
-            )
-
-        if (
-            ficha_nueva
-            and db.query(PacienteDB)
-            .filter(PacienteDB.codigo_ficha == ficha_nueva)
-            .first()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(f"El código de ficha '{ficha_nueva}' ya existe."),
-            )
 
     columnas_validas = {columna.name for columna in modelo.__table__.columns}
 
@@ -144,45 +109,6 @@ def update_record(
             status_code=404,
             detail="Registro no encontrado.",
         )
-
-    if store == "pacientes":
-        cedula_nueva = str(data.get("cedula", registro.cedula) or "").strip()
-
-        ficha_nueva = str(
-            data.get(
-                "codigo_ficha",
-                registro.codigo_ficha,
-            )
-            or ""
-        ).strip()
-
-        if (
-            cedula_nueva
-            and db.query(PacienteDB)
-            .filter(
-                PacienteDB.cedula == cedula_nueva,
-                PacienteDB.id != item_id,
-            )
-            .first()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(f"El DNI '{cedula_nueva}' ya pertenece a otro paciente."),
-            )
-
-        if (
-            ficha_nueva
-            and db.query(PacienteDB)
-            .filter(
-                PacienteDB.codigo_ficha == ficha_nueva,
-                PacienteDB.id != item_id,
-            )
-            .first()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(f"La ficha '{ficha_nueva}' ya pertenece a otro paciente."),
-            )
 
     if store == "citas":
         fecha = str(data.get("fecha", registro.fecha) or "")
@@ -272,33 +198,6 @@ def delete_record(
             status_code=404,
             detail="Registro no encontrado.",
         )
-
-    if store == "pacientes":
-        tiene_historial = any(
-            [
-                db.query(CitaDB).filter(CitaDB.pacienteId == item_id).first(),
-                db.query(PagoDB).filter(PagoDB.pacienteId == item_id).first(),
-                db.query(PlanDB).filter(PlanDB.pacienteId == item_id).first(),
-                db.query(PlanPagoDB).filter(PlanPagoDB.pacienteId == item_id).first(),
-                db.query(MovimientoCuentaDB)
-                .filter(MovimientoCuentaDB.pacienteId == item_id)
-                .first(),
-                db.query(DocumentoPacienteDB)
-                .filter(DocumentoPacienteDB.pacienteId == item_id)
-                .first(),
-            ]
-        )
-
-        if tiene_historial:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "No puedes eliminar un paciente con "
-                    "historial clínico o financiero. "
-                    "Conserva su ficha para mantener "
-                    "la trazabilidad."
-                ),
-            )
 
     if (
         store == "pagos"
