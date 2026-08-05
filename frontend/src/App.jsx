@@ -10,6 +10,31 @@ import Sidebar from './shared/components/Sidebar';
 
 import { useEffect, useState } from 'react';
 import { api } from './services/api';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Calendar as CalendarIcon,
+  CalendarPlus,
+  CheckCircle,
+  Clock,
+  CreditCard,
+  DollarSign,
+  Download,
+  Edit,
+  FolderPlus,
+  PlusCircle,
+  Search,
+  Trash2,
+  TrendingUp,
+  Undo2,
+  Upload,
+  UserPlus,
+  XCircle
+} from 'lucide-react';
+
+import Swal from 'sweetalert2';
+import { format } from 'date-fns';
+
 
 const obtenerFechaLocal = (fecha = new Date()) => {
   const year = fecha.getFullYear();
