@@ -5,7 +5,6 @@ import PlanPagoModal from './features/finanzas/components/PlanPagoModal';
 import PlanTratamientoModal from './features/tratamientos/components/PlanTratamientoModal';
 import PacienteModal from './features/pacientes/components/PacienteModal';
 import CitaModal from './features/agenda/components/CitaModal';
-import AgendaClinicaProfesional from './features/agenda/components/AgendaClinicaProfesional';
 import Sidebar from './shared/components/Sidebar';
 
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -34,6 +33,14 @@ const Dashboard = lazy(
 const PacientesPage = lazy(
   () => import('./features/pacientes/components/PacientesPage')
 );
+
+const AgendaClinicaProfesional = lazy(
+  () =>
+    import(
+      './features/agenda/components/AgendaClinicaProfesional'
+    )
+);
+
 
 const obtenerFechaLocal = (fecha = new Date()) => {
   const year = fecha.getFullYear();
@@ -1090,22 +1097,30 @@ export default function App() {
               PANTALLA 2: AGENDA CLÍNICA PROFESIONAL
           =============================================== */}
           {vistaActiva === 'citas' && (
-            <AgendaClinicaProfesional
-              citas={citas}
-              pacientes={pacientes}
-              pagos={pagos}
-              onNuevaCita={handleNuevaCita}
-              onEditarCita={handleEditarCita}
-              onCambiarEstado={handleCambiarEstadoCita}
-              onCompletarCita={handleAbrirCompletar}
-              onCancelarCita={handleAbrirCancelar}
-              onCobrar={handleCobrarSaldo}
-              onVerFicha={handleVerFicha}
-              onEliminarCita={handleEliminarCita}
-              onReprogramarCita={handleReprogramarCita}
-              onVerCuotas={handleVerCuotasDesdeAgenda}
-            />
-          )}
+  <Suspense
+    fallback={
+      <div className="flex min-h-64 items-center justify-center text-slate-500">
+        Cargando agenda clínica...
+      </div>
+    }
+  >
+    <AgendaClinicaProfesional
+      citas={citas}
+      pacientes={pacientes}
+      pagos={pagos}
+      onNuevaCita={handleNuevaCita}
+      onEditarCita={handleEditarCita}
+      onCambiarEstado={handleCambiarEstadoCita}
+      onCompletarCita={handleAbrirCompletar}
+      onCancelarCita={handleAbrirCancelar}
+      onCobrar={handleCobrarSaldo}
+      onVerFicha={handleVerFicha}
+      onEliminarCita={handleEliminarCita}
+      onReprogramarCita={handleReprogramarCita}
+      onVerCuotas={handleVerCuotasDesdeAgenda}
+    />
+  </Suspense>
+)}
 
           {/* ==============================================
               PANTALLA 3: FINANZAS Y PAGOS
