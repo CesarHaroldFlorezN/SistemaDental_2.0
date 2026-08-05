@@ -45,5 +45,11 @@ jobs:
       - name: Instalar DentalPro
         run: python -m pip install -e ".[dev]"
 
+      - name: Validar código con Ruff
+        run: python -m ruff check backend tests main.py
+
+      - name: Validar formato con Ruff
+        run: python -m ruff format --check backend tests main.py
+
       - name: Ejecutar pruebas
         run: python -m pytest
