@@ -7,16 +7,12 @@ import PacienteModal from './features/pacientes/components/PacienteModal';
 import CitaModal from './features/agenda/components/CitaModal';
 import AgendaClinicaProfesional from './features/agenda/components/AgendaClinicaProfesional';
 import Sidebar from './shared/components/Sidebar';
+import Dashboard from './features/dashboard/components/Dashboard';
 
 import { useEffect, useState } from 'react';
 import { api } from './services/api';
 import {
-  AlertCircle,
   AlertTriangle,
-  Calendar as CalendarIcon,
-  CalendarPlus,
-  CheckCircle,
-  Clock,
   CreditCard,
   DollarSign,
   Download,
@@ -28,8 +24,7 @@ import {
   TrendingUp,
   Undo2,
   Upload,
-  UserPlus,
-  XCircle
+  UserPlus
 } from 'lucide-react';
 
 import Swal from 'sweetalert2';
@@ -1020,42 +1015,7 @@ export default function App() {
     return pl.nombrePaciente.toLowerCase().includes(q) || (pl.nombre || '').toLowerCase().includes(q) || (pl.tipo || '').toLowerCase().includes(q);
   }).sort((a, b) => (b.creadoEn || '').localeCompare(a.creadoEn || ''));
 
-  const hoyStr = obtenerFechaLocal();
-  const mananaDate = new Date();
-  mananaDate.setDate(mananaDate.getDate() + 1);
-  const mananaStr = obtenerFechaLocal(mananaDate);
-
-  const citasHoy = citasFiltradas.filter(c => c.fecha === hoyStr && c.estado !== 'cancelada');
-  const citasManana = citasFiltradas.filter(c => c.fecha === mananaStr && c.estado !== 'cancelada');
-  const citasEnAtencion = citasFiltradas.filter(c => c.estado === 'en_atencion');
-  const pacientesConDeuda = pagos.filter(g => parseFloat(g.saldo || 0) > 0);
-  
-  const pacientesSinVisitaReciente = pacientes.filter(p => {
-    const ultCita = citas.filter(c => c.pacienteId === p.id && c.estado === 'completada').sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0];
-    if (!ultCita || !ultCita.fecha) return true;
-    return ((new Date() - new Date(`${ultCita.fecha}T12:00:00`)) / (1000 * 60 * 60 * 24)) > 180;
-  });
-
-  const getBadgeEstado = (estado) => {
-    switch ((estado || '').toLowerCase()) {
-      case 'completada':
-        return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><CheckCircle size={13}/> Atendida</span>;
-      case 'en_atencion':
-        return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max animate-pulse"><Clock size={13}/> En atención 🔴</span>;
-      case 'en_espera':
-        return <span className="bg-violet-500/10 text-violet-400 border border-violet-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><Clock size={13}/> En espera</span>;
-      case 'confirmada':
-        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Programado</span>;
-      case 'no_asistio':
-        return <span className="bg-orange-500/10 text-orange-400 border border-orange-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> No asistió</span>;
-      case 'cancelada':
-        return <span className="bg-slate-500/10 text-slate-400 border border-slate-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><XCircle size={13}/> Cancelada</span>;
-      default:
-        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-max"><AlertCircle size={13}/> Programado</span>;
-    }
-  };
-
-  const getBadgeTipoPago = (tipo) => {
+    const getBadgeTipoPago = (tipo) => {
     const nombres = { contado: 'Contado', completo: 'Pagado', anticipo: 'Anticipo', cuotas: 'Cuotas', sesion: 'Plan', cortesia: 'Cortesía' };
     return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2.5 py-1 rounded-md text-xs font-semibold">{nombres[(tipo || '').toLowerCase()] || tipo || 'Contado'}</span>;
   };
@@ -1074,127 +1034,18 @@ export default function App() {
 
         <div className="mx-auto w-full max-w-[1800px]">
           
-          {/* ==============================================
-              PANTALLA 0: DASHBOARD
-          =============================================== */}
           {vistaActiva === 'dashboard' && (
-            <div>
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h1 className="text-3xl font-bold text-cyan-400">Centro de Mando</h1>
-                  <p className="text-sm text-slate-400 mt-1">{new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                </div>
-                <button onClick={handleNuevaCita} className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-cyan-600/20 transition cursor-pointer">
-                  <CalendarPlus size={18} /> Agendar Cita
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <div onClick={() => setVistaActiva('pacientes')} className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-lg cursor-pointer hover:border-cyan-500 transition">
-                  <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Pacientes Totales</div>
-                  <div className="text-2xl font-bold text-white font-serif">{pacientes.length}</div>
-                </div>
-                <div onClick={() => setVistaActiva('citas')} className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-lg cursor-pointer hover:border-cyan-500 transition">
-                  <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Citas para Hoy</div>
-                  <div className="text-2xl font-bold text-cyan-400 font-serif">{citasHoy.length}</div>
-                </div>
-                <div onClick={() => setVistaActiva('finanzas')} className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-lg cursor-pointer hover:border-cyan-500 transition">
-                  <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Cuentas por Cobrar</div>
-                  <div className="text-2xl font-bold text-rose-400 font-serif">{pacientesConDeuda.length}</div>
-                </div>
-                <div onClick={() => setVistaActiva('pacientes')} className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-lg cursor-pointer hover:border-cyan-500 transition">
-                  <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Sin Visita (+6 Meses)</div>
-                  <div className="text-2xl font-bold text-amber-400 font-serif">{pacientesSinVisitaReciente.length}</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-6">
-                  <div className="bg-slate-800/80 border-2 border-rose-500/40 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-rose-400 flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>Pacientes en Atención 🔴</h3>
-                      <span className="text-xs bg-rose-500/10 text-rose-400 px-3 py-1 rounded-full font-semibold border border-rose-500/20">{citasEnAtencion.length} en sillón</span>
-                    </div>
-                    <div className="space-y-3">
-                      {citasEnAtencion.length > 0 ? (
-                        citasEnAtencion.map(c => (
-                          <div key={c.id} className="bg-slate-900/80 border border-rose-500/30 rounded-xl p-4 flex justify-between items-center">
-                            <div>
-                              <div className="font-bold text-white text-base">{c.nombrePaciente}</div>
-                              <div className="text-xs text-rose-300 font-medium mt-0.5">🩺 {c.procedimiento || 'Tratamiento en curso'}</div>
-                              <div className="text-xs text-slate-400 mt-1 flex items-center gap-1"><Clock size={12} /> Inicio: {c.hora || '09:00'}</div>
-                            </div>
-                            <button onClick={() => handleAbrirCompletar(c)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg transition cursor-pointer"><CheckCircle size={15} /> Completar</button>
-                          </div>
-                        ))
-                      ) : (<div className="text-center py-6 text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-slate-700/50">Ningún paciente en atención.</div>)}
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-cyan-400 flex items-center gap-2"><CalendarIcon size={18} />Agenda de Hoy</h3>
-                      <button onClick={() => setVistaActiva('citas')} className="text-xs text-cyan-400 hover:underline font-medium cursor-pointer">Ver todas →</button>
-                    </div>
-                    <div className="space-y-2.5">
-                      {citasHoy.length > 0 ? (
-                        citasHoy.map(c => (
-                          <div key={c.id} className="bg-slate-900/60 border border-slate-700/60 rounded-xl p-3.5 flex items-center justify-between hover:border-cyan-500/50 transition">
-                            <div className="flex items-center gap-3">
-                              <div className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 px-3 py-1.5 rounded-lg text-center min-w-16"><div className="text-xs font-bold">{c.hora || '—'}</div></div>
-                              <div>
-                                <div className="font-semibold text-white text-sm">{c.nombrePaciente}</div>
-                                <div className="text-xs text-slate-400">{c.procedimiento || 'Consulta'}</div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {getBadgeEstado(c.estado)}
-                              {c.estado === 'pendiente' && (<button onClick={() => handleCambiarEstadoCita(c, 'en_atencion')} className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition cursor-pointer">▶ Atender</button>)}
-                            </div>
-                          </div>
-                        ))
-                      ) : (<div className="text-center py-8 text-slate-400 text-sm bg-slate-900/30 rounded-xl">No hay más citas programadas para hoy.</div>)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl">
-                    <h3 className="text-base font-bold text-amber-400 flex items-center gap-2 mb-4"><AlertTriangle size={18} />Alertas Inteligentes</h3>
-                    <div className="space-y-3">
-                      <div onClick={() => setVistaActiva('finanzas')} className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex justify-between items-center cursor-pointer hover:bg-rose-500/15 transition">
-                        <div><div className="font-bold text-rose-400 text-sm">Cobros Pendientes</div><div className="text-xs text-slate-300 mt-0.5">{pacientesConDeuda.length} pacientes con saldo por cobrar</div></div>
-                        <span className="bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">{pacientesConDeuda.length}</span>
-                      </div>
-                      <div onClick={() => setVistaActiva('pacientes')} className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex justify-between items-center cursor-pointer hover:bg-amber-500/15 transition">
-                        <div><div className="font-bold text-amber-400 text-sm">Seguimiento Preventivo</div><div className="text-xs text-slate-300 mt-0.5">{pacientesSinVisitaReciente.length} pacientes sin consulta en +6 meses</div></div>
-                        <span className="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">{pacientesSinVisitaReciente.length}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-slate-200 flex items-center gap-2"><CalendarIcon size={18} className="text-slate-400" />Citas para Mañana</h3>
-                      <span className="text-xs text-slate-400 font-medium">{new Date(mananaDate).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}</span>
-                    </div>
-                    <div className="space-y-2.5">
-                      {citasManana.length > 0 ? (
-                        citasManana.map(c => (
-                          <div key={c.id} className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-3.5 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="bg-slate-700/60 text-slate-300 px-3 py-1 rounded-lg text-xs font-bold">{c.hora || '—'}</div>
-                              <div><div className="font-semibold text-white text-sm">{c.nombrePaciente}</div></div>
-                            </div>
-                            {getBadgeEstado(c.estado)}
-                          </div>
-                        ))
-                      ) : (<div className="text-center py-8 text-slate-500 text-sm bg-slate-900/30 rounded-xl">No hay citas agendadas para mañana.</div>)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Dashboard
+              pacientes={pacientes}
+              citas={citasFiltradas}
+              pagos={pagos}
+              onCambiarVista={setVistaActiva}
+              onNuevaCita={handleNuevaCita}
+              onAbrirCompletar={handleAbrirCompletar}
+              onCambiarEstadoCita={handleCambiarEstadoCita}
+            />
           )}
+
 
           {/* ==============================================
               PANTALLA 1: PACIENTES
