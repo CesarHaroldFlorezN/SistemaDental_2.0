@@ -4,34 +4,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import (
-    DocumentoPacienteDB,
-    MovimientoCuentaDB,
-    PagoDB,
-    PlanDB,
-    PlanPagoDB,
-)
+from ..models import DocumentoPacienteDB
 from ..services import serializar_modelo
 
 router = APIRouter()
 
 
 MODELOS = {
-    "pagos": PagoDB,
-    "planes": PlanDB,
-    "planPagos": PlanPagoDB,
-    "movimientosCuenta": MovimientoCuentaDB,
     "documentosPaciente": DocumentoPacienteDB,
-}
-
-ALMACENES_INMUTABLES = {
-    "movimientosCuenta",
 }
 
 
 @router.get("/api/{store}", tags=["CRUD"])
-def get_all(store: str, db: Session = Depends(get_db)):
+def get_all(
+    store: str,
+    db: Session = Depends(get_db),
+):
     modelo = MODELOS.get(store)
+
     if not modelo:
         raise HTTPException(
             status_code=404,
@@ -39,6 +29,7 @@ def get_all(store: str, db: Session = Depends(get_db)):
         )
 
     registros = db.query(modelo).all()
+
     return [serializar_modelo(registro) for registro in registros]
 
 
@@ -49,6 +40,7 @@ def create_record(
     db: Session = Depends(get_db),
 ):
     modelo = MODELOS.get(store)
+
     if not modelo:
         raise HTTPException(
             status_code=404,
@@ -86,18 +78,11 @@ def update_record(
     db: Session = Depends(get_db),
 ):
     modelo = MODELOS.get(store)
+
     if not modelo:
         raise HTTPException(
             status_code=404,
             detail="Tabla no encontrada.",
-        )
-
-    if store in ALMACENES_INMUTABLES:
-        raise HTTPException(
-            status_code=405,
-            detail=(
-                "El historial financiero es inmutable. Usa una anulación o devolución."
-            ),
         )
 
     registro = db.query(modelo).filter(modelo.id == item_id).first()
@@ -117,6 +102,7 @@ def update_record(
     try:
         db.commit()
         db.refresh(registro)
+
         return {
             "message": "Actualizado correctamente.",
             "registro": serializar_modelo(registro),
@@ -136,18 +122,11 @@ def delete_record(
     db: Session = Depends(get_db),
 ):
     modelo = MODELOS.get(store)
+
     if not modelo:
         raise HTTPException(
             status_code=404,
             detail="Tabla no encontrada.",
-        )
-
-    if store in ALMACENES_INMUTABLES:
-        raise HTTPException(
-            status_code=405,
-            detail=(
-                "El historial financiero es inmutable. Usa una anulación o devolución."
-            ),
         )
 
     registro = db.query(modelo).filter(modelo.id == item_id).first()
@@ -158,18 +137,10 @@ def delete_record(
             detail="Registro no encontrado.",
         )
 
-    if (
-        store == "pagos"
-        and db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == item_id).first()
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=("No puedes eliminar un pago vinculado a un plan de cuotas."),
-        )
-
     try:
         db.delete(registro)
         db.commit()
+
         return {
             "message": "Eliminado correctamente.",
         }
