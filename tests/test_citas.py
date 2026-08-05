@@ -307,3 +307,46 @@ def test_cambiar_estados_de_cita() -> None:
     assert client.delete(
         f"/api/pacientes/{paciente_id}"
     ).status_code == 200
+
+def test_actualizar_cita_desde_crud_general() -> None:
+    paciente_id = crear_paciente("006")
+
+    respuesta_crear = client.post(
+        "/api/operaciones/citas",
+        json=datos_cita(
+            paciente_id=paciente_id,
+            hora="19:00",
+            hora_fin="20:00",
+        ),
+    )
+
+    assert respuesta_crear.status_code == 200
+    cita_id = respuesta_crear.json()["cita"]["id"]
+
+    respuesta_actualizar = client.put(
+        f"/api/citas/{cita_id}",
+        json={
+            "fecha": "2035-06-18",
+            "hora": "18:00",
+            "horaFin": "19:00",
+            "duracionMinutos": 60,
+            "estado": "pendiente",
+        },
+    )
+
+    assert respuesta_actualizar.status_code == 200
+
+    cita = respuesta_actualizar.json()["registro"]
+
+    assert cita["fecha"] == "2035-06-18"
+    assert cita["hora"] == "18:00"
+    assert cita["horaFin"] == "19:00"
+    assert cita["duracionMinutos"] == 60
+
+    assert client.delete(
+        f"/api/operaciones/citas/{cita_id}"
+    ).status_code == 200
+
+    assert client.delete(
+        f"/api/pacientes/{paciente_id}"
+    ).status_code == 200

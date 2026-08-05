@@ -31,6 +31,7 @@ from backend.app.models import (
 )
 
 from backend.app.services import (
+    validar_disponibilidad,
     ahora_iso,
     limpiar_valor_csv,
     obtener_paciente,
@@ -40,7 +41,6 @@ from backend.app.routers import (
     citas_router,
     finanzas_router,
 )
-from backend.app.services.finanzas import anular_pago
 
 # =====================================================
 # RUTAS DEL PROYECTO
