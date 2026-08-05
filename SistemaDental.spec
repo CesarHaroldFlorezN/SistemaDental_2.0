@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('frontend-moderno/dist', 'frontend'),
+       ('frontend/dist', 'frontend'),
     ],
     hiddenimports=[],
     hookspath=[],
