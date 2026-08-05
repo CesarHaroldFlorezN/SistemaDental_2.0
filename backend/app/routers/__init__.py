@@ -5,7 +5,6 @@ from .finanzas import router as finanzas_router
 from .pacientes import router as pacientes_router
 from .salud import router as salud_router
 
-
 __all__ = [
     "citas_router",
     "crud_router",

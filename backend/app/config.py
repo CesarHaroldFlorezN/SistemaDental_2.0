@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[2]
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 
@@ -14,9 +13,7 @@ else:
     BUNDLE_DIR = ROOT_DIR
 
 
-DATA_DIR = Path(
-    os.getenv("DENTALPRO_DATA_DIR", str(APP_DIR / "data"))
-).resolve()
+DATA_DIR = Path(os.getenv("DENTALPRO_DATA_DIR", str(APP_DIR / "data"))).resolve()
 
 DB_PATH = Path(
     os.getenv(
@@ -27,11 +24,7 @@ DB_PATH = Path(
 
 DOCUMENTOS_DIR = DATA_DIR / "documentos"
 
-FRONTEND_DIR = (
-    BUNDLE_DIR / "frontend"
-    if IS_FROZEN
-    else ROOT_DIR / "frontend" / "dist"
-)
+FRONTEND_DIR = BUNDLE_DIR / "frontend" if IS_FROZEN else ROOT_DIR / "frontend" / "dist"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)

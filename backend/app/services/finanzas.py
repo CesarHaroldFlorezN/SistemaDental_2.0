@@ -17,11 +17,7 @@ def _obtener_pago(
     db: Session,
     pago_id: int,
 ) -> PagoDB:
-    pago = (
-        db.query(PagoDB)
-        .filter(PagoDB.id == pago_id)
-        .first()
-    )
+    pago = db.query(PagoDB).filter(PagoDB.id == pago_id).first()
 
     if not pago:
         raise HTTPException(
@@ -36,11 +32,7 @@ def _asegurar_sin_plan_de_cuotas(
     db: Session,
     pago: PagoDB,
 ) -> None:
-    plan = (
-        db.query(PlanPagoDB)
-        .filter(PlanPagoDB.pagoId == pago.id)
-        .first()
-    )
+    plan = db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == pago.id).first()
 
     if plan:
         raise HTTPException(
@@ -73,12 +65,7 @@ def _crear_movimiento(
         descripcion=descripcion,
         cargo=round(float(cargo or 0), 2),
         abono=round(float(abono or 0), 2),
-        fecha=(
-            datetime.now()
-            .astimezone()
-            .date()
-            .isoformat()
-        ),
+        fecha=(datetime.now().astimezone().date().isoformat()),
         metodo=metodo,
         referencia=referencia,
         motivo=motivo,
@@ -104,10 +91,7 @@ def registrar_pago(
     if monto > saldo:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "El monto no puede superar "
-                "el saldo pendiente."
-            ),
+            detail=("El monto no puede superar el saldo pendiente."),
         )
 
     pago.cobrado = round(
@@ -122,31 +106,19 @@ def registrar_pago(
         2,
     )
     pago.metodo = payload.metodo.strip() or "Efectivo"
-    pago.fechaUltPago = (
-        datetime.now()
-        .astimezone()
-        .date()
-        .isoformat()
-    )
+    pago.fechaUltPago = datetime.now().astimezone().date().isoformat()
 
     pago.tipoPago = (
         "completo"
         if pago.saldo <= 0
-        else (
-            "cuotas"
-            if pago.tipoPago == "cuotas"
-            else "anticipo"
-        )
+        else ("cuotas" if pago.tipoPago == "cuotas" else "anticipo")
     )
 
     movimiento = _crear_movimiento(
         db=db,
         pago=pago,
         tipo="pago",
-        descripcion=(
-            f"Pago: "
-            f"{pago.concepto or 'Atención dental'}"
-        ),
+        descripcion=(f"Pago: {pago.concepto or 'Atención dental'}"),
         abono=monto,
         metodo=pago.metodo,
         referencia=payload.referencia,
@@ -179,19 +151,13 @@ def anular_pago(
     if monto > cobrado:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "No puedes anular más "
-                "de lo que está cobrado."
-            ),
+            detail=("No puedes anular más de lo que está cobrado."),
         )
 
     if not payload.motivo.strip():
         raise HTTPException(
             status_code=400,
-            detail=(
-                "El motivo de la anulación "
-                "es obligatorio."
-            ),
+            detail=("El motivo de la anulación es obligatorio."),
         )
 
     pago.cobrado = round(cobrado - monto, 2)
@@ -202,26 +168,15 @@ def anular_pago(
         ),
         2,
     )
-    pago.tipoPago = (
-        "contado"
-        if pago.cobrado <= 0
-        else "anticipo"
-    )
+    pago.tipoPago = "contado" if pago.cobrado <= 0 else "anticipo"
 
     movimiento = _crear_movimiento(
         db=db,
         pago=pago,
         tipo="anulacion",
-        descripcion=(
-            "Anulación de pago: "
-            f"{pago.concepto or 'Atención dental'}"
-        ),
+        descripcion=(f"Anulación de pago: {pago.concepto or 'Atención dental'}"),
         cargo=monto,
-        metodo=(
-            payload.metodo.strip()
-            or pago.metodo
-            or "Pago"
-        ),
+        metodo=(payload.metodo.strip() or pago.metodo or "Pago"),
         referencia=payload.referencia,
         motivo=payload.motivo,
         usuario=payload.usuario,
@@ -232,9 +187,7 @@ def anular_pago(
     db.refresh(movimiento)
 
     return {
-        "message": (
-            "Pago anulado sin borrar el historial."
-        ),
+        "message": ("Pago anulado sin borrar el historial."),
         "pago": serializar_modelo(pago),
         "movimiento": serializar_modelo(movimiento),
     }
@@ -254,19 +207,13 @@ def devolver_pago(
     if monto > cobrado:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "No puedes devolver más "
-                "de lo que está cobrado."
-            ),
+            detail=("No puedes devolver más de lo que está cobrado."),
         )
 
     if not payload.motivo.strip():
         raise HTTPException(
             status_code=400,
-            detail=(
-                "El motivo de la devolución "
-                "es obligatorio."
-            ),
+            detail=("El motivo de la devolución es obligatorio."),
         )
 
     pago.cobrado = round(cobrado - monto, 2)
@@ -281,26 +228,15 @@ def devolver_pago(
         float(pago.devuelto or 0) + monto,
         2,
     )
-    pago.tipoPago = (
-        "contado"
-        if pago.cobrado <= 0
-        else "anticipo"
-    )
+    pago.tipoPago = "contado" if pago.cobrado <= 0 else "anticipo"
 
     movimiento = _crear_movimiento(
         db=db,
         pago=pago,
         tipo="devolucion",
-        descripcion=(
-            f"Devolución: "
-            f"{pago.concepto or 'Atención dental'}"
-        ),
+        descripcion=(f"Devolución: {pago.concepto or 'Atención dental'}"),
         cargo=monto,
-        metodo=(
-            payload.metodo.strip()
-            or pago.metodo
-            or "Pago"
-        ),
+        metodo=(payload.metodo.strip() or pago.metodo or "Pago"),
         referencia=payload.referencia,
         motivo=payload.motivo,
         usuario=payload.usuario,
@@ -311,10 +247,7 @@ def devolver_pago(
     db.refresh(movimiento)
 
     return {
-        "message": (
-            "Devolución registrada "
-            "sin borrar el pago original."
-        ),
+        "message": ("Devolución registrada sin borrar el pago original."),
         "pago": serializar_modelo(pago),
         "movimiento": serializar_modelo(movimiento),
     }
@@ -326,16 +259,10 @@ def construir_cuenta_paciente(
 ):
     obtener_paciente(db, paciente_id)
 
-    pagos = (
-        db.query(PagoDB)
-        .filter(PagoDB.pacienteId == paciente_id)
-        .all()
-    )
+    pagos = db.query(PagoDB).filter(PagoDB.pacienteId == paciente_id).all()
     movimientos_db = (
         db.query(MovimientoCuentaDB)
-        .filter(
-            MovimientoCuentaDB.pacienteId == paciente_id
-        )
+        .filter(MovimientoCuentaDB.pacienteId == paciente_id)
         .all()
     )
     movimientos = []
@@ -346,13 +273,8 @@ def construir_cuenta_paciente(
                 "id": f"cargo-{pago.id}",
                 "tipo": "cargo",
                 "pagoId": pago.id,
-                "fecha": (
-                    pago.fecha
-                    or (pago.creadoEn or "")[:10]
-                ),
-                "descripcion": (
-                    pago.concepto or "Atención dental"
-                ),
+                "fecha": (pago.fecha or (pago.creadoEn or "")[:10]),
+                "descripcion": (pago.concepto or "Atención dental"),
                 "cargo": round(
                     float(pago.total or 0),
                     2,
@@ -366,21 +288,18 @@ def construir_cuenta_paciente(
         vinculados = [
             movimiento
             for movimiento in movimientos_db
-            if int(movimiento.pagoId or 0)
-            == int(pago.id)
+            if int(movimiento.pagoId or 0) == int(pago.id)
         ]
 
         neto_registrado = sum(
-            float(movimiento.abono or 0)
-            - float(movimiento.cargo or 0)
+            float(movimiento.abono or 0) - float(movimiento.cargo or 0)
             for movimiento in vinculados
         )
 
         legado = round(
             max(
                 0,
-                float(pago.cobrado or 0)
-                - neto_registrado,
+                float(pago.cobrado or 0) - neto_registrado,
             ),
             2,
         )
@@ -392,9 +311,7 @@ def construir_cuenta_paciente(
                     "tipo": "pago_anterior",
                     "pagoId": pago.id,
                     "fecha": (
-                        pago.fechaUltPago
-                        or pago.fecha
-                        or (pago.creadoEn or "")[:10]
+                        pago.fechaUltPago or pago.fecha or (pago.creadoEn or "")[:10]
                     ),
                     "descripcion": (
                         "Pago registrado anteriormente: "
@@ -425,10 +342,7 @@ def construir_cuenta_paciente(
     cargos = 0.0
     abonos = 0.0
     creditos = round(
-        sum(
-            float(pago.creditoFavor or 0)
-            for pago in pagos
-        ),
+        sum(float(pago.creditoFavor or 0) for pago in pagos),
         2,
     )
 

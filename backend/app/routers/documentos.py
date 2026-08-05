@@ -8,7 +8,7 @@ router = APIRouter(
 )
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import (
@@ -31,7 +31,6 @@ from ..services import (
     serializar_modelo,
 )
 
-
 router = APIRouter()
 
 DOCUMENTOS_DIR = DATA_DIR / "documentos"
@@ -50,17 +49,12 @@ def listar_documentos_paciente(
 
     registros = (
         db.query(DocumentoPacienteDB)
-        .filter(
-            DocumentoPacienteDB.pacienteId == paciente_id
-        )
+        .filter(DocumentoPacienteDB.pacienteId == paciente_id)
         .order_by(DocumentoPacienteDB.id.desc())
         .all()
     )
 
-    return [
-        serializar_modelo(item)
-        for item in registros
-    ]
+    return [serializar_modelo(item) for item in registros]
 
 
 @router.post(
@@ -75,9 +69,7 @@ async def subir_documento_paciente(
 ):
     obtener_paciente(db, paciente_id)
 
-    nombre_original = Path(
-        file.filename or "documento"
-    ).name
+    nombre_original = Path(file.filename or "documento").name
 
     nombre_seguro = (
         re.sub(
@@ -91,13 +83,9 @@ async def subir_documento_paciente(
     carpeta = DOCUMENTOS_DIR / str(paciente_id)
     carpeta.mkdir(parents=True, exist_ok=True)
 
-    marca_tiempo = datetime.now().strftime(
-        "%Y%m%d_%H%M%S_%f"
-    )
+    marca_tiempo = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
 
-    destino = carpeta / (
-        f"{marca_tiempo}_{nombre_seguro}"
-    )
+    destino = carpeta / (f"{marca_tiempo}_{nombre_seguro}")
 
     contenido = await file.read()
 
@@ -112,18 +100,10 @@ async def subir_documento_paciente(
     registro = DocumentoPacienteDB(
         pacienteId=paciente_id,
         nombre=nombre_original,
-        tipo=(
-            file.content_type
-            or "application/octet-stream"
-        ),
+        tipo=(file.content_type or "application/octet-stream"),
         ruta=str(destino),
         descripcion=descripcion,
-        fecha=(
-            datetime.now()
-            .astimezone()
-            .date()
-            .isoformat()
-        ),
+        fecha=(datetime.now().astimezone().date().isoformat()),
         creadoEn=ahora_iso(),
     )
 
@@ -145,10 +125,7 @@ async def subir_documento_paciente(
 
 
 @router.get(
-    (
-        "/api/pacientes/{paciente_id}/documentos/"
-        "{documento_id}/descargar"
-    ),
+    ("/api/pacientes/{paciente_id}/documentos/{documento_id}/descargar"),
     tags=["Documentos"],
 )
 def descargar_documento_paciente(
@@ -182,18 +159,12 @@ def descargar_documento_paciente(
     return FileResponse(
         path=ruta,
         filename=registro.nombre,
-        media_type=(
-            registro.tipo
-            or "application/octet-stream"
-        ),
+        media_type=(registro.tipo or "application/octet-stream"),
     )
 
 
 @router.delete(
-    (
-        "/api/pacientes/{paciente_id}/documentos/"
-        "{documento_id}"
-    ),
+    ("/api/pacientes/{paciente_id}/documentos/{documento_id}"),
     tags=["Documentos"],
 )
 def eliminar_documento_paciente(

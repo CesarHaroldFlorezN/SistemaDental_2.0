@@ -76,4 +76,3 @@ class MovimientoCuentaDB(Base):
     motivo = Column(Text)
     usuario = Column(String(100))
     creadoEn = Column(String(50))
-    

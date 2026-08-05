@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 
-
 client = TestClient(app)
 
 
@@ -29,11 +28,7 @@ def crear_cita_financiera(
             "pacienteId": paciente_id,
             "fecha": "2036-07-20",
             "hora": hora,
-            "horaFin": (
-                "10:00"
-                if hora == "09:00"
-                else "14:00"
-            ),
+            "horaFin": ("10:00" if hora == "09:00" else "14:00"),
             "duracionMinutos": 60,
             "procedimiento": "Tratamiento dental",
             "servicios": [
@@ -100,10 +95,7 @@ def test_registrar_anular_y_devolver_pago() -> None:
     assert respuesta_anulacion.status_code == 200
     assert respuesta_anulacion.json()["pago"]["cobrado"] == 50
     assert respuesta_anulacion.json()["pago"]["saldo"] == 150
-    assert (
-        respuesta_anulacion.json()["movimiento"]["tipo"]
-        == "anulacion"
-    )
+    assert respuesta_anulacion.json()["movimiento"]["tipo"] == "anulacion"
     assert respuesta_anulacion.json()["movimiento"]["cargo"] == 30
 
     respuesta_devolucion = client.post(
@@ -121,22 +113,14 @@ def test_registrar_anular_y_devolver_pago() -> None:
     assert respuesta_devolucion.json()["pago"]["cobrado"] == 30
     assert respuesta_devolucion.json()["pago"]["saldo"] == 170
     assert respuesta_devolucion.json()["pago"]["devuelto"] == 20
-    assert (
-        respuesta_devolucion.json()["movimiento"]["tipo"]
-        == "devolucion"
-    )
+    assert respuesta_devolucion.json()["movimiento"]["tipo"] == "devolucion"
 
-    respuesta_cuenta = client.get(
-        f"/api/pacientes/{paciente_id}/cuenta"
-    )
+    respuesta_cuenta = client.get(f"/api/pacientes/{paciente_id}/cuenta")
 
     assert respuesta_cuenta.status_code == 200
 
     cuenta = respuesta_cuenta.json()
-    tipos = {
-        movimiento["tipo"]
-        for movimiento in cuenta["movimientos"]
-    }
+    tipos = {movimiento["tipo"] for movimiento in cuenta["movimientos"]}
 
     assert "cargo" in tipos
     assert "pago" in tipos
@@ -178,16 +162,12 @@ def test_no_modificar_ni_eliminar_movimiento_financiero() -> None:
     assert respuesta_modificar.status_code == 405
     assert "inmutable" in respuesta_modificar.json()["detail"]
 
-    respuesta_eliminar = client.delete(
-        f"/api/movimientosCuenta/{movimiento_id}"
-    )
+    respuesta_eliminar = client.delete(f"/api/movimientosCuenta/{movimiento_id}")
 
     assert respuesta_eliminar.status_code == 405
     assert "inmutable" in respuesta_eliminar.json()["detail"]
 
-    respuesta_cuenta = client.get(
-        f"/api/pacientes/{paciente_id}/cuenta"
-    )
+    respuesta_cuenta = client.get(f"/api/pacientes/{paciente_id}/cuenta")
 
     assert respuesta_cuenta.status_code == 200
     assert any(

@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 
-
 client = TestClient(app)
 
 
@@ -78,15 +77,11 @@ def test_crear_cita_con_registro_financiero() -> None:
     assert pago["cobrado"] == 0
     assert pago["saldo"] == 100
 
-    respuesta_eliminar = client.delete(
-        f"/api/operaciones/citas/{cita['id']}"
-    )
+    respuesta_eliminar = client.delete(f"/api/operaciones/citas/{cita['id']}")
 
     assert respuesta_eliminar.status_code == 200
 
-    respuesta_eliminar_paciente = client.delete(
-        f"/api/pacientes/{paciente_id}"
-    )
+    respuesta_eliminar_paciente = client.delete(f"/api/pacientes/{paciente_id}")
 
     assert respuesta_eliminar_paciente.status_code == 200
 
@@ -130,17 +125,13 @@ def test_impedir_cruce_de_horarios() -> None:
     assert cita_contigua.status_code == 200
     cita_contigua_id = cita_contigua.json()["cita"]["id"]
 
-    assert client.delete(
-        f"/api/operaciones/citas/{cita_contigua_id}"
-    ).status_code == 200
+    assert (
+        client.delete(f"/api/operaciones/citas/{cita_contigua_id}").status_code == 200
+    )
 
-    assert client.delete(
-        f"/api/operaciones/citas/{primera_cita_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/operaciones/citas/{primera_cita_id}").status_code == 200
 
-    assert client.delete(
-        f"/api/pacientes/{paciente_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
 
 
 def test_reprogramar_cita_activa() -> None:
@@ -177,13 +168,10 @@ def test_reprogramar_cita_activa() -> None:
     assert cita["horaFin"] == "17:00"
     assert cita["duracionMinutos"] == 60
 
-    assert client.delete(
-        f"/api/operaciones/citas/{cita_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/operaciones/citas/{cita_id}").status_code == 200
 
-    assert client.delete(
-        f"/api/pacientes/{paciente_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
+
 
 def test_actualizar_cita_y_pago() -> None:
     paciente_id = crear_paciente("004")
@@ -241,13 +229,9 @@ def test_actualizar_cita_y_pago() -> None:
     assert pago["cobrado"] == 0
     assert pago["saldo"] == 150
 
-    assert client.delete(
-        f"/api/operaciones/citas/{cita_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/operaciones/citas/{cita_id}").status_code == 200
 
-    assert client.delete(
-        f"/api/pacientes/{paciente_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
 
 
 def test_cambiar_estados_de_cita() -> None:
@@ -271,10 +255,7 @@ def test_cambiar_estados_de_cita() -> None:
     )
 
     assert respuesta_confirmar.status_code == 200
-    assert (
-        respuesta_confirmar.json()["cita"]["estado"]
-        == "confirmada"
-    )
+    assert respuesta_confirmar.json()["cita"]["estado"] == "confirmada"
 
     respuesta_atender = client.patch(
         f"/api/operaciones/citas/{cita_id}/estado",
@@ -282,10 +263,7 @@ def test_cambiar_estados_de_cita() -> None:
     )
 
     assert respuesta_atender.status_code == 200
-    assert (
-        respuesta_atender.json()["cita"]["estado"]
-        == "en_atencion"
-    )
+    assert respuesta_atender.json()["cita"]["estado"] == "en_atencion"
     assert respuesta_atender.json()["cita"]["inicio"]
 
     respuesta_completar = client.patch(
@@ -294,19 +272,13 @@ def test_cambiar_estados_de_cita() -> None:
     )
 
     assert respuesta_completar.status_code == 200
-    assert (
-        respuesta_completar.json()["cita"]["estado"]
-        == "completada"
-    )
+    assert respuesta_completar.json()["cita"]["estado"] == "completada"
     assert respuesta_completar.json()["cita"]["fin"]
 
-    assert client.delete(
-        f"/api/operaciones/citas/{cita_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/operaciones/citas/{cita_id}").status_code == 200
 
-    assert client.delete(
-        f"/api/pacientes/{paciente_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
+
 
 def test_actualizar_cita_desde_crud_general() -> None:
     paciente_id = crear_paciente("006")
@@ -343,10 +315,6 @@ def test_actualizar_cita_desde_crud_general() -> None:
     assert cita["horaFin"] == "19:00"
     assert cita["duracionMinutos"] == 60
 
-    assert client.delete(
-        f"/api/operaciones/citas/{cita_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/operaciones/citas/{cita_id}").status_code == 200
 
-    assert client.delete(
-        f"/api/pacientes/{paciente_id}"
-    ).status_code == 200
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200

@@ -32,14 +32,13 @@ from ..services import (
     validar_secuencia_sesion,
 )
 
-
 router = APIRouter()
-
 
 
 # =====================================================
 # OPERACIONES TRANSACCIONALES DE CITAS
 # =====================================================
+
 
 @router.post("/api/operaciones/citas", tags=["Citas"])
 def crear_cita_con_pago(
@@ -263,7 +262,9 @@ def reprogramar_cita(
 
     fecha_anterior = cita.fecha
     hora_anterior = cita.hora
-    hora_fin_anterior = cita.horaFin or minutos_a_hora(convertir_hora_a_minutos(cita.hora or "00:00") + int(cita.duracionMinutos or 60))
+    hora_fin_anterior = cita.horaFin or minutos_a_hora(
+        convertir_hora_a_minutos(cita.hora or "00:00") + int(cita.duracionMinutos or 60)
+    )
     cita.fecha = payload.fecha
     cita.hora = payload.hora
     cita.horaFin = hora_fin_resuelta
@@ -391,9 +392,7 @@ def eliminar_cita_con_pago(
         )
 
     if pago:
-        plan_cuotas = db.query(PlanPagoDB).filter(
-            PlanPagoDB.pagoId == pago.id
-        ).first()
+        plan_cuotas = db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == pago.id).first()
         if plan_cuotas:
             raise HTTPException(
                 status_code=400,

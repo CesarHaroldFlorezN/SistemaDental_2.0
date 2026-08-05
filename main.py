@@ -2,7 +2,6 @@
 
 from backend.app.main import app, ejecutar
 
-
 __all__ = [
     "app",
 ]

@@ -35,22 +35,14 @@ def test_crear_actualizar_y_eliminar_paciente() -> None:
     )
 
     assert respuesta_actualizar.status_code == 200
-    assert (
-        respuesta_actualizar.json()["registro"]["telefono"]
-        == "988888888"
-    )
+    assert respuesta_actualizar.json()["registro"]["telefono"] == "988888888"
 
     respuesta_listar = client.get("/api/pacientes")
 
     assert respuesta_listar.status_code == 200
-    assert any(
-        item["id"] == paciente_id
-        for item in respuesta_listar.json()
-    )
+    assert any(item["id"] == paciente_id for item in respuesta_listar.json())
 
-    respuesta_eliminar = client.delete(
-        f"/api/pacientes/{paciente_id}"
-    )
+    respuesta_eliminar = client.delete(f"/api/pacientes/{paciente_id}")
 
     assert respuesta_eliminar.status_code == 200
 
@@ -90,48 +82,28 @@ def test_exportar_pacientes_csv() -> None:
     assert respuesta_crear.status_code == 200
     paciente_id = respuesta_crear.json()["id"]
 
-    respuesta_exportar = client.get(
-        "/api/exportar/pacientes"
-    )
+    respuesta_exportar = client.get("/api/exportar/pacientes")
 
     assert respuesta_exportar.status_code == 200
-    assert respuesta_exportar.headers[
-        "content-type"
-    ].startswith("text/csv")
+    assert respuesta_exportar.headers["content-type"].startswith("text/csv")
 
-    texto_csv = respuesta_exportar.content.decode(
-        "utf-8-sig"
-    )
+    texto_csv = respuesta_exportar.content.decode("utf-8-sig")
 
-    lector = csv.DictReader(
-        io.StringIO(texto_csv)
-    )
+    lector = csv.DictReader(io.StringIO(texto_csv))
 
     pacientes = list(lector)
 
     paciente_exportado = next(
-        (
-            paciente
-            for paciente in pacientes
-            if paciente["cedula"] == "DNI-CSV-EXPORT"
-        ),
+        (paciente for paciente in pacientes if paciente["cedula"] == "DNI-CSV-EXPORT"),
         None,
     )
 
     assert paciente_exportado is not None
-    assert (
-        paciente_exportado["nombre"]
-        == "Paciente de Prueba CSV-EXPORT"
-    )
-    assert (
-        paciente_exportado["codigo_ficha"]
-        == "TEST-CSV-EXPORT"
-    )
+    assert paciente_exportado["nombre"] == "Paciente de Prueba CSV-EXPORT"
+    assert paciente_exportado["codigo_ficha"] == "TEST-CSV-EXPORT"
     assert paciente_exportado["telefono"] == "999999999"
 
-    respuesta_eliminar = client.delete(
-        f"/api/pacientes/{paciente_id}"
-    )
+    respuesta_eliminar = client.delete(f"/api/pacientes/{paciente_id}")
 
     assert respuesta_eliminar.status_code == 200
 
@@ -156,10 +128,7 @@ def test_importar_y_actualizar_paciente_desde_csv() -> None:
     )
 
     assert respuesta_importar.status_code == 200
-    assert (
-        "1 nuevos"
-        in respuesta_importar.json()["message"]
-    )
+    assert "1 nuevos" in respuesta_importar.json()["message"]
 
     respuesta_listar = client.get("/api/pacientes")
 
@@ -199,14 +168,9 @@ def test_importar_y_actualizar_paciente_desde_csv() -> None:
     )
 
     assert respuesta_actualizar.status_code == 200
-    assert (
-        "1 actualizados"
-        in respuesta_actualizar.json()["message"]
-    )
+    assert "1 actualizados" in respuesta_actualizar.json()["message"]
 
-    respuesta_listar_actualizado = client.get(
-        "/api/pacientes"
-    )
+    respuesta_listar_actualizado = client.get("/api/pacientes")
 
     paciente_actualizado = next(
         item
@@ -214,18 +178,10 @@ def test_importar_y_actualizar_paciente_desde_csv() -> None:
         if item["id"] == paciente_id
     )
 
-    assert (
-        paciente_actualizado["nombre"]
-        == "Paciente Importado Actualizado"
-    )
+    assert paciente_actualizado["nombre"] == "Paciente Importado Actualizado"
     assert paciente_actualizado["telefono"] == "966666666"
-    assert (
-        paciente_actualizado["correo"]
-        == "actualizado@dentalpro.test"
-    )
+    assert paciente_actualizado["correo"] == "actualizado@dentalpro.test"
 
-    respuesta_eliminar = client.delete(
-        f"/api/pacientes/{paciente_id}"
-    )
+    respuesta_eliminar = client.delete(f"/api/pacientes/{paciente_id}")
 
     assert respuesta_eliminar.status_code == 200

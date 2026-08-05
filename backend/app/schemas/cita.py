@@ -1,9 +1,8 @@
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from .finanzas import TipoPago
-
 
 EstadoCita = Literal[
     "pendiente",
@@ -23,19 +22,19 @@ class ServicioCitaPayload(BaseModel):
 
 class CitaPagoPayload(BaseModel):
     pacienteId: int = Field(gt=0)
-    planId: Optional[int] = Field(default=None, gt=0)
-    citaBaseId: Optional[int] = Field(default=None, gt=0)
+    planId: int | None = Field(default=None, gt=0)
+    citaBaseId: int | None = Field(default=None, gt=0)
 
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
-    horaFin: Optional[str] = Field(
+    horaFin: str | None = Field(
         default=None,
         min_length=5,
         max_length=5,
     )
     duracionMinutos: int = Field(default=60, ge=5, le=720)
     procedimiento: str = Field(min_length=2, max_length=200)
-    servicios: List[ServicioCitaPayload] = Field(
+    servicios: list[ServicioCitaPayload] = Field(
         default_factory=list,
         max_length=20,
     )
@@ -58,7 +57,7 @@ class CambioEstadoPayload(BaseModel):
 class ReprogramarCitaPayload(BaseModel):
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
-    horaFin: Optional[str] = Field(
+    horaFin: str | None = Field(
         default=None,
         min_length=5,
         max_length=5,

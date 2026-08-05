@@ -14,21 +14,16 @@ def asegurar_compatibilidad_esquema() -> None:
         }
 
         if "servicios" not in columnas_citas:
-            connection.exec_driver_sql(
-                "ALTER TABLE citas "
-                "ADD COLUMN servicios JSON"
-            )
+            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN servicios JSON")
 
         if "horaFin" not in columnas_citas:
             connection.exec_driver_sql(
-                "ALTER TABLE citas "
-                "ADD COLUMN horaFin VARCHAR(50)"
+                "ALTER TABLE citas ADD COLUMN horaFin VARCHAR(50)"
             )
 
         if "duracionMinutos" not in columnas_citas:
             connection.exec_driver_sql(
-                "ALTER TABLE citas "
-                "ADD COLUMN duracionMinutos INTEGER"
+                "ALTER TABLE citas ADD COLUMN duracionMinutos INTEGER"
             )
 
 

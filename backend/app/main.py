@@ -17,7 +17,6 @@ from .routers import (
     salud_router,
 )
 
-
 # =====================================================
 # BASE DE DATOS
 # =====================================================
@@ -32,10 +31,7 @@ inicializar_base_datos()
 app = FastAPI(
     title="API DentalPro",
     version="1.3.0",
-    description=(
-        "Backend local para gestión clínica, "
-        "agenda y finanzas."
-    ),
+    description=("Backend local para gestión clínica, agenda y finanzas."),
 )
 
 app.add_middleware(
@@ -72,17 +68,13 @@ if FRONTEND_DIR.is_dir():
     if FRONTEND_ASSETS.is_dir():
         app.mount(
             "/assets",
-            StaticFiles(
-                directory=str(FRONTEND_ASSETS)
-            ),
+            StaticFiles(directory=str(FRONTEND_ASSETS)),
             name="react-assets",
         )
 
     @app.get("/", include_in_schema=False)
     def mostrar_frontend():
-        return FileResponse(
-            FRONTEND_DIR / "index.html"
-        )
+        return FileResponse(FRONTEND_DIR / "index.html")
 
     @app.get(
         "/{ruta:path}",
@@ -95,18 +87,12 @@ if FRONTEND_DIR.is_dir():
                 detail="Ruta API no encontrada.",
             )
 
-        archivo_solicitado = (
-            FRONTEND_DIR / ruta
-        ).resolve()
+        archivo_solicitado = (FRONTEND_DIR / ruta).resolve()
 
-        frontend_resuelto = (
-            FRONTEND_DIR.resolve()
-        )
+        frontend_resuelto = FRONTEND_DIR.resolve()
 
         try:
-            archivo_solicitado.relative_to(
-                frontend_resuelto
-            )
+            archivo_solicitado.relative_to(frontend_resuelto)
         except ValueError as error:
             raise HTTPException(
                 status_code=404,
@@ -114,13 +100,9 @@ if FRONTEND_DIR.is_dir():
             ) from error
 
         if archivo_solicitado.is_file():
-            return FileResponse(
-                archivo_solicitado
-            )
+            return FileResponse(archivo_solicitado)
 
-        return FileResponse(
-            FRONTEND_DIR / "index.html"
-        )
+        return FileResponse(FRONTEND_DIR / "index.html")
 else:
 
     @app.get("/", include_in_schema=False)
@@ -128,9 +110,7 @@ else:
         return {
             "message": "API DentalPro activa",
             "frontend": "No compilado",
-            "instruccion": (
-                "Ejecuta npm run dev o npm run build."
-            ),
+            "instruccion": ("Ejecuta npm run dev o npm run build."),
         }
 
 

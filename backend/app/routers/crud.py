@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -14,7 +14,6 @@ from ..models import (
     PlanPagoDB,
 )
 from ..services import serializar_modelo, validar_disponibilidad
-
 
 router = APIRouter()
 
@@ -44,16 +43,13 @@ def get_all(store: str, db: Session = Depends(get_db)):
         )
 
     registros = db.query(modelo).all()
-    return [
-        serializar_modelo(registro)
-        for registro in registros
-    ]
+    return [serializar_modelo(registro) for registro in registros]
 
 
 @router.post("/api/{store}", tags=["CRUD"])
 def create_record(
     store: str,
-    data: Dict[str, Any],
+    data: dict[str, Any],
     db: Session = Depends(get_db),
 ):
     modelo = MODELOS.get(store)
@@ -64,17 +60,11 @@ def create_record(
         )
 
     if store == "pacientes":
-        cedula_nueva = str(
-            data.get("cedula", "") or ""
-        ).strip()
+        cedula_nueva = str(data.get("cedula", "") or "").strip()
 
-        ficha_nueva = str(
-            data.get("codigo_ficha", "") or ""
-        ).strip()
+        ficha_nueva = str(data.get("codigo_ficha", "") or "").strip()
 
-        nombre = str(
-            data.get("nombre", "") or ""
-        ).strip()
+        nombre = str(data.get("nombre", "") or "").strip()
 
         if not nombre:
             raise HTTPException(
@@ -82,32 +72,27 @@ def create_record(
                 detail="El nombre del paciente es obligatorio.",
             )
 
-        if cedula_nueva and db.query(PacienteDB).filter(
-            PacienteDB.cedula == cedula_nueva
-        ).first():
+        if (
+            cedula_nueva
+            and db.query(PacienteDB).filter(PacienteDB.cedula == cedula_nueva).first()
+        ):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"El DNI/Cédula '{cedula_nueva}' "
-                    "ya está registrado."
-                ),
+                detail=(f"El DNI/Cédula '{cedula_nueva}' ya está registrado."),
             )
 
-        if ficha_nueva and db.query(PacienteDB).filter(
-            PacienteDB.codigo_ficha == ficha_nueva
-        ).first():
+        if (
+            ficha_nueva
+            and db.query(PacienteDB)
+            .filter(PacienteDB.codigo_ficha == ficha_nueva)
+            .first()
+        ):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"El código de ficha '{ficha_nueva}' "
-                    "ya existe."
-                ),
+                detail=(f"El código de ficha '{ficha_nueva}' ya existe."),
             )
 
-    columnas_validas = {
-        columna.name
-        for columna in modelo.__table__.columns
-    }
+    columnas_validas = {columna.name for columna in modelo.__table__.columns}
 
     datos_filtrados = {
         clave: valor
@@ -134,7 +119,7 @@ def create_record(
 def update_record(
     store: str,
     item_id: int,
-    data: Dict[str, Any],
+    data: dict[str, Any],
     db: Session = Depends(get_db),
 ):
     modelo = MODELOS.get(store)
@@ -148,16 +133,11 @@ def update_record(
         raise HTTPException(
             status_code=405,
             detail=(
-                "El historial financiero es inmutable. "
-                "Usa una anulación o devolución."
+                "El historial financiero es inmutable. Usa una anulación o devolución."
             ),
         )
 
-    registro = (
-        db.query(modelo)
-        .filter(modelo.id == item_id)
-        .first()
-    )
+    registro = db.query(modelo).filter(modelo.id == item_id).first()
 
     if not registro:
         raise HTTPException(
@@ -166,9 +146,7 @@ def update_record(
         )
 
     if store == "pacientes":
-        cedula_nueva = str(
-            data.get("cedula", registro.cedula) or ""
-        ).strip()
+        cedula_nueva = str(data.get("cedula", registro.cedula) or "").strip()
 
         ficha_nueva = str(
             data.get(
@@ -178,38 +156,38 @@ def update_record(
             or ""
         ).strip()
 
-        if cedula_nueva and db.query(PacienteDB).filter(
-            PacienteDB.cedula == cedula_nueva,
-            PacienteDB.id != item_id,
-        ).first():
+        if (
+            cedula_nueva
+            and db.query(PacienteDB)
+            .filter(
+                PacienteDB.cedula == cedula_nueva,
+                PacienteDB.id != item_id,
+            )
+            .first()
+        ):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"El DNI '{cedula_nueva}' "
-                    "ya pertenece a otro paciente."
-                ),
+                detail=(f"El DNI '{cedula_nueva}' ya pertenece a otro paciente."),
             )
 
-        if ficha_nueva and db.query(PacienteDB).filter(
-            PacienteDB.codigo_ficha == ficha_nueva,
-            PacienteDB.id != item_id,
-        ).first():
+        if (
+            ficha_nueva
+            and db.query(PacienteDB)
+            .filter(
+                PacienteDB.codigo_ficha == ficha_nueva,
+                PacienteDB.id != item_id,
+            )
+            .first()
+        ):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"La ficha '{ficha_nueva}' "
-                    "ya pertenece a otro paciente."
-                ),
+                detail=(f"La ficha '{ficha_nueva}' ya pertenece a otro paciente."),
             )
 
     if store == "citas":
-        fecha = str(
-            data.get("fecha", registro.fecha) or ""
-        )
+        fecha = str(data.get("fecha", registro.fecha) or "")
 
-        hora = str(
-            data.get("hora", registro.hora) or ""
-        )
+        hora = str(data.get("hora", registro.hora) or "")
 
         hora_fin = data.get(
             "horaFin",
@@ -232,25 +210,20 @@ def update_record(
             or "pendiente"
         )
 
-        hora_fin_resuelta, duracion_resuelta = (
-            validar_disponibilidad(
-                db,
-                fecha,
-                hora,
-                hora_fin,
-                duracion,
-                estado,
-                cita_excluida_id=item_id,
-            )
+        hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
+            db,
+            fecha,
+            hora,
+            hora_fin,
+            duracion,
+            estado,
+            cita_excluida_id=item_id,
         )
 
         data["horaFin"] = hora_fin_resuelta
         data["duracionMinutos"] = duracion_resuelta
 
-    columnas_validas = {
-        columna.name
-        for columna in modelo.__table__.columns
-    }
+    columnas_validas = {columna.name for columna in modelo.__table__.columns}
 
     for clave, valor in data.items():
         if clave in columnas_validas and clave != "id":
@@ -288,16 +261,11 @@ def delete_record(
         raise HTTPException(
             status_code=405,
             detail=(
-                "El historial financiero es inmutable. "
-                "Usa una anulación o devolución."
+                "El historial financiero es inmutable. Usa una anulación o devolución."
             ),
         )
 
-    registro = (
-        db.query(modelo)
-        .filter(modelo.id == item_id)
-        .first()
-    )
+    registro = db.query(modelo).filter(modelo.id == item_id).first()
 
     if not registro:
         raise HTTPException(
@@ -308,24 +276,16 @@ def delete_record(
     if store == "pacientes":
         tiene_historial = any(
             [
-                db.query(CitaDB).filter(
-                    CitaDB.pacienteId == item_id
-                ).first(),
-                db.query(PagoDB).filter(
-                    PagoDB.pacienteId == item_id
-                ).first(),
-                db.query(PlanDB).filter(
-                    PlanDB.pacienteId == item_id
-                ).first(),
-                db.query(PlanPagoDB).filter(
-                    PlanPagoDB.pacienteId == item_id
-                ).first(),
-                db.query(MovimientoCuentaDB).filter(
-                    MovimientoCuentaDB.pacienteId == item_id
-                ).first(),
-                db.query(DocumentoPacienteDB).filter(
-                    DocumentoPacienteDB.pacienteId == item_id
-                ).first(),
+                db.query(CitaDB).filter(CitaDB.pacienteId == item_id).first(),
+                db.query(PagoDB).filter(PagoDB.pacienteId == item_id).first(),
+                db.query(PlanDB).filter(PlanDB.pacienteId == item_id).first(),
+                db.query(PlanPagoDB).filter(PlanPagoDB.pacienteId == item_id).first(),
+                db.query(MovimientoCuentaDB)
+                .filter(MovimientoCuentaDB.pacienteId == item_id)
+                .first(),
+                db.query(DocumentoPacienteDB)
+                .filter(DocumentoPacienteDB.pacienteId == item_id)
+                .first(),
             ]
         )
 
@@ -340,15 +300,13 @@ def delete_record(
                 ),
             )
 
-    if store == "pagos" and db.query(PlanPagoDB).filter(
-        PlanPagoDB.pagoId == item_id
-    ).first():
+    if (
+        store == "pagos"
+        and db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == item_id).first()
+    ):
         raise HTTPException(
             status_code=409,
-            detail=(
-                "No puedes eliminar un pago vinculado "
-                "a un plan de cuotas."
-            ),
+            detail=("No puedes eliminar un pago vinculado a un plan de cuotas."),
         )
 
     try:

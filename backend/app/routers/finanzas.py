@@ -19,7 +19,6 @@ from ..services import (
     registrar_pago,
 )
 
-
 router = APIRouter(tags=["Finanzas"])
 
 

@@ -2,7 +2,6 @@ from fastapi import APIRouter, Request
 
 from ..config import DB_PATH
 
-
 router = APIRouter()
 
 

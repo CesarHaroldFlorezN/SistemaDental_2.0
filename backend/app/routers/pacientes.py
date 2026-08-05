@@ -15,7 +15,6 @@ from ..database import get_db
 from ..models import PacienteDB
 from ..services import limpiar_valor_csv
 
-
 router = APIRouter()
 
 
@@ -26,11 +25,7 @@ router = APIRouter()
 def exportar_pacientes(
     db: Session = Depends(get_db),
 ):
-    pacientes = (
-        db.query(PacienteDB)
-        .order_by(PacienteDB.nombre)
-        .all()
-    )
+    pacientes = db.query(PacienteDB).order_by(PacienteDB.nombre).all()
 
     output = io.StringIO()
     output.write("\ufeff")
@@ -78,10 +73,7 @@ def exportar_pacientes(
         iter([output.getvalue()]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                "attachment; "
-                "filename=pacientes_respaldo.csv"
-            )
+            "Content-Disposition": ("attachment; filename=pacientes_respaldo.csv")
         },
     )
 
@@ -94,9 +86,7 @@ async def importar_pacientes(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    nombre_archivo = (
-        file.filename or ""
-    ).lower()
+    nombre_archivo = (file.filename or "").lower()
 
     if not nombre_archivo.endswith(".csv"):
         raise HTTPException(
@@ -125,16 +115,10 @@ async def importar_pacientes(
         delimiter=",",
     )
 
-    if (
-        not lector.fieldnames
-        or "nombre" not in lector.fieldnames
-    ):
+    if not lector.fieldnames or "nombre" not in lector.fieldnames:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "El CSV debe contener al menos "
-                "la columna 'nombre'."
-            ),
+            detail=("El CSV debe contener al menos la columna 'nombre'."),
         )
 
     nuevos = 0
@@ -161,29 +145,19 @@ async def importar_pacientes(
 
             if cedula:
                 paciente = (
-                    db.query(PacienteDB)
-                    .filter(
-                        PacienteDB.cedula == cedula
-                    )
-                    .first()
+                    db.query(PacienteDB).filter(PacienteDB.cedula == cedula).first()
                 )
 
             if not paciente and ficha:
                 paciente = (
                     db.query(PacienteDB)
-                    .filter(
-                        PacienteDB.codigo_ficha == ficha
-                    )
+                    .filter(PacienteDB.codigo_ficha == ficha)
                     .first()
                 )
 
             if paciente:
                 for clave, valor in datos.items():
-                    if (
-                        hasattr(paciente, clave)
-                        and clave != "id"
-                        and valor
-                    ):
+                    if hasattr(paciente, clave) and clave != "id" and valor:
                         setattr(
                             paciente,
                             clave,
@@ -193,23 +167,16 @@ async def importar_pacientes(
                 actualizados += 1
             else:
                 columnas_validas = {
-                    columna.name
-                    for columna
-                    in PacienteDB.__table__.columns
+                    columna.name for columna in PacienteDB.__table__.columns
                 }
 
                 datos_validos = {
                     clave: valor
                     for clave, valor in datos.items()
-                    if (
-                        clave in columnas_validas
-                        and clave != "id"
-                    )
+                    if (clave in columnas_validas and clave != "id")
                 }
 
-                db.add(
-                    PacienteDB(**datos_validos)
-                )
+                db.add(PacienteDB(**datos_validos))
                 nuevos += 1
 
         db.commit()
@@ -217,10 +184,7 @@ async def importar_pacientes(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail=(
-                "No se pudo importar el archivo. "
-                "Revisa duplicados y columnas."
-            ),
+            detail=("No se pudo importar el archivo. Revisa duplicados y columnas."),
         ) from error
 
     return {

@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import or_
@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from ..models import CitaDB, PacienteDB, PlanDB
 from ..schemas import CitaPagoPayload
-
 
 ESTADOS_QUE_BLOQUEAN_HORARIO = {
     "pendiente",
@@ -46,10 +45,7 @@ TRANSICIONES_ESTADO = {
 
 def convertir_hora_a_minutos(hora: str) -> int:
     try:
-        horas, minutos = [
-            int(parte)
-            for parte in hora.split(":", 1)
-        ]
+        horas, minutos = [int(parte) for parte in hora.split(":", 1)]
     except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=422,
@@ -67,20 +63,17 @@ def convertir_hora_a_minutos(hora: str) -> int:
 
 def minutos_a_hora(total_minutos: int) -> str:
     total_minutos = int(total_minutos) % (24 * 60)
-    return (
-        f"{total_minutos // 60:02d}:"
-        f"{total_minutos % 60:02d}"
-    )
+    return f"{total_minutos // 60:02d}:{total_minutos % 60:02d}"
 
 
 def resolver_rango_horario(
     fecha: str,
     hora_inicio: str,
-    hora_fin: Optional[str],
+    hora_fin: str | None,
     duracion_minutos: int,
 ) -> tuple[int, int, str, int]:
     try:
-        datetime.strptime(fecha, "%Y-%m-%d")
+        datetime.strptime(fecha, "%Y-%m-%d").replace(tzinfo=UTC)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
@@ -100,10 +93,7 @@ def resolver_rango_horario(
     if duracion < 5:
         raise HTTPException(
             status_code=422,
-            detail=(
-                "La hora final debe ser posterior "
-                "a la hora de inicio."
-            ),
+            detail=("La hora final debe ser posterior a la hora de inicio."),
         )
 
     if duracion > 720 or fin_min > 24 * 60:
@@ -122,11 +112,7 @@ def obtener_paciente(
     db: Session,
     paciente_id: int,
 ) -> PacienteDB:
-    paciente = (
-        db.query(PacienteDB)
-        .filter(PacienteDB.id == paciente_id)
-        .first()
-    )
+    paciente = db.query(PacienteDB).filter(PacienteDB.id == paciente_id).first()
 
     if not paciente:
         raise HTTPException(
@@ -139,17 +125,13 @@ def obtener_paciente(
 
 def validar_plan(
     db: Session,
-    plan_id: Optional[int],
+    plan_id: int | None,
     paciente_id: int,
 ) -> None:
     if not plan_id:
         return
 
-    plan = (
-        db.query(PlanDB)
-        .filter(PlanDB.id == plan_id)
-        .first()
-    )
+    plan = db.query(PlanDB).filter(PlanDB.id == plan_id).first()
 
     if not plan:
         raise HTTPException(
@@ -160,10 +142,7 @@ def validar_plan(
     if int(plan.pacienteId or 0) != int(paciente_id):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "El plan de tratamiento no pertenece "
-                "al paciente seleccionado."
-            ),
+            detail=("El plan de tratamiento no pertenece al paciente seleccionado."),
         )
 
 
@@ -171,19 +150,17 @@ def validar_disponibilidad(
     db: Session,
     fecha: str,
     hora: str,
-    hora_fin: Optional[str],
+    hora_fin: str | None,
     duracion_minutos: int,
     estado: str,
-    cita_excluida_id: Optional[int] = None,
+    cita_excluida_id: int | None = None,
 ) -> tuple[str, int]:
     """Impide cruces parciales o totales entre citas activas."""
-    inicio, fin, hora_fin_resuelta, duracion_resuelta = (
-        resolver_rango_horario(
-            fecha,
-            hora,
-            hora_fin,
-            duracion_minutos,
-        )
+    inicio, fin, hora_fin_resuelta, duracion_resuelta = resolver_rango_horario(
+        fecha,
+        hora,
+        hora_fin,
+        duracion_minutos,
     )
 
     if estado not in ESTADOS_QUE_BLOQUEAN_HORARIO:
@@ -195,54 +172,30 @@ def validar_disponibilidad(
     )
 
     if cita_excluida_id:
-        consulta = consulta.filter(
-            CitaDB.id != cita_excluida_id
-        )
+        consulta = consulta.filter(CitaDB.id != cita_excluida_id)
 
     for conflicto in consulta.all():
-        inicio_existente = convertir_hora_a_minutos(
-            conflicto.hora or "00:00"
-        )
-        duracion_existente = int(
-            conflicto.duracionMinutos or 60
-        )
+        inicio_existente = convertir_hora_a_minutos(conflicto.hora or "00:00")
+        duracion_existente = int(conflicto.duracionMinutos or 60)
 
         try:
             if conflicto.horaFin:
-                fin_existente = convertir_hora_a_minutos(
-                    conflicto.horaFin
-                )
+                fin_existente = convertir_hora_a_minutos(conflicto.horaFin)
             else:
-                fin_existente = (
-                    inicio_existente + duracion_existente
-                )
+                fin_existente = inicio_existente + duracion_existente
         except HTTPException:
-            fin_existente = (
-                inicio_existente + duracion_existente
-            )
+            fin_existente = inicio_existente + duracion_existente
 
-        hay_cruce = (
-            inicio < fin_existente
-            and fin > inicio_existente
-        )
+        hay_cruce = inicio < fin_existente and fin > inicio_existente
 
         if not hay_cruce:
             continue
 
         paciente = (
-            db.query(PacienteDB)
-            .filter(PacienteDB.id == conflicto.pacienteId)
-            .first()
+            db.query(PacienteDB).filter(PacienteDB.id == conflicto.pacienteId).first()
         )
-        nombre = (
-            paciente.nombre
-            if paciente
-            else "otro paciente"
-        )
-        hora_fin_existente = (
-            conflicto.horaFin
-            or minutos_a_hora(fin_existente)
-        )
+        nombre = paciente.nombre if paciente else "otro paciente"
+        hora_fin_existente = conflicto.horaFin or minutos_a_hora(fin_existente)
 
         raise HTTPException(
             status_code=409,
@@ -282,11 +235,7 @@ def validar_secuencia_sesion(
     )
 
     anterior = next(
-        (
-            item
-            for item in grupo
-            if int(item.sesionNum or 1) == sesion_num - 1
-        ),
+        (item for item in grupo if int(item.sesionNum or 1) == sesion_num - 1),
         None,
     )
 
@@ -303,7 +252,7 @@ def validar_secuencia_sesion(
 
 def normalizar_servicios(
     payload: CitaPagoPayload,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     servicios = []
 
     for servicio in payload.servicios:
@@ -342,17 +291,11 @@ def normalizar_servicios(
             for servicio in servicios
         ]
 
-    procedimiento = " + ".join(
-        servicio["nombre"]
-        for servicio in servicios
-    )
+    procedimiento = " + ".join(servicio["nombre"] for servicio in servicios)
     procedimiento = procedimiento[:200]
 
     costo_total = round(
-        sum(
-            servicio["costo"]
-            for servicio in servicios
-        ),
+        sum(servicio["costo"] for servicio in servicios),
         2,
     )
 
@@ -365,8 +308,8 @@ def normalizar_servicios(
 
 def calcular_datos_pago(
     payload: CitaPagoPayload,
-    costo_total: Optional[float] = None,
-) -> Dict[str, Any]:
+    costo_total: float | None = None,
+) -> dict[str, Any]:
     tipo_pago = payload.tipoPago
 
     if tipo_pago in {"cortesia", "sesion"}:
@@ -374,11 +317,7 @@ def calcular_datos_pago(
         cobrado = 0.0
     else:
         total = round(
-            float(
-                payload.costo
-                if costo_total is None
-                else costo_total
-            ),
+            float(payload.costo if costo_total is None else costo_total),
             2,
         )
 
@@ -395,20 +334,14 @@ def calcular_datos_pago(
     if cobrado > total:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "El monto pagado no puede superar "
-                "el costo total."
-            ),
+            detail=("El monto pagado no puede superar el costo total."),
         )
 
     if tipo_pago == "anticipo":
         if total <= 0:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    "Una cita con anticipo debe tener "
-                    "un costo mayor que cero."
-                ),
+                detail=("Una cita con anticipo debe tener un costo mayor que cero."),
             )
 
         if cobrado <= 0:
@@ -430,10 +363,7 @@ def calcular_datos_pago(
     if tipo_pago == "cuotas" and total <= 0:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Una cita en cuotas debe tener "
-                "un costo mayor que cero."
-            ),
+            detail=("Una cita en cuotas debe tener un costo mayor que cero."),
         )
 
     saldo = round(total - cobrado, 2)
