@@ -224,6 +224,33 @@ def test_crud_de_recursos_financieros() -> None:
     assert respuesta_pago_manual.status_code == 200
     pago_manual_id = respuesta_pago_manual.json()["id"]
 
+    respuesta_movimiento_manual = client.post(
+        "/api/movimientosCuenta",
+        json={
+            "pacienteId": paciente_id,
+            "pagoId": pago_manual_id,
+            "tipo": "pago",
+            "descripcion": "Movimiento financiero directo",
+            "cargo": 0,
+            "abono": 50,
+            "fecha": "2036-07-20",
+            "metodo": "Efectivo",
+            "referencia": "MOVIMIENTO-003",
+            "usuario": "Pruebas",
+        },
+    )
+
+    assert respuesta_movimiento_manual.status_code == 200
+    movimiento_manual_id = respuesta_movimiento_manual.json()["id"]
+
+    respuesta_listar_movimientos = client.get("/api/movimientosCuenta")
+
+    assert respuesta_listar_movimientos.status_code == 200
+    assert any(
+        movimiento["id"] == movimiento_manual_id
+        for movimiento in respuesta_listar_movimientos.json()
+    )
+
     respuesta_plan = client.post(
         "/api/planes",
         json={
@@ -303,4 +330,6 @@ def test_crud_de_recursos_financieros() -> None:
 
     assert client.delete(f"/api/operaciones/citas/{cita_id}").status_code == 200
 
-    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
+    respuesta_eliminar_paciente = client.delete(f"/api/pacientes/{paciente_id}")
+
+    assert respuesta_eliminar_paciente.status_code == 409
