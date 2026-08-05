@@ -184,3 +184,126 @@ def test_reprogramar_cita_activa() -> None:
     assert client.delete(
         f"/api/pacientes/{paciente_id}"
     ).status_code == 200
+
+def test_actualizar_cita_y_pago() -> None:
+    paciente_id = crear_paciente("004")
+
+    respuesta_crear = client.post(
+        "/api/operaciones/citas",
+        json=datos_cita(
+            paciente_id=paciente_id,
+            hora="08:00",
+            hora_fin="09:00",
+        ),
+    )
+
+    assert respuesta_crear.status_code == 200
+    cita_id = respuesta_crear.json()["cita"]["id"]
+
+    datos_actualizados = datos_cita(
+        paciente_id=paciente_id,
+        hora="09:00",
+        hora_fin="10:00",
+    )
+    datos_actualizados.update(
+        {
+            "fecha": "2035-06-17",
+            "procedimiento": "Resina dental",
+            "servicios": [
+                {
+                    "nombre": "Resina dental",
+                    "costo": 150,
+                }
+            ],
+            "costo": 150,
+            "notas": "Cita actualizada durante las pruebas",
+        }
+    )
+
+    respuesta_actualizar = client.put(
+        f"/api/operaciones/citas/{cita_id}",
+        json=datos_actualizados,
+    )
+
+    assert respuesta_actualizar.status_code == 200
+
+    resultado = respuesta_actualizar.json()
+    cita = resultado["cita"]
+    pago = resultado["pago"]
+
+    assert cita["fecha"] == "2035-06-17"
+    assert cita["hora"] == "09:00"
+    assert cita["horaFin"] == "10:00"
+    assert cita["procedimiento"] == "Resina dental"
+    assert cita["costo"] == 150
+
+    assert pago["total"] == 150
+    assert pago["cobrado"] == 0
+    assert pago["saldo"] == 150
+
+    assert client.delete(
+        f"/api/operaciones/citas/{cita_id}"
+    ).status_code == 200
+
+    assert client.delete(
+        f"/api/pacientes/{paciente_id}"
+    ).status_code == 200
+
+
+def test_cambiar_estados_de_cita() -> None:
+    paciente_id = crear_paciente("005")
+
+    respuesta_crear = client.post(
+        "/api/operaciones/citas",
+        json=datos_cita(
+            paciente_id=paciente_id,
+            hora="17:00",
+            hora_fin="18:00",
+        ),
+    )
+
+    assert respuesta_crear.status_code == 200
+    cita_id = respuesta_crear.json()["cita"]["id"]
+
+    respuesta_confirmar = client.patch(
+        f"/api/operaciones/citas/{cita_id}/estado",
+        json={"estado": "confirmada"},
+    )
+
+    assert respuesta_confirmar.status_code == 200
+    assert (
+        respuesta_confirmar.json()["cita"]["estado"]
+        == "confirmada"
+    )
+
+    respuesta_atender = client.patch(
+        f"/api/operaciones/citas/{cita_id}/estado",
+        json={"estado": "en_atencion"},
+    )
+
+    assert respuesta_atender.status_code == 200
+    assert (
+        respuesta_atender.json()["cita"]["estado"]
+        == "en_atencion"
+    )
+    assert respuesta_atender.json()["cita"]["inicio"]
+
+    respuesta_completar = client.patch(
+        f"/api/operaciones/citas/{cita_id}/estado",
+        json={"estado": "completada"},
+    )
+
+    assert respuesta_completar.status_code == 200
+    assert (
+        respuesta_completar.json()["cita"]["estado"]
+        == "completada"
+    )
+    assert respuesta_completar.json()["cita"]["fin"]
+
+    assert client.delete(
+        f"/api/operaciones/citas/{cita_id}"
+    ).status_code == 200
+
+    assert client.delete(
+        f"/api/pacientes/{paciente_id}"
+    ).status_code == 200
