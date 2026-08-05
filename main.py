@@ -14,12 +14,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, Column, Float, Integer, String, Text, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.app.config import DATA_DIR, DB_PATH
 from backend.app.database import Base, engine, get_db
 
+from backend.app.models import (
+    CitaDB,
+    DocumentoPacienteDB,
+    MovimientoCuentaDB,
+    PacienteDB,
+    PagoDB,
+    PlanDB,
+    PlanPagoDB,
+)
 
 # =====================================================
 # RUTAS DEL PROYECTO
@@ -35,138 +44,6 @@ else:
 # =====================================================
 # MODELOS SQLALCHEMY
 # =====================================================
-
-class PacienteDB(Base):
-    __tablename__ = "pacientes"
-
-    id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(100), nullable=False)
-    cedula = Column(String(50), index=True)
-    fechaNacimiento = Column(String(50))
-    genero = Column(String(50))
-    telefono = Column(String(50))
-    correo = Column(String(100))
-    codigo_ficha = Column(String(50), index=True)
-    direccion = Column(String(200))
-    alergias = Column(Text)
-    medicamentos = Column(Text)
-    fechaReg = Column(String(50))
-
-
-class CitaDB(Base):
-    __tablename__ = "citas"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pacienteId = Column(Integer, index=True)
-    planId = Column(Integer, nullable=True)
-    citaBaseId = Column(Integer, nullable=True)
-    fecha = Column(String(50), index=True)
-    hora = Column(String(50), index=True)
-    horaFin = Column(String(50), index=True)
-    duracionMinutos = Column(Integer)
-    procedimiento = Column(String(200))
-    servicios = Column(JSON)
-    notas = Column(Text)
-    notasFin = Column(Text)
-    costo = Column(Float)
-    tipoPago = Column(String(50))
-    estado = Column(String(50), index=True)
-    sesionNum = Column(Integer)
-    totalSesiones = Column(Integer)
-    creadaEn = Column(String(50))
-    inicio = Column(String(50))
-    fin = Column(String(50))
-    motivoCancelacion = Column(Text)
-    canceladaEn = Column(String(50))
-
-
-class PagoDB(Base):
-    __tablename__ = "pagos"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pacienteId = Column(Integer, index=True)
-    citaId = Column(Integer, index=True)
-    concepto = Column(String(200))
-    fecha = Column(String(50))
-    total = Column(Float)
-    cobrado = Column(Float)
-    saldo = Column(Float)
-    metodo = Column(String(50))
-    tipoPago = Column(String(50))
-    cuotas = Column(JSON)
-    creadoEn = Column(String(50))
-    fechaUltPago = Column(String(50))
-    nota = Column(Text)
-    devuelto = Column(Float)
-    creditoFavor = Column(Float)
-
-
-class PlanDB(Base):
-    __tablename__ = "planes"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pacienteId = Column(Integer, index=True)
-    nombre = Column(String(150))
-    tipo = Column(String(100))
-    duracion = Column(String(50))
-    costo = Column(Float)
-    nSesiones = Column(Integer)
-    descripcion = Column(Text)
-    estado = Column(String(50))
-    creadoEn = Column(String(50))
-
-
-class PlanPagoDB(Base):
-    __tablename__ = "planPagos"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pacienteId = Column(Integer, index=True)
-    pagoId = Column(Integer, index=True)
-    citaId = Column(Integer, index=True)
-    concepto = Column(String(200))
-    totalAcordado = Column(Float)
-    anticipo = Column(Float)
-    metodoPreferido = Column(String(50))
-    estado = Column(String(50))
-    cuotas = Column(JSON)
-    totalCuotas = Column(Float)
-    cobrado = Column(Float)
-    saldo = Column(Float)
-    fechaCreacion = Column(String(50))
-    creadoEn = Column(String(50))
-
-
-# DENTALPRO_V8_AUDITORIA: movimientos inmutables de la cuenta del paciente.
-class MovimientoCuentaDB(Base):
-    __tablename__ = "movimientosCuenta"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pacienteId = Column(Integer, index=True)
-    citaId = Column(Integer, nullable=True, index=True)
-    pagoId = Column(Integer, nullable=True, index=True)
-    tipo = Column(String(50), index=True)
-    descripcion = Column(String(250))
-    cargo = Column(Float, default=0)
-    abono = Column(Float, default=0)
-    fecha = Column(String(50), index=True)
-    metodo = Column(String(100))
-    referencia = Column(String(150))
-    motivo = Column(Text)
-    usuario = Column(String(100))
-    creadoEn = Column(String(50))
-
-
-class DocumentoPacienteDB(Base):
-    __tablename__ = "documentosPaciente"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pacienteId = Column(Integer, index=True)
-    nombre = Column(String(250))
-    tipo = Column(String(100))
-    ruta = Column(String(500))
-    descripcion = Column(Text)
-    fecha = Column(String(50))
-    creadoEn = Column(String(50))
 
 
 Base.metadata.create_all(bind=engine)
