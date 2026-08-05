@@ -15,7 +15,7 @@ export default function CancelarCitaModalV8({ isOpen, onClose, onSave, cita, pag
     setOpcion(Number(pago?.cobrado || 0) > 0 ? 'retener' : 'sin_pago');
     setError('');
     setGuardando(false);
-  }, [isOpen, cita?.id, pago?.id]);
+ }, [isOpen, cita?.id, pago?.id, pago?.cobrado]);
 
   if (!isOpen || !cita) return null;
   const cobrado = Math.max(0, Number(pago?.cobrado || 0));

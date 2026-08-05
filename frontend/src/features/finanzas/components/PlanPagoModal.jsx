@@ -58,7 +58,7 @@ export default function PlanPagoModal({ isOpen, onClose, onSave, pacientes = [] 
       });
     }
     setCuotasPreview(lista);
-  }, [formData]);
+}, [formData, hoyStr]);
 
   if (!isOpen) return null;
 
