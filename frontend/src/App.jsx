@@ -14,16 +14,11 @@ import {
   AlertTriangle,
   CreditCard,
   DollarSign,
-  Download,
-  Edit,
   FolderPlus,
   PlusCircle,
   Search,
-  Trash2,
   TrendingUp,
-  Undo2,
-  Upload,
-  UserPlus
+  Undo2
 } from 'lucide-react';
 
 import Swal from 'sweetalert2';
@@ -35,6 +30,10 @@ const Dashboard = lazy(
   () => import('./features/dashboard/components/Dashboard')
 );
 
+
+const PacientesPage = lazy(
+  () => import('./features/pacientes/components/PacientesPage')
+);
 
 const obtenerFechaLocal = (fecha = new Date()) => {
   const year = fecha.getFullYear();
@@ -1063,53 +1062,30 @@ export default function App() {
           {/* ==============================================
               PANTALLA 1: PACIENTES
           =============================================== */}
-          {vistaActiva === 'pacientes' && (
-            <div>
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                  <h1 className="text-3xl font-bold text-cyan-400">Gestión de Pacientes</h1>
-                  <p className="text-sm text-slate-400 mt-1">Directorio clínico y expedientes</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="hidden lg:inline-block bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-4 py-1.5 rounded-full text-sm font-semibold mr-2">{pacientesFiltrados.length} Registros</span>
-                  <button onClick={() => api.exportarPacientes()} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition flex items-center gap-2 text-sm shadow-md cursor-pointer"><Download size={18} /><span className="hidden sm:inline">Exportar CSV</span></button>
-                  <label className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition flex items-center gap-2 text-sm shadow-md cursor-pointer"><Upload size={18} /><span className="hidden sm:inline">Importar CSV</span><input type="file" accept=".csv" className="hidden" onChange={handleImportarCSV} /></label>
-                  <button onClick={handleNuevoPaciente} className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2 rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-cyan-600/20 transition cursor-pointer"><UserPlus size={18} />Nuevo Paciente</button>
-                </div>
-              </div>
-              <div className="relative mb-6">
-                <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
-                <input type="text" placeholder="Buscar por ficha, nombre, DNI, teléfono o correo..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
-              </div>
-              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-700 bg-slate-800 text-slate-400 text-xs uppercase tracking-wider">
-                      <th className="p-4">Ficha</th><th className="p-4">Paciente</th><th className="p-4">DNI</th><th className="p-4">Teléfono</th><th className="p-4 text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/50 text-sm">
-                    {pacientesFiltrados.length > 0 ? (
-                      pacientesFiltrados.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-700/40 transition">
-                          <td className="p-4 font-bold text-cyan-400"><span className="bg-cyan-500/10 px-2.5 py-1 rounded-md border border-cyan-500/20">{p.codigo_ficha || 'N/A'}</span></td>
-                          <td className="p-4 font-medium text-white">{p.nombre}</td>
-                          <td className="p-4 text-slate-300">{p.cedula || '—'}</td>
-                          <td className="p-4 text-slate-300">{p.telefono || '—'}</td>
-                          <td className="p-4 flex justify-center gap-2">
-                            <button onClick={() => handleVerFicha(p)} className="p-2 bg-slate-700/80 rounded-lg hover:bg-cyan-600 hover:text-white transition cursor-pointer" title="Ver Ficha">📋</button>
-                            <button onClick={() => handleEditarPaciente(p)} className="p-2 bg-slate-700/80 rounded-lg hover:bg-amber-600 hover:text-white transition cursor-pointer" title="Editar Paciente"><Edit size={16} /></button>
-                            <button onClick={() => handleEliminar(p.id, p.nombre)} className="p-2 bg-slate-700/80 rounded-lg hover:bg-red-600 hover:text-white transition cursor-pointer" title="Eliminar Paciente"><Trash2 size={16} /></button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (<tr><td colSpan="5" className="p-8 text-center text-slate-400">No se encontraron pacientes.</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
+          {/* ==============================================
+    PANTALLA 1: PACIENTES
+=============================================== */}
+{vistaActiva === 'pacientes' && (
+  <Suspense
+    fallback={
+      <div className="flex min-h-64 items-center justify-center text-slate-500">
+        Cargando pacientes...
+      </div>
+    }
+  >
+    <PacientesPage
+      pacientes={pacientesFiltrados}
+      busqueda={busqueda}
+      onCambiarBusqueda={setBusqueda}
+      onExportar={() => api.exportarPacientes()}
+      onImportar={handleImportarCSV}
+      onNuevo={handleNuevoPaciente}
+      onVerFicha={handleVerFicha}
+      onEditar={handleEditarPaciente}
+      onEliminar={handleEliminar}
+    />
+  </Suspense>
+)}
           {/* ==============================================
               PANTALLA 2: AGENDA CLÍNICA PROFESIONAL
           =============================================== */}
