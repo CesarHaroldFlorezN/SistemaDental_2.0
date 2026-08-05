@@ -10,8 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-
-from backend.app.config import DB_PATH
 from backend.app.database import Base, engine
 
 
@@ -21,6 +19,7 @@ from backend.app.routers import (
     documentos_router,
     finanzas_router,
     pacientes_router,
+    salud_router,
 )
 
 # =====================================================
@@ -87,20 +86,11 @@ app.include_router(citas_router)
 app.include_router(documentos_router)
 app.include_router(finanzas_router)
 app.include_router(pacientes_router)
-
-# =====================================================
-# SALUD DEL SERVIDOR
-# =====================================================
-
-@app.get("/api/salud", tags=["Sistema"])
-def salud():
-    return {
-        "estado": "ok",
-        "base_datos": str(DB_PATH),
-        "version": app.version,
-    }
-
+app.include_router(salud_router)
 app.include_router(crud_router)
+
+
+
 
 # =====================================================
 # FRONTEND REACT
