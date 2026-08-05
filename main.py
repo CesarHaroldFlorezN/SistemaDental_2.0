@@ -37,6 +37,13 @@ from backend.app.schemas import (
     ReprogramarCitaPayload,
 )
 
+
+from backend.app.services import (
+    ahora_iso,
+    limpiar_valor_csv,
+    serializar_modelo,
+)
+
 # =====================================================
 # RUTAS DEL PROYECTO
 # =====================================================
@@ -153,15 +160,10 @@ TRANSICIONES_ESTADO = {
 }
 
 
-def ahora_iso() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def serializar_modelo(registro):
-    return {
-        columna.name: getattr(registro, columna.name)
-        for columna in registro.__table__.columns
-    }
+
+
 
 
 def convertir_hora_a_minutos(hora: str) -> int:
@@ -432,9 +434,6 @@ def calcular_datos_pago(payload: CitaPagoPayload, costo_total: Optional[float] =
         "metodo": metodo,
     }
 
-
-def limpiar_valor_csv(valor: Any) -> str:
-    return str(valor or "").strip()
 
 
 # =====================================================
