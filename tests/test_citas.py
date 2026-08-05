@@ -141,3 +141,46 @@ def test_impedir_cruce_de_horarios() -> None:
     assert client.delete(
         f"/api/pacientes/{paciente_id}"
     ).status_code == 200
+
+
+def test_reprogramar_cita_activa() -> None:
+    paciente_id = crear_paciente("003")
+
+    respuesta_crear = client.post(
+        "/api/operaciones/citas",
+        json=datos_cita(
+            paciente_id=paciente_id,
+            hora="15:00",
+            hora_fin="16:00",
+        ),
+    )
+
+    assert respuesta_crear.status_code == 200
+    cita_id = respuesta_crear.json()["cita"]["id"]
+
+    respuesta_reprogramar = client.patch(
+        f"/api/operaciones/citas/{cita_id}/reprogramar",
+        json={
+            "fecha": "2035-06-16",
+            "hora": "16:00",
+            "horaFin": "17:00",
+            "duracionMinutos": 60,
+        },
+    )
+
+    assert respuesta_reprogramar.status_code == 200
+
+    cita = respuesta_reprogramar.json()["cita"]
+
+    assert cita["fecha"] == "2035-06-16"
+    assert cita["hora"] == "16:00"
+    assert cita["horaFin"] == "17:00"
+    assert cita["duracionMinutos"] == 60
+
+    assert client.delete(
+        f"/api/operaciones/citas/{cita_id}"
+    ).status_code == 200
+
+    assert client.delete(
+        f"/api/pacientes/{paciente_id}"
+    ).status_code == 200

@@ -40,6 +40,9 @@ from backend.app.schemas import (
 
 from backend.app.services import (
     TRANSICIONES_ESTADO,
+    ESTADOS_QUE_BLOQUEAN_HORARIO,
+    convertir_hora_a_minutos,
+    minutos_a_hora,
     ahora_iso,
     calcular_datos_pago,
     limpiar_valor_csv,
