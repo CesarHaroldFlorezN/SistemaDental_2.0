@@ -7,6 +7,15 @@ from .citas import (
     validar_plan,
     validar_secuencia_sesion,
 )
+
+from .finanzas import (
+    anular_pago,
+    construir_cuenta_paciente,
+    devolver_pago,
+    registrar_pago,
+)
+
+
 from .comun import (
     ahora_iso,
     limpiar_valor_csv,
@@ -25,4 +34,8 @@ __all__ = [
     "validar_disponibilidad",
     "validar_plan",
     "validar_secuencia_sesion",
+    "anular_pago",
+    "construir_cuenta_paciente",
+    "devolver_pago",
+    "registrar_pago",
 ]
