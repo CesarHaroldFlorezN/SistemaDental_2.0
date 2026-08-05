@@ -280,7 +280,7 @@ def test_cambiar_estados_de_cita() -> None:
     assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
 
 
-def test_actualizar_cita_desde_crud_general() -> None:
+def test_listar_y_actualizar_cita_desde_ruta_directa() -> None:
     paciente_id = crear_paciente("006")
 
     respuesta_crear = client.post(
@@ -295,6 +295,10 @@ def test_actualizar_cita_desde_crud_general() -> None:
     assert respuesta_crear.status_code == 200
     cita_id = respuesta_crear.json()["cita"]["id"]
 
+    respuesta_listar = client.get("/api/citas")
+
+    assert respuesta_listar.status_code == 200
+    assert any(cita["id"] == cita_id for cita in respuesta_listar.json())
     respuesta_actualizar = client.put(
         f"/api/citas/{cita_id}",
         json={

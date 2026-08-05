@@ -1,11 +1,6 @@
 """Rutas de agenda y operaciones clínicas."""
 
-from fastapi import APIRouter
-
-router = APIRouter(
-    prefix="/api",
-    tags=["Citas"],
-)
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -34,10 +29,92 @@ from ..services import (
 
 router = APIRouter()
 
-
 # =====================================================
 # OPERACIONES TRANSACCIONALES DE CITAS
 # =====================================================
+
+
+@router.get("/api/citas", tags=["Citas"])
+def listar_citas(
+    db: Session = Depends(get_db),
+):
+    citas = db.query(CitaDB).all()
+    return [serializar_modelo(cita) for cita in citas]
+
+
+@router.put(
+    "/api/citas/{cita_id}",
+    tags=["Citas"],
+)
+def actualizar_cita_directa(
+    cita_id: int,
+    data: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    cita = db.query(CitaDB).filter(CitaDB.id == cita_id).first()
+
+    if not cita:
+        raise HTTPException(
+            status_code=404,
+            detail="Cita no encontrada.",
+        )
+
+    fecha = str(data.get("fecha", cita.fecha) or "")
+    hora = str(data.get("hora", cita.hora) or "")
+
+    hora_fin = data.get(
+        "horaFin",
+        cita.horaFin,
+    )
+
+    duracion = int(
+        data.get(
+            "duracionMinutos",
+            cita.duracionMinutos or 60,
+        )
+        or 60
+    )
+
+    estado = str(
+        data.get(
+            "estado",
+            cita.estado,
+        )
+        or "pendiente"
+    )
+
+    hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
+        db,
+        fecha,
+        hora,
+        hora_fin,
+        duracion,
+        estado,
+        cita_excluida_id=cita_id,
+    )
+
+    data["horaFin"] = hora_fin_resuelta
+    data["duracionMinutos"] = duracion_resuelta
+
+    columnas_validas = {columna.name for columna in CitaDB.__table__.columns}
+
+    for clave, valor in data.items():
+        if clave in columnas_validas and clave != "id":
+            setattr(cita, clave, valor)
+
+    try:
+        db.commit()
+        db.refresh(cita)
+        return {
+            "message": "Actualizado correctamente.",
+            "registro": serializar_modelo(cita),
+        }
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo actualizar la cita.",
+        ) from error
 
 
 @router.post("/api/operaciones/citas", tags=["Citas"])
@@ -64,7 +141,10 @@ def crear_cita_con_pago(
     )
 
     detalle_servicios = normalizar_servicios(payload)
-    datos_pago = calcular_datos_pago(payload, detalle_servicios["costo_total"])
+    datos_pago = calcular_datos_pago(
+        payload,
+        detalle_servicios["costo_total"],
+    )
     ahora = ahora_iso()
 
     nueva_cita = CitaDB(
@@ -84,8 +164,8 @@ def crear_cita_con_pago(
         sesionNum=payload.sesionNum,
         totalSesiones=payload.totalSesiones,
         creadaEn=ahora,
-        inicio=ahora if payload.estado == "en_atencion" else None,
-        fin=ahora if payload.estado in {"completada", "no_asistio"} else None,
+        inicio=(ahora if payload.estado == "en_atencion" else None),
+        fin=(ahora if payload.estado in {"completada", "no_asistio"} else None),
     )
 
     try:
@@ -105,7 +185,7 @@ def crear_cita_con_pago(
             cuotas=[],
             creadoEn=ahora,
             fechaUltPago=(payload.fecha if datos_pago["cobrado"] > 0 else None),
-            nota="Pago generado automáticamente desde la cita",
+            nota=("Pago generado automáticamente desde la cita"),
             devuelto=0,
             creditoFavor=0,
         )
@@ -116,7 +196,7 @@ def crear_cita_con_pago(
         db.refresh(nuevo_pago)
 
         return {
-            "message": "Cita y registro financiero creados correctamente.",
+            "message": ("Cita y registro financiero creados correctamente."),
             "cita": serializar_modelo(nueva_cita),
             "pago": serializar_modelo(nuevo_pago),
         }
@@ -127,7 +207,7 @@ def crear_cita_con_pago(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail="No se pudo registrar la cita y su pago.",
+            detail=("No se pudo registrar la cita y su pago."),
         ) from error
 
 

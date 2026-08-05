@@ -5,20 +5,18 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import (
-    CitaDB,
     DocumentoPacienteDB,
     MovimientoCuentaDB,
     PagoDB,
     PlanDB,
     PlanPagoDB,
 )
-from ..services import serializar_modelo, validar_disponibilidad
+from ..services import serializar_modelo
 
 router = APIRouter()
 
 
 MODELOS = {
-    "citas": CitaDB,
     "pagos": PagoDB,
     "planes": PlanDB,
     "planPagos": PlanPagoDB,
@@ -109,45 +107,6 @@ def update_record(
             status_code=404,
             detail="Registro no encontrado.",
         )
-
-    if store == "citas":
-        fecha = str(data.get("fecha", registro.fecha) or "")
-
-        hora = str(data.get("hora", registro.hora) or "")
-
-        hora_fin = data.get(
-            "horaFin",
-            registro.horaFin,
-        )
-
-        duracion = int(
-            data.get(
-                "duracionMinutos",
-                registro.duracionMinutos or 60,
-            )
-            or 60
-        )
-
-        estado = str(
-            data.get(
-                "estado",
-                registro.estado,
-            )
-            or "pendiente"
-        )
-
-        hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
-            db,
-            fecha,
-            hora,
-            hora_fin,
-            duracion,
-            estado,
-            cita_excluida_id=item_id,
-        )
-
-        data["horaFin"] = hora_fin_resuelta
-        data["duracionMinutos"] = duracion_resuelta
 
     columnas_validas = {columna.name for columna in modelo.__table__.columns}
 
