@@ -415,5 +415,3 @@ def eliminar_cita_con_pago(
             status_code=400,
             detail="No se pudo eliminar la cita.",
         ) from error
-
-
