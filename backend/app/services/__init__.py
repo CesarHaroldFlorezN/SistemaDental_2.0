@@ -43,5 +43,5 @@ __all__ = [
     "construir_cuenta_paciente",
     "devolver_pago",
     "registrar_pago",
-    
+
 ]
