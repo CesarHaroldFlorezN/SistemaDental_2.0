@@ -1,16 +1,42 @@
+import os
+import sys
 from pathlib import Path
 
-# Raíz del proyecto SOFTWARE DENTAL 2.0
-ROOT_DIR = Path(__file__).resolve().parents[2]
 
-DATA_DIR = ROOT_DIR / "data"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+IS_FROZEN = bool(getattr(sys, "frozen", False))
+
+if IS_FROZEN:
+    APP_DIR = Path(sys.executable).resolve().parent
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", ROOT_DIR))
+else:
+    APP_DIR = ROOT_DIR
+    BUNDLE_DIR = ROOT_DIR
+
+
+DATA_DIR = Path(
+    os.getenv("DENTALPRO_DATA_DIR", str(APP_DIR / "data"))
+).resolve()
+
+DB_PATH = Path(
+    os.getenv(
+        "DENTALPRO_DB_PATH",
+        str(DATA_DIR / "dentalpro.db"),
+    )
+).resolve()
+
 DOCUMENTOS_DIR = DATA_DIR / "documentos"
-FRONTEND_DIR = ROOT_DIR / "frontend" / "dist"
+
+FRONTEND_DIR = (
+    BUNDLE_DIR / "frontend"
+    if IS_FROZEN
+    else ROOT_DIR / "frontend" / "dist"
+)
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)
 
-DB_PATH = DATA_DIR / "dentalpro.db"
 DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
 
 APP_NAME = "DentalPro"

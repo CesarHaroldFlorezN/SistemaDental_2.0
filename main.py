@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import io
-import os
 import re
 import sys
 from datetime import datetime, timedelta
@@ -15,55 +14,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, Column, Float, Integer, String, Text, create_engine, event, or_
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy import JSON, Column, Float, Integer, String, Text, or_
+from sqlalchemy.orm import Session
+
+from backend.app.config import DATA_DIR, DB_PATH
+from backend.app.database import Base, engine, get_db
 
 
 # =====================================================
-# RUTAS DEL PROYECTO Y BASE DE DATOS
+# RUTAS DEL PROYECTO
 # =====================================================
 
 if getattr(sys, "frozen", False):
-    # En el ejecutable, la base debe persistir junto a SistemaDental.exe.
     APP_DIR = Path(sys.executable).resolve().parent
 else:
     APP_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = Path(
-    os.getenv("DENTALPRO_DATA_DIR", str(APP_DIR / "data"))
-).resolve()
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-DB_PATH = Path(
-    os.getenv("DENTALPRO_DB_PATH", str(DATA_DIR / "dentalpro.db"))
-).resolve()
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,
-        "timeout": 15,
-    },
-)
-
-
-@event.listens_for(engine, "connect")
-def configurar_sqlite(dbapi_connection, _connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys = ON")
-    cursor.execute("PRAGMA busy_timeout = 5000")
-    cursor.close()
-
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-)
-Base = declarative_base()
 
 
 # =====================================================
@@ -248,12 +214,7 @@ app.add_middleware(
 )
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+
 
 
 # =====================================================
