@@ -10,7 +10,6 @@ from .config import ALLOWED_ORIGINS, FRONTEND_DIR
 from .migrations import inicializar_base_datos
 from .routers import (
     citas_router,
-    crud_router,
     documentos_router,
     finanzas_router,
     pacientes_router,
@@ -52,10 +51,6 @@ app.include_router(documentos_router)
 app.include_router(finanzas_router)
 app.include_router(pacientes_router)
 app.include_router(salud_router)
-
-# El CRUD genérico debe registrarse después
-# de las rutas específicas.
-app.include_router(crud_router)
 
 
 # =====================================================
