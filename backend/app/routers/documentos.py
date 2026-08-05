@@ -1,12 +1,5 @@
 """Rutas de documentos clínicos de pacientes."""
 
-from fastapi import APIRouter
-
-router = APIRouter(
-    prefix="/api/pacientes",
-    tags=["Documentos"],
-)
-
 import re
 from datetime import UTC, datetime
 from pathlib import Path
