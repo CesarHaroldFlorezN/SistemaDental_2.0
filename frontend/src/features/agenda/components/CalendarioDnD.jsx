@@ -1,5 +1,11 @@
 // DENTALPRO_V8_2_DRAG_COMPLETO
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Calendar } from 'react-big-calendar';
 
 const minutos = (fecha) => fecha.getHours() * 60 + fecha.getMinutes();
@@ -49,52 +55,102 @@ export default function CalendarioDnD({
   const rangoMinutos = Math.max(step, maxMinutos - minMinutos);
   const EventoOriginal = components.event;
 
-  const obtenerColumnas = () => {
-    const esperadas = view === 'day' ? 1 : 7;
-    const candidatas = Array.from(
-      raizRef.current?.querySelectorAll('.rbc-time-content .rbc-day-slot') || []
-    )
-      .map((elemento) => ({ elemento, rect: elemento.getBoundingClientRect() }))
-      .filter(({ rect }) => rect.width > 0 && rect.height > 0)
-      .sort((a, b) => a.rect.left - b.rect.left);
+  const obtenerColumnas = useCallback(() => {
+  const esperadas = view === 'day' ? 1 : 7;
 
-    const unicas = [];
-    candidatas.forEach((candidata) => {
-      const centro = candidata.rect.left + candidata.rect.width / 2;
-      const repetida = unicas.some((existente) => Math.abs((existente.rect.left + existente.rect.width / 2) - centro) < 2);
-      if (!repetida) unicas.push(candidata);
-    });
+  const candidatas = Array.from(
+    raizRef.current?.querySelectorAll(
+      '.rbc-time-content .rbc-day-slot'
+    ) || []
+  )
+    .map((elemento) => ({
+      elemento,
+      rect: elemento.getBoundingClientRect(),
+    }))
+    .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+    .sort((a, b) => a.rect.left - b.rect.left);
 
-    return unicas.slice(0, esperadas);
-  };
+  const unicas = [];
 
-  const fechaColumna = (indice) => {
-    const base = view === 'day' ? new Date(date) : inicioSemana(date);
+  candidatas.forEach((candidata) => {
+    const centro =
+      candidata.rect.left + candidata.rect.width / 2;
+
+    const repetida = unicas.some(
+      (existente) =>
+        Math.abs(
+          existente.rect.left +
+            existente.rect.width / 2 -
+            centro
+        ) < 2
+    );
+
+    if (!repetida) unicas.push(candidata);
+  });
+
+  return unicas.slice(0, esperadas);
+}, [view]);
+
+const fechaColumna = useCallback(
+  (indice) => {
+    const base =
+      view === 'day' ? new Date(date) : inicioSemana(date);
+
     base.setHours(0, 0, 0, 0);
     base.setDate(base.getDate() + indice);
+
     return base;
-  };
+  },
+  [date, view]
+);
 
-  const indiceFecha = (fechaEvento, cantidadColumnas) => {
-    if (view === 'day') return 0;
-    const indice = diferenciaDias(fechaEvento, inicioSemana(date));
-    return Math.max(0, Math.min(cantidadColumnas - 1, indice));
-  };
+const indiceFecha = (fechaEvento, cantidadColumnas) => {
+  if (view === 'day') return 0;
 
-  const minutoDesdeY = (y, rect) => {
-    const proporcion = Math.max(0, Math.min(1, (y - rect.top) / rect.height));
-    const bruto = minMinutos + proporcion * rangoMinutos;
+  const indice = diferenciaDias(
+    fechaEvento,
+    inicioSemana(date)
+  );
+
+  return Math.max(
+    0,
+    Math.min(cantidadColumnas - 1, indice)
+  );
+};
+
+const minutoDesdeY = useCallback(
+  (y, rect) => {
+    const proporcion = Math.max(
+      0,
+      Math.min(1, (y - rect.top) / rect.height)
+    );
+
+    const bruto =
+      minMinutos + proporcion * rangoMinutos;
+
     return Math.round(bruto / step) * step;
-  };
+  },
+  [minMinutos, rangoMinutos, step]
+);
 
-  const rectVistaPrevia = (columna, inicio, fin) => ({
+const rectVistaPrevia = useCallback(
+  (columna, inicio, fin) => ({
     position: 'fixed',
     left: columna.rect.left + 2,
-    top: columna.rect.top + ((inicio - minMinutos) / rangoMinutos) * columna.rect.height,
+    top:
+      columna.rect.top +
+      ((inicio - minMinutos) / rangoMinutos) *
+        columna.rect.height,
     width: Math.max(10, columna.rect.width - 4),
-    height: Math.max(10, ((fin - inicio) / rangoMinutos) * columna.rect.height),
-    zIndex: 9998
-  });
+    height: Math.max(
+      10,
+      ((fin - inicio) / rangoMinutos) *
+        columna.rect.height
+    ),
+    zIndex: 9998,
+  }),
+  [minMinutos, rangoMinutos]
+);
 
   useEffect(() => {
     interaccionRef.current = interaccion;
@@ -194,7 +250,22 @@ export default function CalendarioDnD({
       window.removeEventListener('pointerup', terminar);
       window.removeEventListener('pointercancel', terminar);
     };
-  }, [interaccion, date, view, minMinutos, maxMinutos, rangoMinutos, step, onEventDrop, onEventResize, onSelectEvent]);
+}, [
+  interaccion,
+  date,
+  view,
+  minMinutos,
+  maxMinutos,
+  rangoMinutos,
+  step,
+  onEventDrop,
+  onEventResize,
+  onSelectEvent,
+  fechaColumna,
+  minutoDesdeY,
+  obtenerColumnas,
+  rectVistaPrevia,
+]);
 
   const iniciar = (eventPointer, event, modo, nodoEvento = null) => {
     if (eventPointer.button !== 0) return;
