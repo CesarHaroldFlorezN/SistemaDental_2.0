@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   AlertTriangle,
   CalendarPlus,
@@ -47,6 +52,7 @@ export default function FichaPaciente360Modal({
   const [documentos, setDocumentos] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [cronograma, setCronograma] = useState(null);
+  const pacienteId = paciente?.id;
 
   const citasPaciente = useMemo(() => citas.filter((c) => Number(c.pacienteId) === Number(paciente?.id)).sort((a, b) => `${b.fecha || ''}${b.hora || ''}`.localeCompare(`${a.fecha || ''}${a.hora || ''}`)), [citas, paciente]);
   const pagosPaciente = useMemo(() => pagos.filter((p) => Number(p.pacienteId) === Number(paciente?.id)), [pagos, paciente]);
@@ -56,28 +62,32 @@ export default function FichaPaciente360Modal({
   const creditoFavor = pagosPaciente.reduce((s, p) => s + Number(p.creditoFavor || 0), 0);
   const proximas = citasPaciente.filter((c) => ['pendiente', 'confirmada', 'en_espera'].includes(c.estado) && c.fecha >= fechaHoy()).sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`));
 
-  const recargarCuenta = async () => {
-    if (!paciente?.id) return;
-    setCargando(true);
-    try {
-      const [datosCuenta, datosDocs] = await Promise.all([
-        api.getCuentaPaciente(paciente.id),
-        api.getDocumentosPaciente(paciente.id)
-      ]);
-      setCuenta(datosCuenta || { movimientos: [], resumen: {} });
-      setDocumentos(datosDocs || []);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setCargando(false);
-    }
-  };
+  const recargarCuenta = useCallback(async () => {
+  if (!pacienteId) return;
+
+  setCargando(true);
+
+  try {
+    const [datosCuenta, datosDocs] = await Promise.all([
+      api.getCuentaPaciente(pacienteId),
+      api.getDocumentosPaciente(pacienteId),
+    ]);
+
+    setCuenta(datosCuenta || { movimientos: [], resumen: {} });
+    setDocumentos(datosDocs || []);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setCargando(false);
+  }
+}, [pacienteId]);
 
   useEffect(() => {
-    if (!isOpen || !paciente) return;
-    setPestana('resumen');
-    recargarCuenta();
-  }, [isOpen, paciente?.id]);
+  if (!isOpen || !pacienteId) return;
+
+  setPestana('resumen');
+  void recargarCuenta();
+}, [isOpen, pacienteId, recargarCuenta]);
 
   if (!isOpen || !paciente) return null;
 
