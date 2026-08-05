@@ -1,0 +1,66 @@
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, Field
+
+from .finanzas import TipoPago
+
+
+EstadoCita = Literal[
+    "pendiente",
+    "confirmada",
+    "en_espera",
+    "en_atencion",
+    "completada",
+    "no_asistio",
+    "cancelada",
+]
+
+
+class ServicioCitaPayload(BaseModel):
+    nombre: str = Field(min_length=2, max_length=150)
+    costo: float = Field(default=0, ge=0)
+
+
+class CitaPagoPayload(BaseModel):
+    pacienteId: int = Field(gt=0)
+    planId: Optional[int] = Field(default=None, gt=0)
+    citaBaseId: Optional[int] = Field(default=None, gt=0)
+
+    fecha: str = Field(min_length=10, max_length=10)
+    hora: str = Field(min_length=5, max_length=5)
+    horaFin: Optional[str] = Field(
+        default=None,
+        min_length=5,
+        max_length=5,
+    )
+    duracionMinutos: int = Field(default=60, ge=5, le=720)
+    procedimiento: str = Field(min_length=2, max_length=200)
+    servicios: List[ServicioCitaPayload] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+    notas: str = Field(default="", max_length=5000)
+    estado: EstadoCita = "pendiente"
+
+    costo: float = Field(default=0, ge=0)
+    tipoPago: TipoPago = "contado"
+    montoPagado: float = Field(default=0, ge=0)
+    metodoPago: str = Field(default="Efectivo", max_length=50)
+
+    sesionNum: int = Field(default=1, ge=1)
+    totalSesiones: int = Field(default=1, ge=1)
+
+
+class CambioEstadoPayload(BaseModel):
+    estado: EstadoCita
+
+
+class ReprogramarCitaPayload(BaseModel):
+    fecha: str = Field(min_length=10, max_length=10)
+    hora: str = Field(min_length=5, max_length=5)
+    horaFin: Optional[str] = Field(
+        default=None,
+        min_length=5,
+        max_length=5,
+    )
+    duracionMinutos: int = Field(default=60, ge=5, le=720)
