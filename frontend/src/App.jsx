@@ -457,7 +457,7 @@ export default function App() {
 
   const handleVerCuotasDesdeAgenda = (cita) => {
     setBusquedaPP(cita?.nombrePaciente || '');
-    setVistaActiva('planPagos');
+    setVistaActiva('planpagos');
   };
 
   const handleAbrirCompletar = (cita) => {
@@ -660,7 +660,7 @@ export default function App() {
       if (accionSaldo === 'agregar_plan' && nuevoSaldo > 0 && !planVinculado) {
         const paciente = pacientes.find((item) => Number(item.id) === Number(pacienteId));
         setBusquedaPP(paciente?.nombre || '');
-        setVistaActiva('planPagos');
+        setVistaActiva('planpagos');
         Swal.fire({
           title: 'Atención finalizada',
           text: `El saldo de ${fMon(nuevoSaldo)} quedó preparado. Crea o completa ahora el plan de pagos del paciente.`,
@@ -811,7 +811,7 @@ export default function App() {
     const planVinculado = planPagos.find((plan) => Number(plan.pagoId) === Number(pago.id));
     if ((pago.tipoPago || '').toLowerCase() === 'cuotas' && planVinculado) {
       setBusquedaPP(nombrePaciente || '');
-      setVistaActiva('planPagos');
+      setVistaActiva('planpagos');
       return;
     }
 
@@ -1513,7 +1513,7 @@ export default function App() {
         }}
         onVerPlanPagos={(paciente) => {
           setBusquedaPP(paciente?.nombre || '');
-          setVistaActiva('planPagos');
+          setVistaActiva('planpagos');
           setModalFichaAbierto(false);
         }}
         onNuevaCita={(paciente) => {

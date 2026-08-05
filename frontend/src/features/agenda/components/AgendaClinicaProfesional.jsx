@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+// DENTALPRO_V8_2_VISUAL_CALENDARIO
+import { Component, Suspense, lazy, useMemo, useState } from 'react';
 import {
   ArrowRight,
-  BadgeCheck,
   CalendarCheck2,
-  CalendarClock,
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -17,17 +15,15 @@ import {
   FileText,
   Filter,
   GripVertical,
-  Hourglass,
   LayoutDashboard,
   LayoutList,
-  ListChecks,
-  MoreHorizontal,
+  Lock,
   Phone,
   PlayCircle,
   Plus,
   Search,
   Trash2,
-  UserRound,
+  Unlock,
   UserRoundCheck,
   UserRoundX,
   WalletCards,
@@ -36,124 +32,79 @@ import {
 } from 'lucide-react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { format, getDay, parse, startOfWeek } from 'date-fns';
+import { format, getDay, parse, startOfWeek as startOfWeekDateFns } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Swal from 'sweetalert2';
 
+const CalendarioDnD = lazy(() => import('./CalendarioDnD.jsx'));
 
-const locales = { es };
+const inicioSemanaLunes = (fecha) => startOfWeekDateFns(fecha, {
+  locale: es,
+  weekStartsOn: 1
+});
+
 const localizer = dateFnsLocalizer({
   format,
   parse,
-  startOfWeek,
+  startOfWeek: inicioSemanaLunes,
   getDay,
-  locales
+  locales: { es }
 });
 
-
-function ToolbarCalendario({ label, onNavigate, onView, view }) {
-  const vistas = [
-    ['month', 'Mes'],
-    ['week', 'Semana'],
-    ['day', 'Día'],
-    ['agenda', 'Agenda']
-  ];
-
-  return (
-    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-700/80 bg-slate-900/70 p-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => onNavigate('TODAY')} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/20">Hoy</button>
-        <div className="flex overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
-          <button type="button" onClick={() => onNavigate('PREV')} className="border-r border-slate-700 p-2.5 text-slate-300 transition hover:bg-slate-800 hover:text-white" title="Periodo anterior"><ChevronLeft size={17} /></button>
-          <button type="button" onClick={() => onNavigate('NEXT')} className="p-2.5 text-slate-300 transition hover:bg-slate-800 hover:text-white" title="Periodo siguiente"><ChevronRight size={17} /></button>
-        </div>
-        <div className="min-w-[190px] text-sm font-black capitalize text-white">{label}</div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-xl border border-slate-700 bg-slate-900 p-1">
-          {vistas.map(([valor, etiqueta]) => (
-            <button
-              key={valor}
-              type="button"
-              onClick={() => onView(valor)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${view === valor ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-            >
-              {etiqueta}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const ESTADOS = {
-  pendiente: {
-    etiqueta: 'Programado',
-    corta: 'Programado',
-    clase: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    colorCalendario: '#f59e0b'
-  },
-  confirmada: {
-    // Compatibilidad con registros antiguos: se presenta dentro de Programado.
-    etiqueta: 'Programado',
-    corta: 'Programado',
-    clase: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    colorCalendario: '#f59e0b'
-  },
-  en_espera: {
-    etiqueta: 'En espera',
-    corta: 'En espera',
-    clase: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
-    colorCalendario: '#8b5cf6'
-  },
-  en_atencion: {
-    etiqueta: 'En atención',
-    corta: 'En atención',
-    clase: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
-    colorCalendario: '#f43f5e'
-  },
-  completada: {
-    etiqueta: 'Finalizada',
-    corta: 'Finalizada',
-    clase: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-    colorCalendario: '#10b981'
-  },
-  no_asistio: {
-    etiqueta: 'No asistió',
-    corta: 'No asistió',
-    clase: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
-    colorCalendario: '#ea580c'
-  },
-  cancelada: {
-    etiqueta: 'Cancelada',
-    corta: 'Cancelada',
-    clase: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
-    colorCalendario: '#475569'
-  }
+  pendiente: { texto: 'Programada', color: '#f59e0b', clase: 'border-amber-500/55' },
+  confirmada: { texto: 'Programada', color: '#f59e0b', clase: 'border-amber-500/55' },
+  en_espera: { texto: 'En espera', color: '#8b5cf6', clase: 'border-violet-500/55' },
+  en_atencion: { texto: 'En atención', color: '#f43f5e', clase: 'border-rose-500/60' },
+  completada: { texto: 'Finalizada', color: '#10b981', clase: 'border-emerald-500/55' },
+  no_asistio: { texto: 'No asistió', color: '#ea580c', clase: 'border-orange-500/55' },
+  cancelada: { texto: 'Cancelada', color: '#64748b', clase: 'border-slate-500/55' }
 };
 
-const normalizarEstadoVisual = (estado) => estado === 'confirmada' ? 'pendiente' : (estado || 'pendiente');
+const ACTIVAS = new Set(['pendiente', 'confirmada', 'en_espera', 'en_atencion']);
 
-const BORDE_ESTADO = {
-  pendiente: 'border-amber-500/55 hover:border-amber-400/80',
-  en_espera: 'border-violet-500/55 hover:border-violet-400/80',
-  en_atencion: 'border-rose-500/60 hover:border-rose-400/85',
-  completada: 'border-emerald-500/55 hover:border-emerald-400/80',
-  no_asistio: 'border-orange-500/55 hover:border-orange-400/80',
-  cancelada: 'border-slate-600 hover:border-slate-500'
+const moneda = (valor) => `S/. ${Number(valor || 0).toLocaleString('es-PE', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+})}`;
+
+const fechaLocal = (fecha = new Date()) => {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
-const ESTADOS_ACTIVOS = new Set([
-  'pendiente',
-  'confirmada',
-  'en_espera',
-  'en_atencion'
-]);
+const fechaDesdeTexto = (texto) => {
+  const [y, m, d] = String(texto || '').split('-').map(Number);
+  return y && m && d ? new Date(y, m - 1, d, 12, 0, 0) : new Date();
+};
+
+const horaAMinutos = (hora) => {
+  const [h, m] = String(hora || '').split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+};
+
+const minutosAHora = (total) => {
+  const valor = Math.max(0, Math.min(1439, Number(total) || 0));
+  return `${String(Math.floor(valor / 60)).padStart(2, '0')}:${String(valor % 60).padStart(2, '0')}`;
+};
+
+const horaFin = (cita) => {
+  if (cita?.horaFin) return cita.horaFin;
+  const inicio = horaAMinutos(cita?.hora || '09:00');
+  return minutosAHora((inicio || 540) + Number(cita?.duracionMinutos || 60));
+};
+
+const servicios = (cita) => Array.isArray(cita?.servicios) && cita.servicios.length
+  ? cita.servicios
+  : [{ nombre: cita?.procedimiento || 'Consulta', costo: cita?.costo || 0 }];
+
+const estadoVisual = (estado) => estado === 'confirmada' ? 'pendiente' : (estado || 'pendiente');
+
 
 const FILTROS_ESTADO = [
-  ['todos', 'Todas'],
+  ['todos', 'Todos los estados'],
   ['pendiente', 'Programadas'],
   ['en_espera', 'En espera'],
   ['en_atencion', 'En atención'],
@@ -162,178 +113,53 @@ const FILTROS_ESTADO = [
   ['cancelada', 'Canceladas']
 ];
 
-const TIPOS_PAGO = {
-  contado: 'Pagar al finalizar',
-  completo: 'Pagado',
-  anticipo: 'Con anticipo',
-  cuotas: 'En cuotas',
-  cortesia: 'Cortesía',
-  sesion: 'Incluido en plan'
-};
+const normalizarTexto = (valor) => String(valor ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
 
-const fechaLocal = (fecha = new Date()) => {
-  const year = fecha.getFullYear();
-  const month = String(fecha.getMonth() + 1).padStart(2, '0');
-  const day = String(fecha.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const fechaDesdeString = (fecha) => {
-  const [year, month, day] = String(fecha || '').split('-').map(Number);
-  if (!year || !month || !day) return new Date();
-  return new Date(year, month - 1, day, 12, 0, 0);
-};
-
-const sumarDias = (fecha, dias) => {
+const sumarDias = (fecha, cantidad) => {
   const copia = new Date(fecha);
-  copia.setDate(copia.getDate() + dias);
+  copia.setDate(copia.getDate() + cantidad);
   return copia;
 };
 
-const normalizar = (valor) =>
-  String(valor ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-
-const moneda = (valor) =>
-  `S/. ${Number(valor || 0).toLocaleString('es-PE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-
-const formatearFecha = (fecha, largo = false) => {
-  if (!fecha) return 'Sin fecha';
-  const date = fechaDesdeString(fecha);
-  const hoy = fechaLocal();
-  const manana = fechaLocal(sumarDias(new Date(), 1));
-
-  if (fecha === hoy) return 'Hoy';
-  if (fecha === manana) return 'Mañana';
-
-  return date.toLocaleDateString('es-PE', {
-    weekday: largo ? 'long' : 'short',
-    day: '2-digit',
-    month: largo ? 'long' : 'short',
-    year: 'numeric'
-  });
-};
-
-const horaAMinutos = (hora) => {
-  const [horas, minutos] = String(hora || '').split(':').map(Number);
-  if (!Number.isFinite(horas) || !Number.isFinite(minutos)) return null;
-  return horas * 60 + minutos;
-};
-
-const minutosAHora = (total) => {
-  const valor = Math.max(0, Math.min(1439, Number(total) || 0));
-  return `${String(Math.floor(valor / 60)).padStart(2, '0')}:${String(valor % 60).padStart(2, '0')}`;
-};
-
-const obtenerHoraFinCita = (cita) => {
-  if (cita?.horaFin) return cita.horaFin;
-  const inicio = horaAMinutos(cita?.hora || '09:00');
-  return inicio === null ? '—' : minutosAHora(inicio + Number(cita?.duracionMinutos || 60));
-};
-
-const obtenerDuracionCita = (cita) => {
-  const inicio = horaAMinutos(cita?.hora);
-  const fin = horaAMinutos(obtenerHoraFinCita(cita));
-  if (inicio === null || fin === null || fin <= inicio) return Number(cita?.duracionMinutos || 60);
-  return fin - inicio;
-};
-
-
-const obtenerServicios = (cita) => {
-  if (Array.isArray(cita?.servicios) && cita.servicios.length) {
-    return cita.servicios.filter((servicio) => servicio?.nombre);
-  }
-  return [{ nombre: cita?.procedimiento || 'Consulta', costo: Number(cita?.costo || 0) }];
-};
-
-function ServiciosCita({ cita, compacto = false }) {
-  const servicios = obtenerServicios(cita);
-  if (compacto) {
-    return (
-      <div className="space-y-0.5">
-        {servicios.slice(0, 3).map((servicio, indice) => (
-          <div key={`${servicio.nombre}-${indice}`} className="truncate text-xs font-semibold text-cyan-100">
-            {servicio.nombre}
-          </div>
-        ))}
-        {servicios.length > 3 && <div className="text-[11px] font-semibold text-cyan-400">+ {servicios.length - 3} servicio(s)</div>}
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2">
-      {servicios.map((servicio, indice) => (
-        <div key={`${servicio.nombre}-${indice}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-          <div className="min-w-0"><div className="truncate text-sm font-semibold text-white">{servicio.nombre}</div><div className="text-[10px] uppercase tracking-wider text-slate-500">Servicio {indice + 1}</div></div>
-          <div className="shrink-0 text-sm font-bold text-cyan-300">{moneda(servicio.costo)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function BadgeEstado({ estado }) {
-  const estadoNormalizado = normalizarEstadoVisual(estado);
-  const info = ESTADOS[estadoNormalizado] || ESTADOS.pendiente;
+  const clave = estadoVisual(estado);
+  const info = ESTADOS[clave] || ESTADOS.pendiente;
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${info.clase}`}>
-      {estadoNormalizado === 'en_atencion' && (
-        <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
-      )}
-      {info.etiqueta}
+    <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-black" style={{ color: info.color, borderColor: `${info.color}55`, backgroundColor: `${info.color}18` }}>
+      {clave === 'en_atencion' && <span className="h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: info.color }} />}
+      {info.texto}
     </span>
   );
 }
 
 function EstadoStepper({ estado }) {
   const pasos = [
-    ['programada', 'Programada'],
+    ['pendiente', 'Programada'],
     ['en_espera', 'En espera'],
     ['en_atencion', 'En atención'],
     ['completada', 'Finalizada']
   ];
-  const indice = {
-    pendiente: 0,
-    confirmada: 0,
-    en_espera: 1,
-    en_atencion: 2,
-    completada: 3
-  }[estado];
-
+  const indice = { pendiente: 0, confirmada: 0, en_espera: 1, en_atencion: 2, completada: 3 }[estado];
   if (indice === undefined) return <BadgeEstado estado={estado} />;
 
   return (
     <div className="grid grid-cols-4 gap-1">
-      {pasos.map(([clave, etiqueta], posicion) => {
+      {pasos.map(([clave, texto], posicion) => {
         const completado = posicion < indice;
         const actual = posicion === indice;
         return (
           <div key={clave} className="min-w-0">
             <div className="flex items-center">
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
-                  completado
-                    ? 'border-emerald-500 bg-emerald-500 text-white'
-                    : actual
-                      ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300'
-                      : 'border-slate-600 bg-slate-800 text-slate-500'
-                }`}
-              >
-                {completado ? <Check size={13} /> : posicion + 1}
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-black ${completado ? 'border-emerald-500 bg-emerald-500 text-white' : actual ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300' : 'border-slate-600 bg-slate-800 text-slate-500'}`}>
+                {completado ? <CheckCircle2 size={14} /> : posicion + 1}
               </span>
-              {posicion < pasos.length - 1 && (
-                <span className={`h-px flex-1 ${posicion < indice ? 'bg-emerald-500' : 'bg-slate-700'}`} />
-              )}
+              {posicion < pasos.length - 1 && <span className={`h-px flex-1 ${posicion < indice ? 'bg-emerald-500' : 'bg-slate-700'}`} />}
             </div>
-            <div className={`mt-1 truncate text-[10px] font-medium ${actual ? 'text-cyan-300' : completado ? 'text-emerald-300' : 'text-slate-600'}`}>
-              {etiqueta}
-            </div>
+            <div className={`mt-1 truncate text-[9px] font-bold ${actual ? 'text-cyan-300' : completado ? 'text-emerald-300' : 'text-slate-600'}`}>{texto}</div>
           </div>
         );
       })}
@@ -341,51 +167,32 @@ function EstadoStepper({ estado }) {
   );
 }
 
-function PagoResumen({ cita, compacto = false, onCobrar, onVerCuotas }) {
+function PagoResumen({ cita, callbacks }) {
   const pago = cita.pago;
   const total = Number(pago?.total ?? cita.costo ?? 0);
   const cobrado = Number(pago?.cobrado || 0);
   const saldo = Number(pago?.saldo ?? Math.max(0, total - cobrado));
-  const tipo = pago?.tipoPago || cita.tipoPago || 'contado';
   const pagado = saldo <= 0;
-
-  if (compacto) {
-    return (
-      <div className="flex items-center gap-2 text-[11px]">
-        <span className={`h-2.5 w-2.5 rounded-full ${pagado ? 'bg-emerald-400' : tipo === 'cuotas' ? 'bg-violet-400' : 'bg-rose-400'}`} />
-        <span className="truncate text-slate-300">
-          {pagado ? 'Pagado' : tipo === 'cuotas' ? `Cuotas · saldo ${moneda(saldo)}` : `Saldo pendiente · ${moneda(saldo)}`}
-        </span>
-      </div>
-    );
-  }
+  const tipo = pago?.tipoPago || cita.tipoPago || 'contado';
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+    <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Forma de pago</div>
-          <div className="mt-1 text-xs font-semibold text-slate-200">{TIPOS_PAGO[tipo] || tipo}</div>
-          {pago?.metodo && pago.metodo !== 'Pendiente' && (
-            <div className="mt-0.5 text-[11px] text-slate-500">Método: {pago.metodo}</div>
-          )}
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Estado financiero</div>
+          <div className={`mt-1 text-sm font-black ${pagado ? 'text-emerald-300' : 'text-rose-300'}`}>{pagado ? 'Pagado completamente' : 'Saldo pendiente'}</div>
+          {pago?.metodo && pago.metodo !== 'Pendiente' && <div className="mt-0.5 text-xs text-slate-500">Último método: {pago.metodo}</div>}
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${pagado ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
-          {pagado ? 'PAGADO' : `DEBE ${moneda(saldo)}`}
-        </span>
+        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${pagado ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>{pagado ? 'PAGADO' : `DEBE ${moneda(saldo)}`}</span>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div><div className="text-[10px] text-slate-500">Total</div><div className="text-xs font-bold text-white">{moneda(total)}</div></div>
-        <div><div className="text-[10px] text-slate-500">Cobrado</div><div className="text-xs font-bold text-emerald-300">{moneda(cobrado)}</div></div>
-        <div><div className="text-[10px] text-slate-500">Saldo</div><div className={`text-xs font-bold ${saldo > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{moneda(saldo)}</div></div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl bg-slate-900/60 p-2"><div className="text-[9px] uppercase text-slate-500">Total</div><div className="mt-1 text-xs font-black text-white">{moneda(total)}</div></div>
+        <div className="rounded-xl bg-slate-900/60 p-2"><div className="text-[9px] uppercase text-slate-500">Pagado</div><div className="mt-1 text-xs font-black text-emerald-300">{moneda(cobrado)}</div></div>
+        <div className="rounded-xl bg-slate-900/60 p-2"><div className="text-[9px] uppercase text-slate-500">Saldo</div><div className={`mt-1 text-xs font-black ${saldo > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{moneda(saldo)}</div></div>
       </div>
       {saldo > 0 && pago && (
-        <button
-          type="button"
-          onClick={() => tipo === 'cuotas' ? onVerCuotas?.(cita) : onCobrar?.(pago, cita.nombrePaciente)}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500"
-        >
-          {tipo === 'cuotas' ? <WalletCards size={15} /> : <CircleDollarSign size={15} />}
+        <button type="button" onClick={() => tipo === 'cuotas' ? callbacks.onVerCuotas?.(cita) : callbacks.onCobrar?.(pago, cita.nombrePaciente)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-xs font-black text-white hover:bg-cyan-500">
+          {tipo === 'cuotas' ? <WalletCards size={16} /> : <CircleDollarSign size={16} />}
           {tipo === 'cuotas' ? 'Ver y pagar cuotas' : 'Registrar pago'}
         </button>
       )}
@@ -393,472 +200,328 @@ function PagoResumen({ cita, compacto = false, onCobrar, onVerCuotas }) {
   );
 }
 
-function BotonSecundario({ children, onClick, title, danger = false }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
-        danger
-          ? 'border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20'
-          : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function AccionPrincipal({ cita, onCambiarEstado, onCompletar, onCobrar, onVerCuotas }) {
-  const estado = cita.estado || 'pendiente';
-  const pago = cita.pago;
-  const saldo = Number(pago?.saldo || 0);
-  const tipo = pago?.tipoPago || cita.tipoPago;
-
-  if (['pendiente', 'confirmada'].includes(estado)) {
-    return (
-      <button type="button" onClick={() => onCambiarEstado?.(cita, 'en_espera')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-violet-900/20 transition hover:bg-violet-500">
-        <UserRoundCheck size={17} /> Recibir paciente
-      </button>
-    );
+function AccionPrincipal({ cita, callbacks }) {
+  if (['pendiente', 'confirmada'].includes(cita.estado)) {
+    return <button type="button" onClick={() => callbacks.onCambiarEstado?.(cita, 'en_espera')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-500"><UserRoundCheck size={17} />Recibir paciente</button>;
   }
-
-  if (estado === 'en_espera') {
-    return (
-      <button type="button" onClick={() => onCambiarEstado?.(cita, 'en_atencion')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-900/20 transition hover:bg-rose-500">
-        <PlayCircle size={17} /> Iniciar atención
-      </button>
-    );
+  if (cita.estado === 'en_espera') {
+    return <button type="button" onClick={() => callbacks.onCambiarEstado?.(cita, 'en_atencion')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-black text-white hover:bg-rose-500"><PlayCircle size={17} />Iniciar atención</button>;
   }
-
-  if (estado === 'en_atencion') {
-    return (
-      <button type="button" onClick={() => onCompletar?.(cita)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-500">
-        <CheckCircle2 size={17} /> Finalizar atención
-      </button>
-    );
+  if (cita.estado === 'en_atencion') {
+    return <button type="button" onClick={() => callbacks.onCompletar?.(cita)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-500"><CheckCircle2 size={17} />Finalizar atención</button>;
   }
-
-  if (estado === 'completada' && saldo > 0 && pago) {
-    return (
-      <button type="button" onClick={() => tipo === 'cuotas' ? onVerCuotas?.(cita) : onCobrar?.(pago, cita.nombrePaciente)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-900/20 transition hover:bg-cyan-500">
-        {tipo === 'cuotas' ? <WalletCards size={17} /> : <CircleDollarSign size={17} />}
-        {tipo === 'cuotas' ? 'Gestionar cuotas' : 'Cobrar saldo'}
-      </button>
-    );
+  if (cita.estado === 'completada') {
+    return <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-black text-emerald-300"><CheckCircle2 size={17} />Atención finalizada</div>;
   }
-
-  if (estado === 'completada') {
-    return (
-      <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-bold text-emerald-300">
-        <CheckCircle2 size={17} /> Atención finalizada
-      </div>
-    );
-  }
-
   return null;
 }
 
-function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd, arrastrando }) {
-  const pago = cita.pago;
-  const saldo = Number(pago?.saldo || 0);
-  const tipo = pago?.tipoPago || cita.tipoPago;
-  const horaFin = obtenerHoraFinCita(cita);
-  const duracion = obtenerDuracionCita(cita);
+class LimiteErrorCalendario extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { fallo: false };
+  }
 
-  return (
-    <article
-      draggable
-      onDragStart={(event) => onDragStart?.(event, cita)}
-      onDragEnd={onDragEnd}
-      className={`overflow-hidden rounded-2xl border bg-gradient-to-b from-slate-900/95 to-slate-900/70 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl ${
-        BORDE_ESTADO[normalizarEstadoVisual(cita.estado)] || BORDE_ESTADO.cancelada
-      } ${arrastrando ? 'scale-[0.98] opacity-45' : ''}`}
-    >
-      <div className="p-3.5">
-        <div className="grid grid-cols-[48px_minmax(132px,1fr)_34px] items-center gap-2">
-          <div className="rounded-lg border border-slate-600 bg-slate-800/90 px-1.5 py-1 text-center shadow-inner">
-            <div className="text-[7px] font-black uppercase tracking-[0.12em] text-slate-500">Ficha</div>
-            <div className="mt-0.5 truncate text-sm font-black leading-none text-white">{cita.codigoFicha || '—'}</div>
-          </div>
+  static getDerivedStateFromError() {
+    return { fallo: true };
+  }
 
-          <div className="flex min-w-0 items-center justify-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-2 shadow-inner">
-            <span className="whitespace-nowrap text-[13px] font-black tabular-nums text-cyan-200">{cita.hora || '—'}</span>
-            <ArrowRight size={15} className="shrink-0 text-cyan-500" />
-            <span className="whitespace-nowrap text-[13px] font-black tabular-nums text-cyan-200">{horaFin}</span>
-          </div>
+  componentDidCatch(error) {
+    console.error('DentalPro: el calendario interactivo no pudo cargarse.', error);
+  }
 
-          <button type="button" title="Ver detalle" onClick={() => onDetalle(cita)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 transition hover:border-cyan-500/40 hover:text-cyan-300"><Eye size={16} /></button>
-        </div>
-
-        <div className="mt-3 flex items-start gap-2">
-          <GripVertical size={16} className="mt-1 shrink-0 cursor-grab text-slate-600 active:cursor-grabbing" />
-          <div className="min-w-0 flex-1">
-            <button type="button" onClick={() => onDetalle(cita)} className="block w-full truncate text-left text-base font-black tracking-tight text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
-            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500"><CalendarClock size={13} /><span>{duracion} min de atención</span></div>
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-          <ServiciosCita cita={cita} compacto />
-          <div className="justify-self-start sm:justify-self-end"><BadgeEstado estado={cita.estado} /></div>
-        </div>
-
-        <div className="mt-3"><PagoResumen cita={cita} compacto /></div>
-        <div className="mt-3"><AccionPrincipal cita={cita} onCambiarEstado={callbacks.onCambiarEstado} onCompletar={callbacks.onCompletar} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} /></div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <BotonSecundario onClick={() => callbacks.onEditar?.(cita)} title="Editar servicios o cita"><Edit3 size={14} /> Editar</BotonSecundario>
-          {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && <BotonSecundario onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} title="No asistió"><UserRoundX size={14} /></BotonSecundario>}
-          {ESTADOS_ACTIVOS.has(cita.estado) && <BotonSecundario danger onClick={() => callbacks.onCancelar?.(cita)} title="Cancelar cita"><XCircle size={14} /></BotonSecundario>}
-          {saldo > 0 && pago && tipo !== 'cuotas' && cita.estado !== 'cancelada' && <BotonSecundario onClick={() => callbacks.onCobrar?.(pago, cita.nombrePaciente)} title="Registrar pago"><CircleDollarSign size={14} /></BotonSecundario>}
-        </div>
-      </div>
-    </article>
-  );
+  render() {
+    if (this.state.fallo) return this.props.fallback;
+    return this.props.children;
+  }
 }
 
-function ColumnaRecepcion({
-  titulo,
-  subtitulo,
-  citas,
-  clase,
-  callbacks,
-  onDetalle,
-  vacio,
-  estadoDestino,
-  citaArrastradaId,
-  columnaSobre,
-  onDragStart,
-  onDragEnd,
-  onDragEnter,
-  onDrop
-}) {
-  const activa = columnaSobre === estadoDestino;
-
+function Toolbar({ label, view, onNavigate, onView }) {
   return (
-    <section
-      onDragOver={(event) => event.preventDefault()}
-      onDragEnter={(event) => { event.preventDefault(); onDragEnter?.(estadoDestino); }}
-      onDrop={(event) => { event.preventDefault(); onDrop?.(estadoDestino); }}
-      className={`min-w-0 rounded-2xl border p-3 transition ${activa ? 'border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-500/20' : 'border-slate-700/80 bg-slate-800/60'}`}
-    >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <h3 className={`text-sm font-bold ${clase}`}>{titulo}</h3>
-          <p className="text-[11px] text-slate-500">{subtitulo}</p>
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => onNavigate('TODAY')} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-2 text-xs font-bold text-cyan-300">Hoy</button>
+        <div className="flex overflow-hidden rounded-xl border border-slate-700">
+          <button type="button" onClick={() => onNavigate('PREV')} className="border-r border-slate-700 p-2.5 text-slate-300 hover:bg-slate-800"><ChevronLeft size={17} /></button>
+          <button type="button" onClick={() => onNavigate('NEXT')} className="p-2.5 text-slate-300 hover:bg-slate-800"><ChevronRight size={17} /></button>
         </div>
-        <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-300">{citas.length}</span>
+        <div className="min-w-[190px] text-sm font-black capitalize text-white">{label}</div>
       </div>
-      <div className="space-y-3">
-        {citas.length ? citas.map((cita) => (
-          <TarjetaRecepcion
-            key={cita.id}
-            cita={cita}
-            callbacks={callbacks}
-            onDetalle={onDetalle}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            arrastrando={Number(citaArrastradaId) === Number(cita.id)}
-          />
-        )) : (
-          <div className={`rounded-xl border border-dashed px-3 py-8 text-center text-xs ${activa ? 'border-cyan-500/50 text-cyan-300' : 'border-slate-700 text-slate-600'}`}>{activa ? 'Suelta aquí para cambiar el estado' : vacio}</div>
-        )}
+      <div className="flex rounded-xl border border-slate-700 bg-slate-900 p-1">
+        {[
+          ['month', 'Mes'],
+          ['week', 'Semana'],
+          ['day', 'Dia']
+        ].map(([valor, texto]) => (
+          <button key={valor} type="button" onClick={() => onView(valor)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${view === valor ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>{texto}</button>
+        ))}
       </div>
-    </section>
-  );
-}
-
-function EventoCalendario({ event }) {
-  return (
-    <div className="min-w-0 leading-tight">
-      <div className="truncate font-bold">{event.citaData.hora} → {obtenerHoraFinCita(event.citaData)} · {event.citaData.nombrePaciente}</div>
-      <div className="mt-0.5"><ServiciosCita cita={event.citaData} compacto /></div>
     </div>
   );
 }
 
-const ORDEN_RESUMEN_MES = [
-  ['pendiente', 'Programado', '#f59e0b'],
-  ['en_espera', 'En espera', '#8b5cf6'],
-  ['en_atencion', 'En atención', '#f43f5e'],
-  ['completada', 'Finalizado', '#10b981'],
-  ['no_asistio', 'No asistió', '#ea580c'],
-  ['cancelada', 'Cancelado', '#64748b']
-];
-
-function EventoResumenMes({ event }) {
-  const visibles = ORDEN_RESUMEN_MES.filter(([estado]) => Number(event.conteos?.[estado] || 0) > 0);
+function Evento({ event, editable }) {
+  const cita = event.citaData;
   return (
-    <div className="dp-month-summary grid gap-1 py-0.5">
-      {visibles.map(([estado, etiqueta, color]) => (
-        <div key={estado} className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${color}18`, color }}>
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-          <span className="truncate">{event.conteos[estado]} {etiqueta}{event.conteos[estado] === 1 ? '' : 's'}</span>
+    <div className={`dp-evento-calendario flex h-full min-w-0 flex-col justify-center overflow-hidden px-2 py-1 leading-tight ${editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}>
+      <div className="truncate text-[10px] font-black tabular-nums tracking-tight text-white">{cita.hora} - {horaFin(cita)}</div>
+      <div className="mt-0.5 truncate text-[12px] font-black text-white">{cita.nombrePaciente}</div>
+    </div>
+  );
+}
+
+function LeyendaEstados() {
+  const estados = ['pendiente', 'en_espera', 'en_atencion', 'completada', 'no_asistio', 'cancelada'];
+  return (
+    <div className="dp-leyenda-calendario flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-700 bg-slate-900/55 px-3 py-2.5">
+      <span className="mr-1 text-[10px] font-black uppercase tracking-wider text-slate-500">Estados</span>
+      {estados.map((estado) => (
+        <div key={estado} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
+          <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ backgroundColor: ESTADOS[estado].color }} />
+          <span>{ESTADOS[estado].texto}</span>
         </div>
       ))}
     </div>
   );
 }
 
-function CabeceraFechaMes({ date, label, onAbrirDia }) {
-  const esHoy = fechaLocal(date) === fechaLocal();
+function ResumenMes({ event }) {
+  const orden = [
+    ['pendiente', 'Programada'],
+    ['en_espera', 'En espera'],
+    ['en_atencion', 'En atención'],
+    ['completada', 'Finalizada'],
+    ['no_asistio', 'No asistió'],
+    ['cancelada', 'Cancelada']
+  ];
   return (
-    <button
-      type="button"
-      onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAbrirDia?.(date); }}
-      className={`dp-month-date ml-auto flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black transition ${esHoy ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-300/40' : 'text-slate-400 hover:bg-slate-700/60 hover:text-white'}`}
-      title="Abrir vista del día"
-    >
-      {esHoy && <span className="text-[8px] font-black tracking-wider">HOY</span>}
-      <span>{label}</span>
-    </button>
+    <div className="space-y-1 py-0.5">
+      {orden.filter(([estado]) => event.conteos[estado]).map(([estado, texto]) => (
+        <div key={estado} className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-bold" style={{ color: ESTADOS[estado].color, backgroundColor: `${ESTADOS[estado].color}16` }}>
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ESTADOS[estado].color }} />
+          <span>{event.conteos[estado]} {texto}{event.conteos[estado] === 1 ? '' : 's'}</span>
+        </div>
+      ))}
+    </div>
   );
 }
+
+function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd }) {
+  const pago = cita.pago;
+  const saldo = Number(pago?.saldo ?? cita.costo ?? 0);
+  const estado = estadoVisual(cita.estado);
+  return (
+    <article draggable={ACTIVAS.has(cita.estado)} onDragStart={(e) => ACTIVAS.has(cita.estado) && onDragStart(e, cita)} onDragEnd={onDragEnd} className={`rounded-2xl border bg-slate-900/80 p-3.5 shadow-lg ${ESTADOS[estado]?.clase || 'border-slate-600'}`}>
+      <div className="grid grid-cols-[42px_minmax(0,1fr)_32px] items-center gap-2">
+        <div className="rounded-lg border border-slate-600 bg-slate-800 px-1 py-1 text-center">
+          <div className="text-[6px] font-black uppercase tracking-wider text-slate-500">Ficha</div>
+          <div className="truncate text-xs font-black text-white">{cita.codigoFicha || '—'}</div>
+        </div>
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-2 py-2 text-xs font-black text-cyan-200">
+          <span>{cita.hora || '—'}</span><ArrowRight size={14} /><span>{horaFin(cita)}</span>
+        </div>
+        <button type="button" onClick={() => onDetalle(cita)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:text-cyan-300"><Eye size={15} /></button>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <GripVertical size={15} className="mt-1 shrink-0 cursor-grab text-slate-600" />
+        <div className="min-w-0 flex-1">
+          <button type="button" onClick={() => onDetalle(cita)} className="w-full truncate text-left font-black text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
+          <div className="mt-1 truncate text-xs text-cyan-100">{servicios(cita).map((s) => s.nombre).join(' + ')}</div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+            <span style={{ color: ESTADOS[estado]?.color }}>{ESTADOS[estado]?.texto}</span>
+            <span className={saldo > 0 ? 'text-rose-300' : 'text-emerald-300'}>{saldo > 0 ? `Debe ${moneda(saldo)}` : 'Pagado'}</span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3">
+        {['pendiente', 'confirmada'].includes(cita.estado) && <button type="button" onClick={() => callbacks.onCambiarEstado(cita, 'en_espera')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white"><UserRoundCheck size={15} />Recibir paciente</button>}
+        {cita.estado === 'en_espera' && <button type="button" onClick={() => callbacks.onCambiarEstado(cita, 'en_atencion')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white"><PlayCircle size={15} />Iniciar atencion</button>}
+        {cita.estado === 'en_atencion' && <button type="button" onClick={() => callbacks.onCompletar(cita)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white"><CheckCircle2 size={15} />Finalizar atencion</button>}
+        {cita.estado === 'completada' && saldo > 0 && pago && <button type="button" onClick={() => pago.tipoPago === 'cuotas' ? callbacks.onVerCuotas(cita) : callbacks.onCobrar(pago, cita.nombrePaciente)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white">{pago.tipoPago === 'cuotas' ? <WalletCards size={15} /> : <CircleDollarSign size={15} />}Cobrar saldo</button>}
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        {ACTIVAS.has(cita.estado) && <button type="button" onClick={() => callbacks.onEditar(cita)} className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300" title="Editar cita activa"><Edit3 size={13} /></button>}
+        {ACTIVAS.has(cita.estado) && <button type="button" onClick={() => callbacks.onCancelar(cita)} className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs text-rose-300"><XCircle size={13} /></button>}
+        {cita.estado === 'completada' && <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-bold text-emerald-300">Cierre protegido</span>}
+      </div>
+    </article>
+  );
+}
+
+function Columna({ titulo, estado, citas, callbacks, onDetalle, arrastre }) {
+  const activa = arrastre.sobre === estado;
+  return (
+    <section onDragOver={(e) => e.preventDefault()} onDragEnter={() => arrastre.setSobre(estado)} onDrop={() => arrastre.soltar(estado)} className={`rounded-2xl border p-3 ${activa ? 'border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-500/20' : 'border-slate-700 bg-slate-800/60'}`}>
+      <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-black text-white">{titulo}</h3><span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-300">{citas.length}</span></div>
+      <div className="space-y-3">
+        {citas.length ? citas.map((cita) => <TarjetaRecepcion key={cita.id} cita={cita} callbacks={callbacks} onDetalle={onDetalle} onDragStart={arrastre.iniciar} onDragEnd={arrastre.terminar} />) : <div className="rounded-xl border border-dashed border-slate-700 py-8 text-center text-xs text-slate-600">Sin pacientes</div>}
+      </div>
+    </section>
+  );
+}
+
 
 function DetalleRapido({ cita, onClose, callbacks }) {
   if (!cita) return null;
   const pago = cita.pago;
   const cobrado = Number(pago?.cobrado || 0);
   const puedeEliminar = cobrado <= 0 && ['pendiente', 'cancelada', 'no_asistio'].includes(cita.estado);
+  const finalizada = cita.estado === 'completada';
 
   return (
-    <div className="fixed inset-0 z-[70] flex justify-end bg-black/60 backdrop-blur-sm" onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (event.target === event.currentTarget) onClose?.(); }}>
+    <div className="fixed inset-0 z-[90] flex justify-end bg-black/65 backdrop-blur-sm" onClick={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <aside className="h-full w-full max-w-lg overflow-y-auto border-l border-slate-700 bg-slate-900 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
-          <div><div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">Detalle de la atención</div><h2 className="mt-1 text-xl font-bold text-white">{cita.nombrePaciente}</h2><div className="mt-1 text-sm text-slate-400">{formatearFecha(cita.fecha, true)} · {cita.hora} → {obtenerHoraFinCita(cita)} · {obtenerDuracionCita(cita)} min</div></div>
+          <div className="min-w-0">
+            <div className="text-xs font-black uppercase tracking-wider text-cyan-400">Resumen de la atención</div>
+            <h2 className="mt-1 truncate text-xl font-black text-white">{cita.nombrePaciente}</h2>
+            <div className="mt-1 text-sm text-slate-400">{fechaDesdeTexto(cita.fecha).toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })} · {cita.hora} - {horaFin(cita)}</div>
+          </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-800 hover:text-white"><X size={19} /></button>
         </div>
-        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-800/70 p-4"><EstadoStepper estado={cita.estado} /></div>
+
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
+          <EstadoStepper estado={cita.estado} />
+        </div>
+
         <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Paciente</div><div className="font-semibold text-white">{cita.nombrePaciente}</div></div><div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-right"><div className="text-[10px] uppercase text-cyan-400">Ficha</div><div className="text-lg font-black text-white">{cita.codigoFicha || '—'}</div></div></div>
-          {cita.telefonoPaciente && <div className="mb-3 flex items-center gap-1.5 text-xs text-slate-400"><Phone size={13} /> {cita.telefonoPaciente}</div>}
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Servicios programados</div>
-          <ServiciosCita cita={cita} />
-          {cita.notas && <div className="mt-3 rounded-lg bg-slate-900/70 p-3 text-xs text-slate-400">{cita.notas}</div>}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Paciente</div>
+              <div className="truncate font-black text-white">{cita.nombrePaciente}</div>
+              {cita.telefonoPaciente && <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400"><Phone size={13} />{cita.telefonoPaciente}</div>}
+            </div>
+            <div className="shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-right">
+              <div className="text-[9px] font-black uppercase text-cyan-400">Ficha</div>
+              <div className="text-base font-black text-white">{cita.codigoFicha || '—'}</div>
+            </div>
+          </div>
+
+          <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Servicios</div>
+          <div className="space-y-2">
+            {servicios(cita).map((servicio, indice) => (
+              <div key={`${servicio.nombre}-${indice}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/65 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-white">{servicio.nombre}</div>
+                  {servicio.realizado === false && <div className="mt-0.5 text-[10px] font-black uppercase text-amber-300">No realizado</div>}
+                </div>
+                <div className="shrink-0 text-sm font-black text-cyan-300">{moneda(servicio.costo)}</div>
+              </div>
+            ))}
+          </div>
+          {cita.notas && <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-300"><span className="font-black text-slate-500">Nota de la cita: </span>{cita.notas}</div>}
+          {cita.notasFin && <div className="mt-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-cyan-100"><span className="font-black text-cyan-400">Cierre clínico: </span>{cita.notasFin}</div>}
         </div>
-        <div className="mt-4"><PagoResumen cita={cita} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} /></div>
-        <div className="mt-4"><AccionPrincipal cita={cita} onCambiarEstado={callbacks.onCambiarEstado} onCompletar={callbacks.onCompletar} onCobrar={callbacks.onCobrar} onVerCuotas={callbacks.onVerCuotas} /></div>
+
+        <div className="mt-4"><PagoResumen cita={cita} callbacks={callbacks} /></div>
+        <div className="mt-4"><AccionPrincipal cita={cita} callbacks={callbacks} /></div>
+
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <BotonSecundario onClick={() => callbacks.onEditar?.(cita)} title="Editar servicios y cita"><Edit3 size={15} /> Editar</BotonSecundario>
-          <BotonSecundario onClick={() => callbacks.onVerFicha?.(cita.paciente)} title="Abrir ficha encima"><FileText size={15} /> Ver ficha</BotonSecundario>
-          {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && <BotonSecundario onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} title="No asistió"><UserRoundX size={15} /> No asistió</BotonSecundario>}
-          {ESTADOS_ACTIVOS.has(cita.estado) && <BotonSecundario danger onClick={() => callbacks.onCancelar?.(cita)} title="Cancelar"><XCircle size={15} /> Cancelar</BotonSecundario>}
-          {puedeEliminar && <button type="button" onClick={() => callbacks.onEliminar?.(cita.id, cita.nombrePaciente)} className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"><Trash2 size={15} /> Eliminar definitivamente</button>}
+          {!finalizada && <button type="button" onClick={() => { callbacks.onEditar?.(cita); onClose?.(); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-xs font-black text-slate-200 hover:border-cyan-500/50 hover:text-white"><Edit3 size={15} />Editar cita</button>}
+          <button type="button" onClick={() => { callbacks.onVerFicha?.(cita.paciente); onClose?.(); }} className={`inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-xs font-black text-slate-200 hover:border-cyan-500/50 hover:text-white ${finalizada ? 'col-span-2' : ''}`}><FileText size={15} />{finalizada ? 'Ver cierre, cuenta y pagos' : 'Ver ficha completa'}</button>
+          {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && <button type="button" onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2.5 text-xs font-black text-orange-300"><UserRoundX size={15} />No asistió</button>}
+          {ACTIVAS.has(cita.estado) && <button type="button" onClick={() => callbacks.onCancelar?.(cita)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs font-black text-rose-300"><XCircle size={15} />Cancelar cita</button>}
+          {puedeEliminar && callbacks.onEliminar && <button type="button" onClick={() => callbacks.onEliminar(cita.id, cita.nombrePaciente)} className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs font-black text-rose-300 hover:bg-rose-500/20"><Trash2 size={15} />Eliminar definitivamente</button>}
         </div>
+
+        {finalizada && <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs leading-relaxed text-emerald-100">La atención clínica permanece finalizada. Los cobros incorrectos se corrigen mediante una anulación o devolución para conservar la trazabilidad.</div>}
       </aside>
     </div>
   );
 }
 
-export default function AgendaClinicaProfesional({
-  citas = [],
-  pacientes = [],
-  pagos = [],
-  onNuevaCita,
-  onEditarCita,
-  onCambiarEstado,
-  onCompletarCita,
-  onCancelarCita,
-  onCobrar,
-  onVerFicha,
-  onEliminarCita,
-  onReprogramarCita,
-  onVerCuotas
+export default function AgendaClinicaProfesional({  citas = [], pacientes = [], pagos = [], onNuevaCita, onEditarCita, onCambiarEstado,
+  onCompletarCita, onCancelarCita, onCobrar, onVerFicha, onEliminarCita,
+  onReprogramarCita, onVerCuotas
 }) {
+  const [modo, setModo] = useState('recepcion');
+  const [fechaRecepcion, setFechaRecepcion] = useState(fechaLocal());
+  const [vista, setVista] = useState('week');
+  const [fechaCalendario, setFechaCalendario] = useState(new Date());
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('todos');
   const [rangoFecha, setRangoFecha] = useState('todas');
   const [fechaExacta, setFechaExacta] = useState('');
-  const [modoVista, setModoVista] = useState('recepcion');
-  const [fechaRecepcion, setFechaRecepcion] = useState(fechaLocal());
-  const [limiteVisible, setLimiteVisible] = useState(30);
-  const [citaDetalle, setCitaDetalle] = useState(null);
-  const [vistaCalendario, setVistaCalendario] = useState('week');
-  const [fechaCalendario, setFechaCalendario] = useState(new Date());
-  const [moverCalendarioActivo, setMoverCalendarioActivo] = useState(false);
-  const [citaMoverCalendarioId, setCitaMoverCalendarioId] = useState(null);
-  const [citaArrastradaId, setCitaArrastradaId] = useState(null);
+  const [edicionHorarios, setEdicionHorarios] = useState(false);
+  const [detalle, setDetalle] = useState(null);
+  const [arrastradaId, setArrastradaId] = useState(null);
   const [columnaSobre, setColumnaSobre] = useState(null);
-  const bloquearSeleccionRef = useRef(0);
 
-  useEffect(() => setLimiteVisible(30), [busqueda, estadoFiltro, rangoFecha, fechaExacta]);
-
-  const pacientesPorId = useMemo(() => new Map(pacientes.map((p) => [Number(p.id), p])), [pacientes]);
-  const pagosPorCita = useMemo(() => {
-    const mapa = new Map();
-    pagos.forEach((pago) => {
-      const id = Number(pago.citaId);
-      if (!Number.isNaN(id) && !mapa.has(id)) mapa.set(id, pago);
-    });
-    return mapa;
-  }, [pagos]);
-
-  const citasEnriquecidas = useMemo(() => citas.map((cita) => {
-    const paciente = pacientesPorId.get(Number(cita.pacienteId)) || {};
+  const enriquecidas = useMemo(() => citas.map((cita) => {
+    const paciente = pacientes.find((p) => Number(p.id) === Number(cita.pacienteId));
+    const pago = pagos.find((p) => Number(p.citaId) === Number(cita.id));
     return {
       ...cita,
       paciente,
-      pago: pagosPorCita.get(Number(cita.id)) || null,
-      nombrePaciente: paciente.nombre || 'Paciente no encontrado',
-      cedulaPaciente: paciente.cedula || '',
-      codigoFicha: paciente.codigo_ficha || '',
-      telefonoPaciente: paciente.telefono || '',
-      correoPaciente: paciente.correo || ''
+      nombrePaciente: paciente?.nombre || cita.nombrePaciente || 'Paciente',
+      codigoFicha: paciente?.codigo_ficha || cita.codigoFicha || '',
+      cedulaPaciente: paciente?.cedula || '',
+      telefonoPaciente: paciente?.telefono || '',
+      correoPaciente: paciente?.correo || '',
+      pago
     };
-  }), [citas, pacientesPorId, pagosPorCita]);
+  }), [citas, pacientes, pagos]);
 
   const hoy = fechaLocal();
   const manana = fechaLocal(sumarDias(new Date(), 1));
-  const pasadoManana = fechaLocal(sumarDias(new Date(), 2));
   const finSemana = fechaLocal(sumarDias(new Date(), 7));
 
-  const resumenDias = useMemo(() => {
-    const construir = (fecha, etiqueta, descripcion) => {
-      const delDia = citasEnriquecidas.filter((cita) => cita.fecha === fecha && cita.estado !== 'cancelada');
-      const programadas = delDia.filter((cita) => ['pendiente', 'confirmada'].includes(cita.estado)).length;
-      return { fecha, etiqueta, descripcion, total: delDia.length, programadas };
-    };
-    return [
-      construir(hoy, 'Hoy', 'Jornada actual'),
-      construir(manana, 'Mañana', 'Próxima jornada'),
-      construir(pasadoManana, 'Pasado mañana', 'Vista anticipada')
-    ];
-  }, [citasEnriquecidas, hoy, manana, pasadoManana]);
-
-  const citasFiltradas = useMemo(() => {
-    const terminos = normalizar(busqueda).split(/\s+/).filter(Boolean);
-    return citasEnriquecidas.filter((cita) => {
-      const estadoVisual = normalizarEstadoVisual(cita.estado);
-      const estadoOk = estadoFiltro === 'todos' || estadoVisual === estadoFiltro;
-      if (!estadoOk) return false;
+  const filtradas = useMemo(() => {
+    const terminos = normalizarTexto(busqueda).split(/\s+/).filter(Boolean);
+    return enriquecidas.filter((cita) => {
+      const visual = estadoVisual(cita.estado);
+      if (estadoFiltro !== 'todos' && visual !== estadoFiltro) return false;
       if (fechaExacta && cita.fecha !== fechaExacta) return false;
       if (!fechaExacta) {
         if (rangoFecha === 'hoy' && cita.fecha !== hoy) return false;
         if (rangoFecha === 'manana' && cita.fecha !== manana) return false;
         if (rangoFecha === 'proximos7' && !(cita.fecha >= hoy && cita.fecha <= finSemana)) return false;
-        if (rangoFecha === 'vencidas' && !(cita.fecha < hoy && ESTADOS_ACTIVOS.has(cita.estado))) return false;
+        if (rangoFecha === 'vencidas' && !(cita.fecha < hoy && ACTIVAS.has(cita.estado))) return false;
       }
       if (!terminos.length) return true;
-      const texto = normalizar([
+      const textoBusqueda = normalizarTexto([
         cita.nombrePaciente,
-        cita.cedulaPaciente,
         cita.codigoFicha,
+        cita.cedulaPaciente,
         cita.telefonoPaciente,
         cita.correoPaciente,
         cita.procedimiento,
         cita.notas,
         cita.fecha,
         cita.hora,
-        cita.horaFin
+        ...servicios(cita).map((servicio) => servicio.nombre)
       ].join(' '));
-      return terminos.every((termino) => texto.includes(termino));
-    }).sort((a, b) => `${a.fecha || ''}${a.hora || ''}`.localeCompare(`${b.fecha || ''}${b.hora || ''}`));
-  }, [busqueda, citasEnriquecidas, estadoFiltro, fechaExacta, finSemana, hoy, manana, rangoFecha]);
-
-  const citasRecepcion = useMemo(() => citasEnriquecidas
-    .filter((cita) => cita.fecha === fechaRecepcion)
-    .sort((a, b) => String(a.hora || '').localeCompare(String(b.hora || ''))), [citasEnriquecidas, fechaRecepcion]);
-
-  const columnasRecepcion = useMemo(() => ({
-    programadas: citasRecepcion.filter((c) => ['pendiente', 'confirmada'].includes(c.estado)),
-    espera: citasRecepcion.filter((c) => c.estado === 'en_espera'),
-    atencion: citasRecepcion.filter((c) => c.estado === 'en_atencion'),
-    finalizadas: citasRecepcion.filter((c) => c.estado === 'completada')
-  }), [citasRecepcion]);
-
-  const eventosCalendario = useMemo(() => citasFiltradas.map((cita) => {
-    const [year, month, day] = String(cita.fecha || hoy).split('-').map(Number);
-    const [hour, minute] = String(cita.hora || '09:00').split(':').map(Number);
-    const start = new Date(year, month - 1, day, hour || 0, minute || 0);
-    const [endHour, endMinute] = String(obtenerHoraFinCita(cita)).split(':').map(Number);
-    const end = new Date(year, month - 1, day, endHour || 0, endMinute || 0);
-    return {
-      id: cita.id,
-      title: `${cita.nombrePaciente} · ${obtenerServicios(cita)[0]?.nombre || 'Consulta'}`,
-      start,
-      end: end > start ? end : new Date(start.getTime() + Number(cita.duracionMinutos || 60) * 60 * 1000),
-      estado: cita.estado,
-      citaData: cita
-    };
-  }), [citasFiltradas, hoy]);
-
-  const eventosResumenMes = useMemo(() => {
-    const porFecha = new Map();
-    citasFiltradas.forEach((cita) => {
-      if (!cita.fecha) return;
-      if (!porFecha.has(cita.fecha)) {
-        porFecha.set(cita.fecha, {
-          pendiente: 0,
-          en_espera: 0,
-          en_atencion: 0,
-          completada: 0,
-          no_asistio: 0,
-          cancelada: 0
-        });
-      }
-      const estado = normalizarEstadoVisual(cita.estado);
-      const conteos = porFecha.get(cita.fecha);
-      conteos[estado] = Number(conteos[estado] || 0) + 1;
+      return terminos.every((termino) => textoBusqueda.includes(termino));
     });
+  }, [enriquecidas, busqueda, estadoFiltro, rangoFecha, fechaExacta, hoy, manana, finSemana]);
 
-    return Array.from(porFecha.entries()).map(([fecha, conteos]) => {
-      const date = fechaDesdeString(fecha);
-      return {
-        id: `resumen-${fecha}`,
-        title: 'Resumen del día',
-        start: date,
-        end: sumarDias(date, 1),
-        allDay: true,
-        esResumenMes: true,
-        fecha,
-        conteos
-      };
+  const eventos = useMemo(() => filtradas.map((cita) => {
+    const [y, m, d] = String(cita.fecha).split('-').map(Number);
+    const [hi, mi] = String(cita.hora || '09:00').split(':').map(Number);
+    const [hf, mf] = String(horaFin(cita)).split(':').map(Number);
+    const start = new Date(y, m - 1, d, hi, mi);
+    let end = new Date(y, m - 1, d, hf, mf);
+    if (end <= start) end = new Date(start.getTime() + Number(cita.duracionMinutos || 60) * 60000);
+    return { id: cita.id, title: cita.nombrePaciente, start, end, citaData: cita };
+  }), [filtradas]);
+
+  const resumenMes = useMemo(() => {
+    const mapa = new Map();
+    filtradas.forEach((cita) => {
+      if (!mapa.has(cita.fecha)) mapa.set(cita.fecha, { pendiente: 0, en_espera: 0, en_atencion: 0, completada: 0, no_asistio: 0, cancelada: 0 });
+      const clave = estadoVisual(cita.estado);
+      mapa.get(cita.fecha)[clave] += 1;
     });
-  }, [citasFiltradas]);
+    return [...mapa.entries()].map(([fecha, conteos]) => ({ id: `r-${fecha}`, title: 'Resumen', start: fechaDesdeTexto(fecha), end: new Date(fechaDesdeTexto(fecha).getTime() + 86400000), allDay: true, esResumen: true, conteos }));
+  }, [filtradas]);
 
-  const resumenGlobal = useMemo(() => {
-    const base = {
-      total: citasFiltradas.length,
-      pendiente: 0,
-      en_espera: 0,
-      en_atencion: 0,
-      completada: 0,
-      no_asistio: 0,
-      cancelada: 0,
-      totalFacturado: 0,
-      totalCobrado: 0,
-      saldoPendiente: 0
-    };
-
-    citasFiltradas.forEach((cita) => {
-      const estado = normalizarEstadoVisual(cita.estado);
-      base[estado] = Number(base[estado] || 0) + 1;
-      const total = Number(cita.pago?.total ?? cita.costo ?? 0);
-      const cobrado = Number(cita.pago?.cobrado || 0);
-      const saldo = Number(cita.pago?.saldo ?? Math.max(0, total - cobrado));
-      base.totalFacturado += total;
-      base.totalCobrado += cobrado;
-      base.saldoPendiente += saldo;
-    });
-    return base;
-  }, [citasFiltradas]);
-
-  useEffect(() => {
-    if (modoVista !== 'calendario' || !eventosCalendario.length) return;
-    if (busqueda || estadoFiltro !== 'todos' || rangoFecha !== 'todas' || fechaExacta) {
-      setFechaCalendario(eventosCalendario[0].start);
-    }
-  }, [busqueda, estadoFiltro, eventosCalendario, fechaExacta, modoVista, rangoFecha]);
-
-  const gruposLista = useMemo(() => {
-    const grupos = new Map();
-    citasFiltradas.forEach((cita) => {
-      if (!grupos.has(cita.fecha)) grupos.set(cita.fecha, []);
-      grupos.get(cita.fecha).push(cita);
-    });
-    return Array.from(grupos.entries());
-  }, [citasFiltradas]);
+  const recepcion = useMemo(() => enriquecidas.filter((c) => c.fecha === fechaRecepcion).sort((a, b) => String(a.hora).localeCompare(String(b.hora))), [enriquecidas, fechaRecepcion]);
+  const columnas = {
+    pendiente: recepcion.filter((c) => ['pendiente', 'confirmada'].includes(c.estado)),
+    en_espera: recepcion.filter((c) => c.estado === 'en_espera'),
+    en_atencion: recepcion.filter((c) => c.estado === 'en_atencion'),
+    completada: recepcion.filter((c) => c.estado === 'completada')
+  };
 
   const callbacks = {
     onEditar: onEditarCita,
@@ -866,367 +529,259 @@ export default function AgendaClinicaProfesional({
     onCompletar: onCompletarCita,
     onCancelar: onCancelarCita,
     onCobrar,
+    onVerCuotas,
     onVerFicha,
-    onEliminar: onEliminarCita,
-    onVerCuotas
+    onEliminar: onEliminarCita
   };
 
-  const cambiarDiaRecepcion = (dias) => setFechaRecepcion(fechaLocal(sumarDias(fechaDesdeString(fechaRecepcion), dias)));
-  const limpiarFiltros = () => { setBusqueda(''); setEstadoFiltro('todos'); setRangoFecha('todas'); setFechaExacta(''); };
-  const hayFiltros = Boolean(busqueda) || estadoFiltro !== 'todos' || rangoFecha !== 'todas' || Boolean(fechaExacta);
-
-  const cerrarDetalleSeguro = () => {
-    bloquearSeleccionRef.current = Date.now() + 350;
-    setCitaDetalle(null);
-  };
-
-  const abrirVistaDia = (date) => {
-    setFechaCalendario(date);
-    setVistaCalendario('day');
-  };
-
-  const seleccionarSlotSeguro = async (slotInfo) => {
-    if (citaDetalle || Date.now() < bloquearSeleccionRef.current) return;
-
-    if (vistaCalendario === 'month') {
-      abrirVistaDia(slotInfo.start);
-      return;
+  const arrastre = {
+    sobre: columnaSobre,
+    setSobre: setColumnaSobre,
+    iniciar: (event, cita) => { setArrastradaId(cita.id); event.dataTransfer.setData('text/plain', String(cita.id)); event.dataTransfer.effectAllowed = 'move'; },
+    terminar: () => { setArrastradaId(null); setColumnaSobre(null); },
+    soltar: (destino) => {
+      const cita = enriquecidas.find((c) => Number(c.id) === Number(arrastradaId));
+      setArrastradaId(null); setColumnaSobre(null);
+      if (!cita) return;
+      const actual = ['pendiente', 'confirmada'].includes(cita.estado) ? 'pendiente' : cita.estado;
+      if (actual === destino) return;
+      if (destino === 'completada') onCompletarCita?.(cita);
+      else onCambiarEstado?.(cita, destino);
     }
+  };
 
-    if (moverCalendarioActivo) {
-      const cita = citasEnriquecidas.find((item) => Number(item.id) === Number(citaMoverCalendarioId));
-      if (!cita) {
-        Swal.fire({
-          toast: true,
-          position: 'top-end',
-          title: 'Selecciona primero una cita',
-          text: 'Haz clic en la cita que deseas mover y luego en el horario de destino.',
-          icon: 'info',
-          timer: 2400,
-          showConfirmButton: false,
-          background: '#283652',
-          color: '#E9EDF2'
-        });
-        return;
+  const guardarCambioHorario = async ({ event, start, end }) => {
+    const cita = event.citaData;
+    if (!cita || !ACTIVAS.has(cita.estado)) return;
+    await onReprogramarCita?.(cita, start, end);
+  };
+
+  const abrirEvento = (event) => {
+    if (event.esResumen) { setFechaCalendario(event.start); setVista('day'); return; }
+    setDetalle(event.citaData);
+  };
+
+  const seleccionarSlot = (slot) => {
+    if (vista === 'month') { setFechaCalendario(slot.start); setVista('day'); return; }
+    if (edicionHorarios) return;
+    const inicio = format(slot.start, 'HH:mm') === '00:00' ? '09:00' : format(slot.start, 'HH:mm');
+    const fin = format(slot.end, 'HH:mm') > inicio ? format(slot.end, 'HH:mm') : minutosAHora((horaAMinutos(inicio) || 540) + 60);
+    onNuevaCita?.({ fecha: format(slot.start, 'yyyy-MM-dd'), hora: inicio, horaFin: fin, duracionMinutos: (horaAMinutos(fin) || 600) - (horaAMinutos(inicio) || 540) });
+  };
+
+  const propiedadesEvento = (event) => {
+    if (event.esResumen) return { style: { background: 'transparent', border: 0, padding: 0, color: 'inherit' } };
+    const info = ESTADOS[estadoVisual(event.citaData.estado)] || ESTADOS.pendiente;
+    return {
+      className: 'dp-tarjeta-calendario',
+      style: {
+        '--dp-event-color': info.color,
+        backgroundColor: `${info.color}4D`,
+        color: '#ffffff',
+        border: `1px solid ${info.color}D9`,
+        borderLeft: `5px solid ${info.color}`,
+        borderRadius: 10,
+        padding: 0,
+        boxShadow: edicionHorarios
+          ? `0 0 0 2px ${info.color}4D, 0 9px 20px rgba(15,23,42,.30)`
+          : '0 4px 12px rgba(15,23,42,.22)',
+        cursor: edicionHorarios ? 'grab' : 'pointer',
+        overflow: 'hidden'
       }
-
-      const inicioDestino = slotInfo.start;
-      const finDestino = new Date(inicioDestino.getTime() + obtenerDuracionCita(cita) * 60 * 1000);
-      const confirmacion = await Swal.fire({
-        title: '¿Mover esta cita?',
-        html: `<div style="text-align:left;line-height:1.7"><strong>${cita.nombrePaciente}</strong><br>${format(inicioDestino, 'dd/MM/yyyy')}<br>${format(inicioDestino, 'HH:mm')} → ${format(finDestino, 'HH:mm')}</div>`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, reprogramar',
-        cancelButtonText: 'Volver',
-        confirmButtonColor: '#56759E',
-        background: '#283652',
-        color: '#E9EDF2'
-      });
-
-      if (confirmacion.isConfirmed) {
-        await onReprogramarCita?.(cita, inicioDestino);
-        setCitaMoverCalendarioId(null);
-      }
-      return;
-    }
-
-    const inicio = format(slotInfo.start, 'HH:mm') === '00:00' ? '09:00' : format(slotInfo.start, 'HH:mm');
-    const finSeleccionado = format(slotInfo.end, 'HH:mm');
-    const fin = finSeleccionado === '00:00' || finSeleccionado <= inicio
-      ? minutosAHora((horaAMinutos(inicio) || 540) + 60)
-      : finSeleccionado;
-
-    onNuevaCita?.({
-      fecha: format(slotInfo.start, 'yyyy-MM-dd'),
-      hora: inicio,
-      horaFin: fin,
-      duracionMinutos: Math.max(5, (horaAMinutos(fin) || 600) - (horaAMinutos(inicio) || 540))
-    });
+    };
   };
 
-  const seleccionarEventoCalendario = (event) => {
-    if (event?.esResumenMes) {
-      abrirVistaDia(event.start);
-      return;
-    }
-    if (moverCalendarioActivo) {
-      setCitaMoverCalendarioId(event.citaData.id);
-      return;
-    }
-    setCitaDetalle(event.citaData);
+  const calendarioComun = {
+    localizer,
+    culture: 'es',
+    events: vista === 'month' ? resumenMes : eventos,
+    startAccessor: 'start',
+    endAccessor: 'end',
+    view: vista,
+    date: fechaCalendario,
+    onView: (nueva) => setVista(nueva === 'agenda' ? 'week' : nueva),
+    onNavigate: setFechaCalendario,
+    views: ['month', 'week', 'day'],
+    step: 15,
+    timeslots: 4,
+    min: new Date(1970, 0, 1, 7, 0),
+    max: new Date(1970, 0, 1, 21, 0),
+    selectable: !edicionHorarios,
+    onSelectSlot: seleccionarSlot,
+    onSelectEvent: abrirEvento,
+    eventPropGetter: propiedadesEvento,
+    components: { toolbar: Toolbar, event: (props) => props.event.esResumen ? <ResumenMes {...props} /> : <Evento {...props} editable={edicionHorarios} /> },
+    formats: {
+      dayFormat: (fecha) => format(fecha, 'EEE dd', { locale: es }),
+      weekdayFormat: (fecha) => format(fecha, 'EEEE', { locale: es }),
+      monthHeaderFormat: (fecha) => format(fecha, 'MMMM yyyy', { locale: es }),
+      dayHeaderFormat: (fecha) => format(fecha, "EEEE dd 'de' MMMM", { locale: es }),
+      timeGutterFormat: (fecha) => format(fecha, 'HH:mm', { locale: es }),
+      eventTimeRangeFormat: ({ start, end }) => `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`
+    },
+    messages: { today: 'Hoy', previous: 'Anterior', next: 'Siguiente', month: 'Mes', week: 'Semana', day: 'Día', noEventsInRange: 'No hay citas.' },
+    style: { height: 720 }
   };
 
-  const iniciarArrastreRecepcion = (event, cita) => {
-    setCitaArrastradaId(cita.id);
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(cita.id));
-  };
-
-  const terminarArrastreRecepcion = () => {
-    setCitaArrastradaId(null);
-    setColumnaSobre(null);
-  };
-
-  const soltarEnColumna = (estadoDestino) => {
-    const cita = citasEnriquecidas.find((item) => Number(item.id) === Number(citaArrastradaId));
-    terminarArrastreRecepcion();
-    if (!cita) return;
-
-    const actualNormalizado = ['pendiente', 'confirmada'].includes(cita.estado) ? 'pendiente' : cita.estado;
-    if (actualNormalizado === estadoDestino) return;
-
-    if (estadoDestino === 'completada') {
-      onCompletarCita?.(cita);
-      return;
-    }
-
-    onCambiarEstado?.(cita, estadoDestino);
-  };
-
+  const fallbackCalendario = (
+    <div>
+      <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">El modo interactivo no pudo cargarse. El calendario estable sigue disponible; desactiva Editar horarios.</div>
+      <Calendar {...calendarioComun} />
+    </div>
+  );
 
   return (
-    <div className="space-y-5">
+    <div className="dp-agenda-profesional space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-cyan-400">Agenda y recepción clínica</h1>
-          <p className="mt-1 text-sm text-slate-400">Programa, recibe, atiende, finaliza y cobra desde una misma pantalla.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => onNuevaCita?.(null)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-600/20 hover:bg-cyan-500"><Plus size={18} /> Nueva cita</button>
-        </div>
+        <div><h1 className="text-3xl font-bold text-cyan-400">Agenda y recepción clínica</h1><p className="mt-1 text-sm text-slate-400">Gestiona pacientes, horarios y cobros desde una sola vista.</p></div>
+        <button type="button" onClick={() => onNuevaCita?.(null)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white"><Plus size={18} />Nueva cita</button>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-700/80 bg-slate-800/80 p-3 shadow-xl lg:flex-row lg:items-center">
-        <div className="flex rounded-xl border border-slate-700 bg-slate-900 p-1">
-          {[
-            ['recepcion', 'Recepción', <LayoutDashboard size={16} />],
-            ['calendario', 'Calendario', <CalendarDays size={16} />],
-            ['lista', 'Resumen', <LayoutList size={16} />]
-          ].map(([modo, etiqueta, icono]) => (
-            <button key={modo} type="button" onClick={() => setModoVista(modo)} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition ${modoVista === modo ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>{icono}{etiqueta}</button>
-          ))}
-        </div>
-
-        {modoVista !== 'recepcion' && (
-          <>
-            <div className="relative min-w-[260px] flex-1">
-              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre, DNI, ficha, teléfono o tratamiento..." className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-10 pr-9 text-sm text-white outline-none focus:border-cyan-500" />
-              {busqueda && <button type="button" onClick={() => setBusqueda('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-white"><X size={15} /></button>}
-            </div>
-            <div className="relative min-w-[165px]">
-              <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <select value={rangoFecha} onChange={(e) => { setRangoFecha(e.target.value); setFechaExacta(''); }} className="w-full appearance-none rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-8 text-sm text-white outline-none focus:border-cyan-500">
-                <option value="todas">Todas las fechas</option><option value="hoy">Hoy</option><option value="manana">Mañana</option><option value="proximos7">Próximos 7 días</option><option value="vencidas">Vencidas</option>
-              </select>
-              <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            </div>
-            <input type="date" value={fechaExacta} onChange={(e) => { setFechaExacta(e.target.value); if (e.target.value) setRangoFecha('todas'); }} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500" />
-          </>
-        )}
-      </div>
-
-      {modoVista === 'recepcion' && (
-        <>
-          <div className="grid gap-3 md:grid-cols-3">
-            {resumenDias.map((dia) => {
-              const activo = fechaRecepcion === dia.fecha;
-              return (
-                <button key={dia.fecha} type="button" onClick={() => setFechaRecepcion(dia.fecha)} className={`rounded-2xl border p-4 text-left transition ${activo ? 'border-cyan-500 bg-cyan-500/10 shadow-lg shadow-cyan-950/20' : dia.programadas > 0 ? 'border-amber-500/30 bg-amber-500/5 hover:border-amber-400/60' : 'border-slate-700 bg-slate-800/60 hover:border-slate-600'}`}>
-                  <div className="flex items-center justify-between gap-3"><div><div className={`text-xs font-bold uppercase tracking-wider ${activo ? 'text-cyan-300' : 'text-slate-400'}`}>{dia.etiqueta}</div><div className="mt-1 text-[11px] text-slate-500">{dia.descripcion}</div></div><CalendarCheck2 size={20} className={dia.programadas > 0 ? 'text-amber-300' : 'text-slate-600'} /></div>
-                  <div className="mt-3 text-2xl font-black text-white">{dia.programadas}</div>
-                  <div className="text-xs font-semibold text-slate-300">{dia.programadas === 1 ? 'paciente programado' : 'pacientes programados'}</div>
-                  <div className="mt-1 text-[11px] text-slate-500">{dia.total ? `${dia.total} cita(s) registradas en total` : 'Sin citas registradas'}</div>
-                </button>
-              );
-            })}
+      <div className="dp-barra-agenda flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-800/80 p-3">
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex flex-wrap rounded-xl border border-slate-700 bg-slate-900 p-1 sm:w-fit">
+            {[
+              ['recepcion', 'Recepción', <LayoutDashboard size={16} />],
+              ['calendario', 'Calendario', <CalendarDays size={16} />],
+              ['resumen', 'Resumen', <LayoutList size={16} />]
+            ].map(([valor, texto, icono]) => <button key={valor} type="button" onClick={() => setModo(valor)} className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold sm:flex-none ${modo === valor ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>{icono}{texto}</button>)}
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-700/80 bg-slate-800/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Jornada de recepción</div>
-              <div className="mt-1 text-lg font-bold capitalize text-white">{formatearFecha(fechaRecepcion, true)}</div>
-              <div className="text-xs text-slate-500">{citasRecepcion.length} cita{citasRecepcion.length === 1 ? '' : 's'} registrada{citasRecepcion.length === 1 ? '' : 's'}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => cambiarDiaRecepcion(-1)} className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 hover:text-white"><ChevronLeft size={18} /></button>
-              <button type="button" onClick={() => setFechaRecepcion(hoy)} className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20">Hoy</button>
-              <input type="date" value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500" />
-              <button type="button" onClick={() => cambiarDiaRecepcion(1)} className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 hover:text-white"><ChevronRight size={18} /></button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
-            <span className="font-semibold text-cyan-300">Consejo:</span> arrastra una tarjeta entre columnas para cambiar rápidamente el estado del paciente.
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-4">
-            <ColumnaRecepcion titulo="Programadas" subtitulo="Próximas por recibir" citas={columnasRecepcion.programadas} clase="text-amber-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="No hay pacientes programados." estadoDestino="pendiente" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
-            <ColumnaRecepcion titulo="En espera" subtitulo="Ya llegaron a recepción" citas={columnasRecepcion.espera} clase="text-violet-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="Nadie está esperando." estadoDestino="en_espera" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
-            <ColumnaRecepcion titulo="En atención" subtitulo="Actualmente en consulta" citas={columnasRecepcion.atencion} clase="text-rose-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="No hay atención en curso." estadoDestino="en_atencion" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
-            <ColumnaRecepcion titulo="Finalizadas" subtitulo="Atendidas durante el día" citas={columnasRecepcion.finalizadas} clase="text-emerald-300" callbacks={callbacks} onDetalle={setCitaDetalle} vacio="Aún no hay atenciones finalizadas." estadoDestino="completada" citaArrastradaId={citaArrastradaId} columnaSobre={columnaSobre} onDragStart={iniciarArrastreRecepcion} onDragEnd={terminarArrastreRecepcion} onDragEnter={setColumnaSobre} onDrop={soltarEnColumna} />
-          </div>
-        </>
-      )}
-
-      {modoVista !== 'recepcion' && (
-        <div className="flex flex-wrap items-center gap-2">
-          {FILTROS_ESTADO.map(([valor, etiqueta]) => (
-            <button key={valor} type="button" onClick={() => setEstadoFiltro(valor)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${estadoFiltro === valor ? 'border-cyan-500 bg-cyan-600 text-white' : 'border-slate-700 bg-slate-900/60 text-slate-400 hover:text-white'}`}>{etiqueta}</button>
-          ))}
-          {hayFiltros && <button type="button" onClick={limpiarFiltros} className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white"><X size={14} /> Limpiar</button>}
-        </div>
-      )}
-
-      {modoVista === 'calendario' && (
-        <div className="agenda-calendario-pro rounded-2xl border border-slate-700/80 bg-slate-800/80 p-4 shadow-xl">
-          <style>{`
-            .agenda-calendario-pro .rbc-calendar { color: #e2e8f0; }
-            .agenda-calendario-pro .rbc-toolbar { display: none; }
-            .agenda-calendario-pro .rbc-header { padding: 10px 6px; border-color: #334155; background: rgba(15,23,42,.72); color: #cbd5e1; font-size: 12px; }
-            .agenda-calendario-pro .rbc-time-view,
-            .agenda-calendario-pro .rbc-month-view { border-color: #334155; border-radius: 14px; overflow: hidden; background: rgba(15,23,42,.38); }
-            .agenda-calendario-pro .rbc-time-header-content,
-            .agenda-calendario-pro .rbc-time-content,
-            .agenda-calendario-pro .rbc-timeslot-group,
-            .agenda-calendario-pro .rbc-day-bg,
-            .agenda-calendario-pro .rbc-month-row { border-color: #334155; }
-            .agenda-calendario-pro .rbc-timeslot-group { min-height: 76px; }
-            .agenda-calendario-pro .rbc-time-slot { color: #64748b; font-size: 11px; }
-            .agenda-calendario-pro .rbc-label { color: #94a3b8; font-size: 11px; padding-right: 8px; }
-            .agenda-calendario-pro .rbc-today { background: rgba(6,182,212,.055); }
-            .agenda-calendario-pro .rbc-current-time-indicator { height: 2px; background: #22d3ee; }
-            .agenda-calendario-pro .rbc-event { margin-top: 2px; margin-bottom: 2px; border: 1px solid rgba(255,255,255,.16) !important; border-radius: 10px !important; overflow: hidden; }
-            .agenda-calendario-pro .rbc-day-slot .rbc-event-content { padding: 2px 3px; }
-            .agenda-calendario-pro .rbc-month-view .rbc-event { margin-left: 3px; margin-right: 3px; padding: 3px 6px !important; }
-            .agenda-calendario-pro .rbc-off-range-bg { background: rgba(2,6,23,.45); }
-            .agenda-calendario-pro .rbc-show-more { background: transparent; color: #67e8f9; font-size: 11px; }
-            .agenda-calendario-pro .rbc-agenda-view table.rbc-agenda-table { border-color: #334155; }
-            .agenda-calendario-pro .rbc-agenda-view table.rbc-agenda-table tbody > tr > td,
-            .agenda-calendario-pro .rbc-agenda-view table.rbc-agenda-table thead > tr > th { border-color: #334155; padding: 10px; }
-            .agenda-calendario-pro .rbc-month-view .rbc-date-cell { padding: 5px 6px 1px; }
-            .agenda-calendario-pro .rbc-month-view .rbc-row-content { min-height: 92px; }
-            .agenda-calendario-pro .rbc-month-view .rbc-row-segment { padding: 1px 4px; }
-            .agenda-calendario-pro .rbc-month-view .rbc-event.dp-resumen-evento { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; overflow: visible; }
-            html[data-theme="light"] .agenda-calendario-pro .rbc-calendar { color: #283652; }
-            html[data-theme="light"] .agenda-calendario-pro .rbc-header { background: #E9EDF2; border-color: #C5D0E0; color: #56759E; }
-            html[data-theme="light"] .agenda-calendario-pro .rbc-time-view,
-            html[data-theme="light"] .agenda-calendario-pro .rbc-month-view { background: #fff; border-color: #C5D0E0; }
-            html[data-theme="light"] .agenda-calendario-pro .rbc-time-header-content,
-            html[data-theme="light"] .agenda-calendario-pro .rbc-time-content,
-            html[data-theme="light"] .agenda-calendario-pro .rbc-timeslot-group,
-            html[data-theme="light"] .agenda-calendario-pro .rbc-day-bg,
-            html[data-theme="light"] .agenda-calendario-pro .rbc-month-row { border-color: #C5D0E0; }
-            html[data-theme="light"] .agenda-calendario-pro .rbc-off-range-bg { background: #E9EDF2; }
-            html[data-theme="light"] .agenda-calendario-pro .rbc-today { background: rgba(86,117,158,.10) !important; box-shadow: inset 0 0 0 2px rgba(86,117,158,.32); }
-          `}</style>
-
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/55 p-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300"><CalendarDays size={15} className="text-cyan-400" /> Calendario clínico interactivo</div>
-              <div className="mt-1 text-[11px] text-slate-500">Clic: ver detalle · Doble clic: editar · Selecciona un espacio para programar.</div>
-            </div>
-            <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${moverCalendarioActivo ? 'border-cyan-500 bg-cyan-500/10' : 'border-slate-700 bg-slate-900'}`}>
-              <input type="checkbox" checked={moverCalendarioActivo} onChange={(event) => { const activo = event.target.checked; setMoverCalendarioActivo(activo); if (!activo) setCitaMoverCalendarioId(null); }} className="h-4 w-4 accent-cyan-500" />
-              <div><div className={`text-xs font-bold ${moverCalendarioActivo ? 'text-cyan-300' : 'text-slate-300'}`}>Permitir mover citas</div><div className="text-[10px] text-slate-500">Selecciona una cita y luego el nuevo horario</div></div>
-            </label>
-          </div>
-
-          {moverCalendarioActivo && (
-            <div className={`mb-3 rounded-xl border px-3 py-2 text-xs ${citaMoverCalendarioId ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>
-              {citaMoverCalendarioId
-                ? 'Cita seleccionada. Haz clic en el nuevo horario para confirmar el movimiento.'
-                : 'Modo mover activo. Haz clic primero en la cita que deseas reprogramar.'}
+          {modo !== 'recepcion' && (
+            <div className="dp-filtros-agenda grid min-w-0 w-full gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(250px,1.35fr)_minmax(155px,.72fr)_minmax(155px,.72fr)_minmax(145px,.62fr)]">
+              <div className="relative min-w-0">
+                <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, DNI, ficha, teléfono o servicio..." className="dp-control-filtro w-full min-w-0 rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-10 pr-9 text-sm text-white outline-none focus:border-cyan-500" />
+                {busqueda && <button type="button" onClick={() => setBusqueda('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-white"><X size={14} /></button>}
+              </div>
+              <div className="relative min-w-0">
+                <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} className="dp-control-filtro w-full min-w-0 appearance-none rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-8 text-sm text-white outline-none focus:border-cyan-500">
+                  {FILTROS_ESTADO.map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
+                </select>
+                <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              </div>
+              <div className="relative min-w-0">
+                <select value={rangoFecha} onChange={(e) => { setRangoFecha(e.target.value); setFechaExacta(''); }} className="dp-control-filtro w-full min-w-0 appearance-none rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-3 pr-8 text-sm text-white outline-none focus:border-cyan-500">
+                  <option value="todas">Todas las fechas</option>
+                  <option value="hoy">Hoy</option>
+                  <option value="manana">Mañana</option>
+                  <option value="proximos7">Próximos 7 días</option>
+                  <option value="vencidas">Citas vencidas</option>
+                </select>
+                <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              </div>
+              <input type="date" value={fechaExacta} onChange={(e) => { setFechaExacta(e.target.value); if (e.target.value) setRangoFecha('todas'); }} className="dp-control-filtro w-full min-w-0 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500" />
             </div>
           )}
-
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-slate-400"><strong className="text-white">{citasFiltradas.length}</strong> cita{citasFiltradas.length === 1 ? '' : 's'} visible{citasFiltradas.length === 1 ? '' : 's'} con los filtros actuales.</div>
-            <div className="flex flex-wrap gap-2">{['pendiente','en_espera','en_atencion','completada'].map((estado) => <span key={estado} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ESTADOS[estado].colorCalendario }} />{ESTADOS[estado].corta}</span>)}</div>
-          </div>
-
-          <div style={{ height: '76vh', minHeight: 640 }}>
-            <Calendar
-              localizer={localizer}
-              culture="es"
-              view={vistaCalendario}
-              onView={setVistaCalendario}
-              date={fechaCalendario}
-              onNavigate={setFechaCalendario}
-              views={['month', 'week', 'day', 'agenda']}
-              events={vistaCalendario === 'month' ? eventosResumenMes : eventosCalendario}
-              components={{
-                event: vistaCalendario === 'month' ? EventoResumenMes : EventoCalendario,
-                toolbar: ToolbarCalendario,
-                month: {
-                  dateHeader: (props) => <CabeceraFechaMes {...props} onAbrirDia={abrirVistaDia} />
-                }
-              }}
-              messages={{ next: 'Siguiente', previous: 'Anterior', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día', agenda: 'Agenda', date: 'Fecha', time: 'Hora', event: 'Paciente / tratamiento', noEventsInRange: 'No hay citas en este rango.' }}
-              step={15}
-              timeslots={4}
-              min={new Date(1970, 0, 1, 7, 0, 0)}
-              max={new Date(1970, 0, 1, 21, 0, 0)}
-              popup
-              eventPropGetter={(event) => {
-                if (event.esResumenMes) {
-                  return { className: 'dp-resumen-evento', style: { background: 'transparent', border: 0, boxShadow: 'none', padding: 0, color: 'inherit' } };
-                }
-                const estado = normalizarEstadoVisual(event.estado);
-                return { style: { backgroundColor: ESTADOS[estado]?.colorCalendario || '#64748b', color: '#fff', border: Number(event.id) === Number(citaMoverCalendarioId) ? '2px solid #67e8f9' : '1px solid rgba(255,255,255,.18)', fontSize: '12px', padding: '4px 6px', boxShadow: Number(event.id) === Number(citaMoverCalendarioId) ? '0 0 0 3px rgba(34,211,238,.25)' : '0 5px 12px rgba(0,0,0,.22)' } };
-              }}
-              selectable={!citaDetalle}
-              onSelectEvent={seleccionarEventoCalendario}
-              onDoubleClickEvent={(event) => !moverCalendarioActivo && !event.esResumenMes && onEditarCita?.(event.citaData)}
-              onSelectSlot={seleccionarSlotSeguro}
-              onDrillDown={abrirVistaDia}
-              drilldownView="day"
-            />
-          </div>
         </div>
-      )}
+        {modo !== 'recepcion' && <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+          <span>{filtradas.length} cita{filtradas.length === 1 ? '' : 's'} visible{filtradas.length === 1 ? '' : 's'}</span>
+          {(busqueda || estadoFiltro !== 'todos' || rangoFecha !== 'todas' || fechaExacta) && <button type="button" onClick={() => { setBusqueda(''); setEstadoFiltro('todos'); setRangoFecha('todas'); setFechaExacta(''); }} className="font-black text-cyan-300 hover:text-cyan-200">Limpiar filtros</button>}
+        </div>}
+      </div>
 
-      {modoVista === 'lista' && (
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-700/80 bg-slate-800/80 p-5 shadow-xl">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-cyan-400"><ListChecks size={16} /> Resumen general</div>
-                <h2 className="mt-1 text-xl font-black text-white">Citas, atención y cobros en una sola vista</h2>
-                <p className="mt-1 text-xs text-slate-500">Usa el buscador y los filtros superiores para reducir este resumen.</p>
-              </div>
-              <div className="text-sm text-slate-400"><strong className="text-white">{resumenGlobal.total}</strong> cita{resumenGlobal.total === 1 ? '' : 's'} visible{resumenGlobal.total === 1 ? '' : 's'}</div>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Programadas</div><div className="mt-1 text-2xl font-black text-white">{resumenGlobal.pendiente}</div></div>
-              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-violet-300">En espera / atención</div><div className="mt-1 text-2xl font-black text-white">{resumenGlobal.en_espera + resumenGlobal.en_atencion}</div></div>
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Finalizadas</div><div className="mt-1 text-2xl font-black text-white">{resumenGlobal.completada}</div></div>
-              <div className="rounded-xl border border-slate-600 bg-slate-900/70 p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Facturado visible</div><div className="mt-1 text-lg font-black text-white">{moneda(resumenGlobal.totalFacturado)}</div><div className="mt-1 text-[11px] text-slate-500">Cobrado {moneda(resumenGlobal.totalCobrado)} · Saldo {moneda(resumenGlobal.saldoPendiente)}</div></div>
-            </div>
-          </div>
-          {!citasFiltradas.length ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-14 text-center"><CalendarDays className="mx-auto text-slate-600" size={42} /><h3 className="mt-4 font-semibold text-slate-300">No se encontraron citas</h3><button type="button" onClick={() => onNuevaCita?.(null)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-500"><Plus size={17} /> Agendar cita</button></div>
-          ) : gruposLista.map(([fecha, citasGrupo]) => (
-            <section key={fecha} className="space-y-3">
-              <div className="sticky top-0 z-10 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-900/95 px-4 py-2.5 backdrop-blur"><div className="font-bold capitalize text-white">{formatearFecha(fecha, true)}</div><span className="text-xs text-slate-500">{citasGrupo.length} cita{citasGrupo.length === 1 ? '' : 's'}</span></div>
-              {citasGrupo.slice(0, limiteVisible).map((cita) => (
-                <article key={cita.id} className="rounded-2xl border border-slate-700/80 bg-slate-800/80 p-4 shadow-lg hover:border-cyan-500/40">
-                  <div className="grid gap-4 lg:grid-cols-[105px_minmax(0,1fr)_230px_180px] lg:items-center">
-                    <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-center"><div className="flex items-center justify-center gap-1 text-sm font-bold text-cyan-300"><span>{cita.hora}</span><ArrowRight size={13} /><span>{obtenerHoraFinCita(cita)}</span></div><div className="mt-1"><BadgeEstado estado={cita.estado} /></div></div>
-                    <div className="min-w-0"><button type="button" onClick={() => setCitaDetalle(cita)} className="truncate text-left text-base font-bold text-white hover:text-cyan-300">{cita.nombrePaciente}</button><div className="mt-2"><ServiciosCita cita={cita} compacto /></div><div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-400"><strong className="text-cyan-300">Ficha {cita.codigoFicha || '—'}</strong><span>·</span><span>{cita.telefonoPaciente || 'Sin teléfono'}</span></div></div>
-                    <PagoResumen cita={cita} onCobrar={onCobrar} onVerCuotas={onVerCuotas} />
-                    <div className="space-y-2"><AccionPrincipal cita={cita} onCambiarEstado={onCambiarEstado} onCompletar={onCompletarCita} onCobrar={onCobrar} onVerCuotas={onVerCuotas} /><button type="button" onClick={() => setCitaDetalle(cita)} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white"><MoreHorizontal size={15} /> Ver más acciones</button></div>
-                  </div>
-                </article>
-              ))}
-            </section>
-          ))}
+      {modo === 'recepcion' && <>
+        <div className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/60 p-3">
+          <button type="button" onClick={() => setFechaRecepcion(fechaLocal(new Date(fechaDesdeTexto(fechaRecepcion).getTime() - 86400000)))} className="rounded-lg border border-slate-700 p-2 text-slate-300"><ChevronLeft size={17} /></button>
+          <div className="text-center"><div className="text-xs font-bold uppercase text-cyan-400">Recepción del día</div><input type="date" value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} className="mt-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-bold text-white" /></div>
+          <button type="button" onClick={() => setFechaRecepcion(fechaLocal(new Date(fechaDesdeTexto(fechaRecepcion).getTime() + 86400000)))} className="rounded-lg border border-slate-700 p-2 text-slate-300"><ChevronRight size={17} /></button>
         </div>
-      )}
+        <div className="grid gap-4 xl:grid-cols-4">
+          <Columna titulo="Programadas" estado="pendiente" citas={columnas.pendiente} callbacks={callbacks} onDetalle={setDetalle} arrastre={arrastre} />
+          <Columna titulo="En espera" estado="en_espera" citas={columnas.en_espera} callbacks={callbacks} onDetalle={setDetalle} arrastre={arrastre} />
+          <Columna titulo="En atención" estado="en_atencion" citas={columnas.en_atencion} callbacks={callbacks} onDetalle={setDetalle} arrastre={arrastre} />
+          <Columna titulo="Finalizadas" estado="completada" citas={columnas.completada} callbacks={callbacks} onDetalle={setDetalle} arrastre={arrastre} />
+        </div>
+      </>}
 
-      <DetalleRapido cita={citaDetalle} onClose={cerrarDetalleSeguro} callbacks={callbacks} />
+      {modo === 'calendario' && <section className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4 shadow-xl">
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3 md:flex-row md:items-center md:justify-between">
+          <div><div className="flex items-center gap-2 font-bold text-white"><CalendarCheck2 size={18} className="text-cyan-400" />Calendario clínico</div><div className="mt-1 text-xs text-slate-500">Mueve la tarjeta para cambiar día y hora. Arrastra el borde inferior para cambiar la duración.</div></div>
+          <label className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold ${edicionHorarios ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-slate-900 text-slate-400'}`}>
+            <input type="checkbox" checked={edicionHorarios} onChange={(e) => { setEdicionHorarios(e.target.checked); if (e.target.checked && vista === 'month') setVista('week'); }} className="accent-emerald-500" />
+            {edicionHorarios ? <Unlock size={15} /> : <Lock size={15} />}Editar horarios
+          </label>
+        </div>
+        <div className="mb-4"><LeyendaEstados /></div>
+        {edicionHorarios && vista !== 'month' ? (
+          <LimiteErrorCalendario fallback={fallbackCalendario}>
+            <Suspense fallback={<div className="flex h-[720px] items-center justify-center text-sm text-slate-400">Cargando calendario interactivo...</div>}>
+              <CalendarioDnD {...calendarioComun} selectable={false} draggableAccessor={(event) => ACTIVAS.has(event.citaData?.estado)} resizable resizableAccessor={(event) => ACTIVAS.has(event.citaData?.estado)} onEventDrop={guardarCambioHorario} onEventResize={guardarCambioHorario} popup />
+            </Suspense>
+          </LimiteErrorCalendario>
+        ) : <Calendar {...calendarioComun} />}
+      </section>}
+
+      {modo === 'resumen' && <section className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="font-black text-white">Resumen de citas</h2><p className="text-xs text-slate-500">Los indicadores y la relación inferior responden a los filtros seleccionados.</p></div><span className="text-xs font-black text-cyan-300">{filtradas.length} resultados</span></div>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {['pendiente', 'en_espera', 'en_atencion', 'completada', 'no_asistio', 'cancelada'].map((estado) => <div key={estado} className="dp-resumen-indicador rounded-xl border border-slate-700 bg-slate-900/60 p-3"><div className="text-[10px] uppercase text-slate-500">{ESTADOS[estado].texto}</div><div className="mt-1 text-2xl font-black" style={{ color: ESTADOS[estado].color }}>{filtradas.filter((c) => estadoVisual(c.estado) === estado).length}</div></div>)}
+        </div>
+        <div className="space-y-2">{[...filtradas].sort((a, b) => `${b.fecha}${b.hora}`.localeCompare(`${a.fecha}${a.hora}`)).map((cita) => <button key={cita.id} type="button" onClick={() => setDetalle(cita)} className="dp-resumen-fila grid w-full min-w-0 gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-left sm:grid-cols-[120px_minmax(0,1fr)_150px]"><span className="text-xs font-bold text-cyan-300">{cita.fecha}<br />{cita.hora} - {horaFin(cita)}</span><span><span className="font-bold text-white">{cita.nombrePaciente}</span><span className="mt-1 block text-xs text-slate-400">{servicios(cita).map((s) => s.nombre).join(' + ')}</span></span><span className="text-right text-xs" style={{ color: ESTADOS[estadoVisual(cita.estado)].color }}>{ESTADOS[estadoVisual(cita.estado)].texto}</span></button>)}</div>
+      </section>}
+
+      <DetalleRapido cita={detalle} onClose={() => setDetalle(null)} callbacks={callbacks} />
+
+      <style>{`
+        .dp-evento-interactivo { position: relative; width: 100%; height: 100%; min-height: 100%; }
+        .dp-evento-interactivo.dp-puede-mover { cursor: grab; touch-action: none; }
+        .dp-evento-interactivo.dp-puede-mover:active { cursor: grabbing; }
+        .dp-agenda-profesional .rbc-event { padding: 0 !important; }
+        .dp-agenda-profesional .rbc-event-label { display: none !important; }
+        .dp-agenda-profesional .rbc-event-content { height: 100% !important; min-height: 100% !important; }
+        .dp-control-duracion { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; height: 12px; cursor: ns-resize; display: flex; align-items: flex-end; justify-content: center; background: transparent; border: 0; padding: 0; touch-action: none; }
+        .dp-control-duracion span { width: 34px; height: 4px; margin-bottom: 1px; border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+        .dp-sombra-destino { animation: dp-pulso-destino .75s ease-in-out infinite alternate; }
+        @keyframes dp-pulso-destino { from { opacity: .65; } to { opacity: 1; } }
+        .rbc-today { box-shadow: inset 0 0 0 2px rgba(6,182,212,.35); }
+        .rbc-month-view .rbc-date-cell.rbc-now button::after { content: ' HOY'; margin-left: 5px; font-size: 9px; color: #22d3ee; font-weight: 900; }
+
+        html[data-theme="light"] .dp-agenda-profesional .dp-barra-agenda,
+        html[data-theme="light"] .dp-agenda-profesional .dp-leyenda-calendario,
+        html[data-theme="light"] .dp-agenda-profesional .dp-resumen-indicador,
+        html[data-theme="light"] .dp-agenda-profesional .dp-resumen-fila {
+          background: #ffffff !important;
+          border-color: #C5D0E0 !important;
+          box-shadow: 0 5px 16px rgba(40,54,82,.07);
+        }
+        html[data-theme="light"] .dp-agenda-profesional .dp-control-filtro {
+          background: #ffffff !important;
+          color: #283652 !important;
+          border-color: #B7C4D8 !important;
+          box-shadow: inset 0 1px 2px rgba(40,54,82,.04);
+        }
+        html[data-theme="light"] .dp-agenda-profesional .dp-control-filtro:focus {
+          border-color: #56759E !important;
+          box-shadow: 0 0 0 3px rgba(86,117,158,.15);
+        }
+        html[data-theme="light"] .dp-agenda-profesional .text-slate-500,
+        html[data-theme="light"] .dp-agenda-profesional .text-slate-600 {
+          color: #5E7191 !important;
+        }
+        html[data-theme="light"] .dp-agenda-profesional .text-slate-300,
+        html[data-theme="light"] .dp-agenda-profesional .text-slate-400 {
+          color: #425A7D !important;
+        }
+        html[data-theme="light"] .dp-agenda-profesional .rbc-label,
+        html[data-theme="light"] .dp-agenda-profesional .rbc-time-gutter,
+        html[data-theme="light"] .dp-agenda-profesional .rbc-date-cell,
+        html[data-theme="light"] .dp-agenda-profesional .rbc-button-link {
+          color: #283652 !important;
+        }
+        html[data-theme="light"] .dp-agenda-profesional .rbc-time-slot {
+          color: #56759E !important;
+        }
+        html[data-theme="light"] .dp-agenda-profesional .dp-tarjeta-calendario {
+          background-color: color-mix(in srgb, var(--dp-event-color) 24%, white) !important;
+          color: #283652 !important;
+          box-shadow: 0 4px 11px rgba(40,54,82,.14) !important;
+        }
+        html[data-theme="light"] .dp-agenda-profesional .dp-evento-calendario,
+        html[data-theme="light"] .dp-agenda-profesional .dp-evento-calendario * {
+          color: #283652 !important;
+        }
+      `}</style>
     </div>
   );
 }
