@@ -339,6 +339,11 @@ MODELOS = {
     "planPagos": PlanPagoDB,
     "movimientosCuenta": MovimientoCuentaDB,
     "documentosPaciente": DocumentoPacienteDB,
+
+}
+
+ALMACENES_INMUTABLES = {
+    "movimientosCuenta",
 }
 
 ESTADOS_QUE_BLOQUEAN_HORARIO = {
@@ -1137,6 +1142,17 @@ def update_record(
     if not modelo:
         raise HTTPException(status_code=404, detail="Tabla no encontrada.")
 
+    if store in ALMACENES_INMUTABLES:
+        raise HTTPException(
+            status_code=405,
+            detail=(
+                "El historial financiero es inmutable. "
+                "Usa una anulación o devolución."
+            ),
+        )
+
+
+
     registro = db.query(modelo).filter(modelo.id == item_id).first()
     if not registro:
         raise HTTPException(status_code=404, detail="Registro no encontrado.")
@@ -1212,6 +1228,15 @@ def delete_record(
     modelo = MODELOS.get(store)
     if not modelo:
         raise HTTPException(status_code=404, detail="Tabla no encontrada.")
+
+    if store in ALMACENES_INMUTABLES:
+            raise HTTPException(
+                status_code=405,
+                detail=(
+                    "El historial financiero es inmutable. "
+                    "Usa una anulación o devolución."
+                ),
+            )
 
     registro = db.query(modelo).filter(modelo.id == item_id).first()
     if not registro:
