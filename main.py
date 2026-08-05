@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 import sys
 from datetime import datetime, timedelta
@@ -28,10 +29,16 @@ if getattr(sys, "frozen", False):
 else:
     APP_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = APP_DIR / "data"
+DATA_DIR = Path(
+    os.getenv("DENTALPRO_DATA_DIR", str(APP_DIR / "data"))
+).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-DB_PATH = DATA_DIR / "dentalpro.db"
+DB_PATH = Path(
+    os.getenv("DENTALPRO_DB_PATH", str(DATA_DIR / "dentalpro.db"))
+).resolve()
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
 
 engine = create_engine(
