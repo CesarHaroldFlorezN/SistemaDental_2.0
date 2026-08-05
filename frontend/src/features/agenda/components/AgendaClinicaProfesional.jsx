@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
-  Clock3,
   Edit3,
   Eye,
   FileText,
@@ -34,7 +33,6 @@ import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { format, getDay, parse, startOfWeek as startOfWeekDateFns } from 'date-fns';
 import { es } from 'date-fns/locale';
-import Swal from 'sweetalert2';
 
 const CalendarioDnD = lazy(() => import('./CalendarioDnD.jsx'));
 

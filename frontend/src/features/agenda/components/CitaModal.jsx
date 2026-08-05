@@ -116,7 +116,7 @@ const obtenerHoraFinCita = (cita) => {
   return sumarMinutos(cita?.hora || '09:00', Number(cita?.duracionMinutos || 60));
 };
 
-const crearEstadoInicial = (citaEditar, pagoEditar, pacientes) => {
+const crearEstadoInicial = (citaEditar, pagoEditar) => {
   const hora = citaEditar?.hora || '09:00';
   const duracionGuardada = Math.max(5, Number(citaEditar?.duracionMinutos || 60));
   const horaFin = citaEditar?.horaFin || sumarMinutos(hora, duracionGuardada);
@@ -157,7 +157,7 @@ export default function CitaModal({
   citas = []
 }) {
   const [formData, setFormData] = useState(() =>
-    crearEstadoInicial(citaEditar, pagoEditar, pacientes)
+    crearEstadoInicial(citaEditar, pagoEditar)
   );
   const [busquedaPaciente, setBusquedaPaciente] = useState('');
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
@@ -168,7 +168,10 @@ export default function CitaModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    const estado = crearEstadoInicial(citaEditar, pagoEditar, pacientes);
+    const estado = crearEstadoInicial(
+  citaEditar,
+  pagoEditar
+);
     setFormData(estado);
     const seleccionado = pacientes.find((paciente) => Number(paciente.id) === Number(estado.pacienteId));
     setBusquedaPaciente(etiquetaPaciente(seleccionado));

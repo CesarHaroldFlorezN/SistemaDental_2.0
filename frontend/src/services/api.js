@@ -30,8 +30,9 @@ const request = async (url, options = {}) => {
   } catch (error) {
     if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
       throw new Error(
-        'No se pudo conectar con el servidor. Verifica que DentalPro esté ejecutándose.'
-      );
+  'No se pudo conectar con el servidor. Verifica que DentalPro esté ejecutándose.',
+  { cause: error }
+);
     }
 
     throw error;

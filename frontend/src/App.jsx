@@ -918,11 +918,6 @@ export default function App() {
     }
   };
 
-  const handleCerrarPlan = async (plan) => {
-    await api.actualizarPlanPago(plan.id, { ...plan, estado: 'completado' });
-    cargarPlanPagos(); Swal.fire({ title: 'Plan cerrado 🔒', icon: 'success', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false });
-  };
-
   const handleEliminarPlan = async (id) => {
     const confirm = await Swal.fire({ title: '¿Eliminar plan de pago?', icon: 'warning', showCancelButton: true, background: '#1e293b', color: '#fff', confirmButtonColor: '#ef4444', confirmButtonText: 'Sí, eliminar' });
     if (confirm.isConfirmed) { await api.eliminarPlanPago(id); cargarPlanPagos(); Swal.fire({ title: 'Eliminado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false }); }
@@ -930,7 +925,7 @@ export default function App() {
 
   const handleGuardarNuevoPP = async (payload) => {
     try { await api.crearPlanPago(payload); setModalPPAbierto(false); cargarPlanPagos(); Swal.fire({ title: 'Plan Creado 🗓️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false }); } 
-    catch (error) { Swal.fire({ title: 'Error', text: 'No se pudo crear el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' }); }
+    catch { Swal.fire({ title: 'Error', text: 'No se pudo crear el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' }); }
   };
 
   const handleNuevoPlan = () => { setPlanSeleccionado(null); setModalPlanAbierto(true); };
@@ -941,7 +936,7 @@ export default function App() {
       if (id) { await api.actualizarPlan(id, payload); Swal.fire({ title: 'Plan Actualizado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); } 
       else { await api.crearPlan(payload); Swal.fire({ title: 'Plan Creado 🗂️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); }
       setModalPlanAbierto(false); cargarPlanes();
-    } catch (error) { Swal.fire({ title: 'Error', text: 'No se pudo guardar el plan.', icon: 'error', background: '#1e293b', color: '#fff' }); }
+    } catch { Swal.fire({ title: 'Error', text: 'No se pudo guardar el plan.', icon: 'error', background: '#1e293b', color: '#fff' }); }
   };
 
   const handleEliminarPlanTratamiento = async (id, nombre) => {

@@ -17,5 +17,12 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+
+    rules: {
+  // Los modales actuales reinician su formulario al abrirse.
+  // Se refactorizarán progresivamente al dividir los componentes.
+  'react-hooks/set-state-in-effect': 'off',
+},
   },
+
 ])

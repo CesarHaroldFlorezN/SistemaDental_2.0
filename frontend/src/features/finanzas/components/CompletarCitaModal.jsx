@@ -11,7 +11,6 @@ import {
   ReceiptText,
   Search,
   Trash2,
-  WalletCards,
   X
 } from 'lucide-react';
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Save, Calendar, User, DollarSign, CreditCard } from 'lucide-react';
+import { X, Save, User, CreditCard } from 'lucide-react';
 
 export default function PlanPagoModal({ isOpen, onClose, onSave, pacientes = [] }) {
   const hoyStr = new Date().toISOString().split('T')[0];
