@@ -7,9 +7,8 @@ import PacienteModal from './features/pacientes/components/PacienteModal';
 import CitaModal from './features/agenda/components/CitaModal';
 import AgendaClinicaProfesional from './features/agenda/components/AgendaClinicaProfesional';
 import Sidebar from './shared/components/Sidebar';
-import Dashboard from './features/dashboard/components/Dashboard';
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { api } from './services/api';
 import {
   AlertTriangle,
@@ -29,6 +28,12 @@ import {
 
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
+
+
+
+const Dashboard = lazy(
+  () => import('./features/dashboard/components/Dashboard')
+);
 
 
 const obtenerFechaLocal = (fecha = new Date()) => {
@@ -1035,16 +1040,24 @@ export default function App() {
         <div className="mx-auto w-full max-w-[1800px]">
           
           {vistaActiva === 'dashboard' && (
-            <Dashboard
-              pacientes={pacientes}
-              citas={citasFiltradas}
-              pagos={pagos}
-              onCambiarVista={setVistaActiva}
-              onNuevaCita={handleNuevaCita}
-              onAbrirCompletar={handleAbrirCompletar}
-              onCambiarEstadoCita={handleCambiarEstadoCita}
-            />
-          )}
+  <Suspense
+    fallback={
+      <div className="flex min-h-64 items-center justify-center text-slate-500">
+        Cargando panel principal...
+      </div>
+    }
+  >
+    <Dashboard
+      pacientes={pacientes}
+      citas={citasFiltradas}
+      pagos={pagos}
+      onCambiarVista={setVistaActiva}
+      onNuevaCita={handleNuevaCita}
+      onAbrirCompletar={handleAbrirCompletar}
+      onCambiarEstadoCita={handleCambiarEstadoCita}
+    />
+  </Suspense>
+)}
 
 
           {/* ==============================================
