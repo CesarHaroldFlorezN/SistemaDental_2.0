@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.database import Base, engine
+from backend.app.migrations import inicializar_base_datos
 
 
 from backend.app.routers import (
@@ -31,32 +31,11 @@ if getattr(sys, "frozen", False):
 else:
     APP_DIR = Path(__file__).resolve().parent
 
-
-
 # =====================================================
-# MODELOS SQLALCHEMY
+# BASE DE DATOS
 # =====================================================
 
-
-Base.metadata.create_all(bind=engine)
-
-
-def asegurar_compatibilidad_esquema() -> None:
-    """Agrega columnas nuevas sin borrar ni reemplazar la base existente."""
-    with engine.begin() as connection:
-        columnas_citas = {
-            fila[1]
-            for fila in connection.exec_driver_sql("PRAGMA table_info(citas)").fetchall()
-        }
-        if "servicios" not in columnas_citas:
-            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN servicios JSON")
-        if "horaFin" not in columnas_citas:
-            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN horaFin VARCHAR(50)")
-        if "duracionMinutos" not in columnas_citas:
-            connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN duracionMinutos INTEGER")
-
-
-asegurar_compatibilidad_esquema()
+inicializar_base_datos()
 
 
 # =====================================================

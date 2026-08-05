@@ -16,7 +16,7 @@ def pytest_sessionfinish(session, exitstatus) -> None:
     """Cierra y elimina la base temporal al terminar las pruebas."""
 
     try:
-        from main import engine
+        from backend.app.database import engine
 
         engine.dispose()
     finally:
