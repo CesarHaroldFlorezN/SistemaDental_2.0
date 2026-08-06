@@ -6,6 +6,7 @@ from sqlalchemy.engine import Connection, Engine
 from . import models
 from .config import RESPALDAR_AL_INICIAR
 from .database import Base, engine
+from .integridad import exigir_integridad_sqlite
 from .respaldos import crear_respaldo_sqlite
 
 NombreMigracion = tuple[
@@ -160,6 +161,8 @@ def inicializar_base_datos() -> None:
     # El import de models registra todas las tablas en Base.
     _ = models
 
+    exigir_integridad_sqlite()
+
     if RESPALDAR_AL_INICIAR and hay_migraciones_pendientes():
         crear_respaldo_sqlite()
 
@@ -167,3 +170,4 @@ def inicializar_base_datos() -> None:
 
     with engine.begin() as connection:
         aplicar_migraciones(connection)
+    exigir_integridad_sqlite()
