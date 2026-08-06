@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import ALLOWED_ORIGINS, FRONTEND_DIR
 from .migrations import inicializar_base_datos
 from .routers import (
+    autenticacion_router,
     citas_router,
     documentos_router,
     finanzas_router,
@@ -51,7 +52,7 @@ app.include_router(documentos_router)
 app.include_router(finanzas_router)
 app.include_router(pacientes_router)
 app.include_router(salud_router)
-
+app.include_router(autenticacion_router)
 
 # =====================================================
 # FRONTEND REACT
