@@ -69,11 +69,37 @@ def migracion_001_compatibilidad_citas(
             connection.exec_driver_sql(sentencia)
 
 
+def migracion_002_identificadores_unicos_pacientes(
+    connection: Connection,
+) -> None:
+    """Impide identificadores duplicados sin bloquear valores vacíos."""
+
+    connection.exec_driver_sql(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_pacientes_cedula_normalizada
+        ON pacientes (LOWER(TRIM(cedula)))
+        WHERE TRIM(COALESCE(cedula, '')) <> ''
+        """
+    )
+    connection.exec_driver_sql(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_pacientes_codigo_ficha_normalizado
+        ON pacientes (LOWER(TRIM(codigo_ficha)))
+        WHERE TRIM(COALESCE(codigo_ficha, '')) <> ''
+        """
+    )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
         "compatibilidad_columnas_citas",
         migracion_001_compatibilidad_citas,
+    ),
+    (
+        2,
+        "identificadores_unicos_pacientes",
+        migracion_002_identificadores_unicos_pacientes,
     ),
 )
 
