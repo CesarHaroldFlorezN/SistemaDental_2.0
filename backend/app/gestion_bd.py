@@ -6,7 +6,9 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .auditoria import auditar_datos_sqlite
 from .config import DB_PATH, RESPALDOS_DIR
+from .integridad import ErrorIntegridadBaseDatos
 from .respaldos import (
     restaurar_base_sqlite,
     validar_base_sqlite,
@@ -52,6 +54,34 @@ def ejecutar_listado(
         )
 
     return 0
+
+
+def ejecutar_auditoria(
+    ruta_bd: Path = DB_PATH,
+) -> int:
+    try:
+        resultado = auditar_datos_sqlite(ruta_bd)
+    except (
+        ErrorIntegridadBaseDatos,
+        OSError,
+        sqlite3.Error,
+    ) as error:
+        print(
+            f"Error durante la auditoría: {error}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if resultado.saludable:
+        print("Base saludable: no se encontraron inconsistencias.")
+        return 0
+
+    print(f"Auditoría completada con {resultado.total} inconsistencia(s).")
+
+    for hallazgo in resultado.hallazgos:
+        print(f"[{hallazgo.codigo}] {hallazgo.cantidad}: {hallazgo.descripcion}")
+
+    return 1
 
 
 def ejecutar_restauracion(
@@ -118,6 +148,11 @@ def crear_parser() -> argparse.ArgumentParser:
         help="Lista y valida los respaldos disponibles.",
     )
 
+    comandos.add_parser(
+        "auditar",
+        help="Busca inconsistencias sin modificar datos.",
+    )
+
     restaurar = comandos.add_parser(
         "restaurar",
         help="Restaura un respaldo con confirmación explícita.",
@@ -137,6 +172,9 @@ def main(argumentos: list[str] | None = None) -> int:
 
     if opciones.comando == "listar":
         return ejecutar_listado()
+
+    if opciones.comando == "auditar":
+        return ejecutar_auditoria()
 
     return ejecutar_restauracion(
         archivo=opciones.archivo,

@@ -2,7 +2,12 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from backend.app.auditoria import (
+    HallazgoAuditoria,
+    ResultadoAuditoria,
+)
 from backend.app.gestion_bd import (
+    ejecutar_auditoria,
     ejecutar_listado,
     ejecutar_restauracion,
 )
@@ -82,3 +87,50 @@ def test_restaurar_desde_herramienta_controlada(
 
     assert resultado == 0
     assert leer_valor(ruta_bd) == "anterior"
+
+
+def test_comando_auditar_base_saludable(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    resultado = ResultadoAuditoria(hallazgos=())
+
+    monkeypatch.setattr(
+        "backend.app.gestion_bd.auditar_datos_sqlite",
+        lambda _ruta: resultado,
+    )
+
+    codigo = ejecutar_auditoria(tmp_path / "dentalpro.db")
+    salida = capsys.readouterr().out
+
+    assert codigo == 0
+    assert "Base saludable" in salida
+
+
+def test_comando_auditar_muestra_hallazgos(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    resultado = ResultadoAuditoria(
+        hallazgos=(
+            HallazgoAuditoria(
+                codigo="prueba",
+                descripcion="Hallazgo de prueba",
+                cantidad=2,
+            ),
+        )
+    )
+
+    monkeypatch.setattr(
+        "backend.app.gestion_bd.auditar_datos_sqlite",
+        lambda _ruta: resultado,
+    )
+
+    codigo = ejecutar_auditoria(tmp_path / "dentalpro.db")
+    salida = capsys.readouterr().out
+
+    assert codigo == 1
+    assert "[prueba]" in salida
+    assert "Hallazgo de prueba" in salida
