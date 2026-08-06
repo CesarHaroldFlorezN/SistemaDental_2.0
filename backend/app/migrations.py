@@ -1,5 +1,7 @@
 from . import models
+from .config import RESPALDAR_AL_INICIAR
 from .database import Base, engine
+from .respaldos import crear_respaldo_sqlite
 
 
 def asegurar_compatibilidad_esquema() -> None:
@@ -28,10 +30,13 @@ def asegurar_compatibilidad_esquema() -> None:
 
 
 def inicializar_base_datos() -> None:
-    """Crea las tablas nuevas y actualiza las existentes."""
+    """Respalda, crea y actualiza el esquema SQLite."""
 
     # El import de models registra todas las tablas en Base.
     _ = models
+
+    if RESPALDAR_AL_INICIAR:
+        crear_respaldo_sqlite()
 
     Base.metadata.create_all(bind=engine)
     asegurar_compatibilidad_esquema()
