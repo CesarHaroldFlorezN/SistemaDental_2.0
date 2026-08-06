@@ -90,6 +90,83 @@ def migracion_002_identificadores_unicos_pacientes(
     )
 
 
+def migracion_003_usuarios_y_sesiones(
+    connection: Connection,
+) -> None:
+    """Crea usuarios, roles y sesiones revocables."""
+
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY,
+            nombre VARCHAR(120) NOT NULL,
+            nombre_usuario VARCHAR(80) NOT NULL,
+            contrasena_hash VARCHAR(255) NOT NULL,
+            rol VARCHAR(30) NOT NULL,
+            activo BOOLEAN NOT NULL DEFAULT 1,
+            intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+            bloqueado_hasta VARCHAR(50),
+            creado_en VARCHAR(50) NOT NULL,
+            actualizado_en VARCHAR(50) NOT NULL,
+            ultimo_acceso_en VARCHAR(50),
+            CONSTRAINT ck_usuarios_nombre_usuario_no_vacio
+                CHECK (TRIM(nombre_usuario) <> ''),
+            CONSTRAINT ck_usuarios_rol_valido
+                CHECK (
+                    rol IN (
+                        'administrador',
+                        'odontologo',
+                        'recepcion'
+                    )
+                )
+        )
+        """
+    )
+
+    connection.exec_driver_sql(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            ux_usuarios_nombre_usuario_normalizado
+        ON usuarios (LOWER(TRIM(nombre_usuario)))
+        """
+    )
+
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS sesiones (
+            id INTEGER PRIMARY KEY,
+            usuario_id INTEGER NOT NULL,
+            token_hash VARCHAR(64) NOT NULL,
+            creada_en VARCHAR(50) NOT NULL,
+            expira_en VARCHAR(50) NOT NULL,
+            revocada_en VARCHAR(50),
+            FOREIGN KEY (usuario_id)
+                REFERENCES usuarios(id)
+                ON DELETE CASCADE
+        )
+        """
+    )
+
+    connection.exec_driver_sql(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_sesiones_token_hash
+        ON sesiones (token_hash)
+        """
+    )
+    connection.exec_driver_sql(
+        """
+        CREATE INDEX IF NOT EXISTS ix_sesiones_usuario_id
+        ON sesiones (usuario_id)
+        """
+    )
+    connection.exec_driver_sql(
+        """
+        CREATE INDEX IF NOT EXISTS ix_sesiones_expira_en
+        ON sesiones (expira_en)
+        """
+    )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -100,6 +177,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         2,
         "identificadores_unicos_pacientes",
         migracion_002_identificadores_unicos_pacientes,
+    ),
+    (
+        3,
+        "usuarios_y_sesiones",
+        migracion_003_usuarios_y_sesiones,
     ),
 )
 
