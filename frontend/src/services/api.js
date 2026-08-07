@@ -25,7 +25,10 @@ const handleResponse = async (response) => {
 
 const request = async (url, options = {}) => {
   try {
-    const response = await fetch(url, options);
+    const response = await fetch(url, {
+  credentials: 'include',
+  ...options
+});
     return await handleResponse(response);
   } catch (error) {
     if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
@@ -46,6 +49,31 @@ const jsonOptions = (method, data) => ({
 });
 
 export const api = {
+
+
+    // ===================================================
+  // AUTENTICACIÓN
+  // ===================================================
+  iniciarSesion: (nombreUsuario, contrasena) =>
+    request(
+      `${API_URL}/auth/login`,
+      jsonOptions('POST', {
+        nombreUsuario,
+        contrasena
+      })
+    ),
+
+  obtenerSesion: () =>
+    request(`${API_URL}/auth/me`),
+
+  cerrarSesion: () =>
+    request(
+      `${API_URL}/auth/logout`,
+      {
+        method: 'POST'
+      }
+    ),
+
   // ===================================================
   // PACIENTES
   // ===================================================

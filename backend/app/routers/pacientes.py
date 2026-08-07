@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..dependencias import exigir_administrador
 from ..models import (
     CitaDB,
     DocumentoPacienteDB,
@@ -164,6 +165,7 @@ def actualizar_paciente(
 @router.delete(
     "/api/pacientes/{paciente_id}",
     tags=["Pacientes"],
+    dependencies=[Depends(exigir_administrador)],
 )
 def eliminar_paciente(
     paciente_id: int,
@@ -219,6 +221,7 @@ def eliminar_paciente(
 @router.get(
     "/api/exportar/pacientes",
     tags=["Pacientes"],
+    dependencies=[Depends(exigir_administrador)],
 )
 def exportar_pacientes(
     db: Session = Depends(get_db),
@@ -279,6 +282,7 @@ def exportar_pacientes(
 @router.post(
     "/api/importar/pacientes",
     tags=["Pacientes"],
+    dependencies=[Depends(exigir_administrador)],
 )
 async def importar_pacientes(
     file: UploadFile = File(...),

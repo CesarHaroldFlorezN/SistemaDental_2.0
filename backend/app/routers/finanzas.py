@@ -6,6 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..dependencias import (
+    exigir_administrador,
+    exigir_personal_clinico,
+    exigir_personal_financiero,
+)
 from ..models import (
     MovimientoCuentaDB,
     PagoDB,
@@ -136,14 +141,20 @@ def _eliminar_registro(
 # =====================================================
 
 
-@router.get("/api/pagos")
+@router.get(
+    "/api/pagos",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def listar_pagos(
     db: Session = Depends(get_db),
 ):
     return _listar_registros(PagoDB, db)
 
 
-@router.post("/api/pagos")
+@router.post(
+    "/api/pagos",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def crear_pago(
     data: dict[str, Any],
     db: Session = Depends(get_db),
@@ -151,7 +162,10 @@ def crear_pago(
     return _crear_registro(PagoDB, data, db)
 
 
-@router.put("/api/pagos/{item_id}")
+@router.put(
+    "/api/pagos/{item_id}",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def actualizar_pago(
     item_id: int,
     data: dict[str, Any],
@@ -165,7 +179,10 @@ def actualizar_pago(
     )
 
 
-@router.delete("/api/pagos/{item_id}")
+@router.delete(
+    "/api/pagos/{item_id}",
+    dependencies=[Depends(exigir_administrador)],
+)
 def eliminar_pago(
     item_id: int,
     db: Session = Depends(get_db),
@@ -182,14 +199,20 @@ def eliminar_pago(
 # =====================================================
 
 
-@router.get("/api/planes")
+@router.get(
+    "/api/planes",
+    dependencies=[Depends(exigir_personal_clinico)],
+)
 def listar_planes(
     db: Session = Depends(get_db),
 ):
     return _listar_registros(PlanDB, db)
 
 
-@router.post("/api/planes")
+@router.post(
+    "/api/planes",
+    dependencies=[Depends(exigir_personal_clinico)],
+)
 def crear_plan(
     data: dict[str, Any],
     db: Session = Depends(get_db),
@@ -197,7 +220,10 @@ def crear_plan(
     return _crear_registro(PlanDB, data, db)
 
 
-@router.put("/api/planes/{item_id}")
+@router.put(
+    "/api/planes/{item_id}",
+    dependencies=[Depends(exigir_personal_clinico)],
+)
 def actualizar_plan(
     item_id: int,
     data: dict[str, Any],
@@ -211,7 +237,10 @@ def actualizar_plan(
     )
 
 
-@router.delete("/api/planes/{item_id}")
+@router.delete(
+    "/api/planes/{item_id}",
+    dependencies=[Depends(exigir_personal_clinico)],
+)
 def eliminar_plan(
     item_id: int,
     db: Session = Depends(get_db),
@@ -228,14 +257,20 @@ def eliminar_plan(
 # =====================================================
 
 
-@router.get("/api/planPagos")
+@router.get(
+    "/api/planPagos",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def listar_planes_pago(
     db: Session = Depends(get_db),
 ):
     return _listar_registros(PlanPagoDB, db)
 
 
-@router.post("/api/planPagos")
+@router.post(
+    "/api/planPagos",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def crear_plan_pago(
     data: dict[str, Any],
     db: Session = Depends(get_db),
@@ -243,7 +278,10 @@ def crear_plan_pago(
     return _crear_registro(PlanPagoDB, data, db)
 
 
-@router.put("/api/planPagos/{item_id}")
+@router.put(
+    "/api/planPagos/{item_id}",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def actualizar_plan_pago(
     item_id: int,
     data: dict[str, Any],
@@ -257,7 +295,10 @@ def actualizar_plan_pago(
     )
 
 
-@router.delete("/api/planPagos/{item_id}")
+@router.delete(
+    "/api/planPagos/{item_id}",
+    dependencies=[Depends(exigir_administrador)],
+)
 def eliminar_plan_pago(
     item_id: int,
     db: Session = Depends(get_db),
@@ -274,7 +315,10 @@ def eliminar_plan_pago(
 # =====================================================
 
 
-@router.get("/api/movimientosCuenta")
+@router.get(
+    "/api/movimientosCuenta",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def listar_movimientos_cuenta(
     db: Session = Depends(get_db),
 ):
@@ -284,7 +328,10 @@ def listar_movimientos_cuenta(
     )
 
 
-@router.post("/api/movimientosCuenta")
+@router.post(
+    "/api/movimientosCuenta",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def crear_movimiento_cuenta(
     data: dict[str, Any],
     db: Session = Depends(get_db),
@@ -296,7 +343,10 @@ def crear_movimiento_cuenta(
     )
 
 
-@router.put("/api/movimientosCuenta/{item_id}")
+@router.put(
+    "/api/movimientosCuenta/{item_id}",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def impedir_actualizacion_movimiento(
     item_id: int,
 ):
@@ -310,7 +360,10 @@ def impedir_actualizacion_movimiento(
     )
 
 
-@router.delete("/api/movimientosCuenta/{item_id}")
+@router.delete(
+    "/api/movimientosCuenta/{item_id}",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def impedir_eliminacion_movimiento(
     item_id: int,
 ):
@@ -331,6 +384,7 @@ def impedir_eliminacion_movimiento(
 
 @router.post(
     "/api/operaciones/pagos/{pago_id}/registrar",
+    dependencies=[Depends(exigir_personal_financiero)],
 )
 def registrar_pago_auditable(
     pago_id: int,
@@ -342,6 +396,7 @@ def registrar_pago_auditable(
 
 @router.post(
     "/api/operaciones/pagos/{pago_id}/anular",
+    dependencies=[Depends(exigir_administrador)],
 )
 def anular_pago_auditable(
     pago_id: int,
@@ -353,6 +408,7 @@ def anular_pago_auditable(
 
 @router.post(
     "/api/operaciones/pagos/{pago_id}/devolver",
+    dependencies=[Depends(exigir_administrador)],
 )
 def devolver_pago_auditable(
     pago_id: int,
@@ -364,6 +420,7 @@ def devolver_pago_auditable(
 
 @router.get(
     "/api/pacientes/{paciente_id}/cuenta",
+    dependencies=[Depends(exigir_personal_financiero)],
 )
 def obtener_cuenta_paciente(
     paciente_id: int,

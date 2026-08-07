@@ -75,6 +75,7 @@ def test_aplicar_migracion_y_registrar_version(
     assert versiones == [
         (1, "compatibilidad_columnas_citas"),
         (2, "identificadores_unicos_pacientes"),
+        (3, "usuarios_y_sesiones"),
     ]
     assert not hay_migraciones_pendientes(motor)
 
@@ -97,7 +98,7 @@ def test_no_repetir_migracion_aplicada(
             "SELECT COUNT(*) FROM schema_migrations"
         ).scalar_one()
 
-    assert cantidad == 2
+    assert cantidad == 3
 
     motor.dispose()
 
@@ -182,5 +183,124 @@ def test_identificadores_de_pacientes_son_unicos(
         ).scalar_one()
 
     assert cantidad == 3
+
+    motor.dispose()
+
+
+def test_crear_esquema_de_autenticacion(
+    tmp_path: Path,
+) -> None:
+    motor = crear_motor_temporal(tmp_path)
+    crear_esquema_antiguo(motor)
+
+    with motor.begin() as connection:
+        aplicar_migraciones(connection)
+
+        tablas = {
+            fila[0]
+            for fila in connection.exec_driver_sql(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                """
+            ).fetchall()
+        }
+
+        indices = {
+            fila[0]
+            for fila in connection.exec_driver_sql(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'index'
+                """
+            ).fetchall()
+        }
+
+        claves_foraneas = connection.exec_driver_sql(
+            "PRAGMA foreign_key_list(sesiones)"
+        ).fetchall()
+
+    assert "usuarios" in tablas
+    assert "sesiones" in tablas
+    assert "ux_usuarios_nombre_usuario_normalizado" in indices
+    assert "ux_sesiones_token_hash" in indices
+    assert "ix_sesiones_usuario_id" in indices
+    assert "ix_sesiones_expira_en" in indices
+    assert any(
+        fila[2] == "usuarios" and fila[6] == "CASCADE" for fila in claves_foraneas
+    )
+
+    with motor.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO usuarios (
+                id,
+                nombre,
+                nombre_usuario,
+                contrasena_hash,
+                rol,
+                creado_en,
+                actualizado_en
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                "Administrador",
+                "admin",
+                "hash-seguro",
+                "administrador",
+                "2036-01-01T08:00:00-05:00",
+                "2036-01-01T08:00:00-05:00",
+            ),
+        )
+
+    with pytest.raises(IntegrityError), motor.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO usuarios (
+                nombre,
+                nombre_usuario,
+                contrasena_hash,
+                rol,
+                creado_en,
+                actualizado_en
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "Usuario duplicado",
+                " ADMIN ",
+                "otro-hash",
+                "recepcion",
+                "2036-01-01T08:00:00-05:00",
+                "2036-01-01T08:00:00-05:00",
+            ),
+        )
+
+    with pytest.raises(IntegrityError), motor.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO usuarios (
+                nombre,
+                nombre_usuario,
+                contrasena_hash,
+                rol,
+                creado_en,
+                actualizado_en
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "Rol inválido",
+                "usuario-invalido",
+                "otro-hash",
+                "superusuario",
+                "2036-01-01T08:00:00-05:00",
+                "2036-01-01T08:00:00-05:00",
+            ),
+        )
 
     motor.dispose()

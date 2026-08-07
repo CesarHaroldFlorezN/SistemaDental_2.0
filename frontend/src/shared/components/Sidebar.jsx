@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import {
+  LogOut,
+  UserRound,
   Activity,
   Calendar,
   ChevronLeft,
@@ -11,17 +13,75 @@ import {
   Users
 } from 'lucide-react';
 
-export default function Sidebar({ vistaActiva, setVistaActiva }) {
+const ROLES_TODOS = [
+  'administrador',
+  'odontologo',
+  'recepcion'
+];
+
+const NOMBRES_ROL = {
+  administrador: 'Administrador',
+  odontologo: 'Odontólogo',
+  recepcion: 'Recepción'
+};
+
+export default function Sidebar({
+  vistaActiva,
+  setVistaActiva,
+  usuarioActual,
+  onCerrarSesion
+}) {
   const [contraido, setContraido] = useState(() => localStorage.getItem('dp-sidebar-contraido') === '1');
 
   const menuItems = [
-    { id: 'dashboard', nombre: 'Dashboard', icono: LayoutDashboard },
-    { id: 'pacientes', nombre: 'Pacientes', icono: Users },
-    { id: 'citas', nombre: 'Agenda / Citas', icono: Calendar },
-    { id: 'planes', nombre: 'Planes Tratamiento', icono: FolderKanban },
-    { id: 'finanzas', nombre: 'Finanzas', icono: DollarSign },
-    { id: 'planpagos', nombre: 'Planes de Pago', icono: CreditCard }
-  ];
+    {
+      id: 'dashboard',
+      nombre: 'Dashboard',
+      icono: LayoutDashboard,
+      roles: ROLES_TODOS
+    },
+    {
+      id: 'pacientes',
+      nombre: 'Pacientes',
+      icono: Users,
+      roles: ROLES_TODOS
+    },
+    {
+      id: 'citas',
+      nombre: 'Agenda / Citas',
+      icono: Calendar,
+      roles: ROLES_TODOS
+    },
+    {
+      id: 'planes',
+      nombre: 'Planes Tratamiento',
+      icono: FolderKanban,
+      roles: [
+        'administrador',
+        'odontologo'
+      ]
+    },
+    {
+      id: 'finanzas',
+      nombre: 'Finanzas',
+      icono: DollarSign,
+      roles: [
+        'administrador',
+        'recepcion'
+      ]
+    },
+    {
+      id: 'planpagos',
+      nombre: 'Planes de Pago',
+      icono: CreditCard,
+      roles: [
+        'administrador',
+        'recepcion'
+      ]
+    }
+  ].filter((item) =>
+    item.roles.includes(usuarioActual?.rol)
+  );
 
   const alternar = () => {
     setContraido((actual) => {
@@ -80,9 +140,65 @@ export default function Sidebar({ vistaActiva, setVistaActiva }) {
         </nav>
       </div>
 
-      <div className={`border-t border-slate-700/80 py-4 text-xs text-slate-500 ${contraido ? 'flex justify-center px-1' : 'flex items-center justify-between px-2'}`}>
-        {!contraido && <span>Versión 2.0</span>}
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_9px_rgba(16,185,129,.6)]" title="Backend conectado" />
+      <div className="border-t border-slate-700/80 pt-4">
+        <div
+          className={`mb-3 flex items-center ${
+            contraido ? 'justify-center' : 'gap-3 px-2'
+          }`}
+          title={
+            contraido
+              ? `${usuarioActual?.nombre} · ${NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol}`
+              : undefined
+          }
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
+            <UserRound size={18} />
+          </div>
+
+          {!contraido && (
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold text-slate-200">
+                {usuarioActual?.nombre}
+              </p>
+
+              <p className="truncate text-[10px] capitalize text-cyan-400">
+                {NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onCerrarSesion}
+          title="Cerrar sesión"
+          className={`mb-4 flex w-full items-center rounded-xl py-2.5 text-xs font-semibold text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300 ${
+            contraido
+              ? 'justify-center px-2'
+              : 'gap-3 px-3.5'
+          }`}
+        >
+          <LogOut size={17} />
+
+          {!contraido && (
+            <span>Cerrar sesión</span>
+          )}
+        </button>
+
+        <div
+          className={`flex items-center py-1 text-xs text-slate-500 ${
+            contraido
+              ? 'justify-center px-1'
+              : 'justify-between px-2'
+          }`}
+        >
+          {!contraido && <span>Versión 2.0</span>}
+
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_9px_rgba(16,185,129,.6)]"
+            title="Backend conectado"
+          />
+        </div>
       </div>
     </aside>
   );

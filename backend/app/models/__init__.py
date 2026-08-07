@@ -7,6 +7,7 @@ from .finanzas import (
     PlanPagoDB,
 )
 from .paciente import PacienteDB
+from .usuario import SesionDB, UsuarioDB
 
 __all__ = [
     "CitaDB",
@@ -16,4 +17,6 @@ __all__ = [
     "PagoDB",
     "PlanDB",
     "PlanPagoDB",
+    "SesionDB",
+    "UsuarioDB",
 ]

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import ALLOWED_ORIGINS, FRONTEND_DIR
+from .dependencias import (
+    exigir_personal_clinico,
+    obtener_usuario_actual,
+)
 from .migrations import inicializar_base_datos
 from .routers import (
+    autenticacion_router,
     citas_router,
     documentos_router,
     finanzas_router,
@@ -45,13 +50,26 @@ app.add_middleware(
 # =====================================================
 # ROUTERS
 # =====================================================
+app.include_router(autenticacion_router)
 
-app.include_router(citas_router)
-app.include_router(documentos_router)
-app.include_router(finanzas_router)
-app.include_router(pacientes_router)
+app.include_router(
+    citas_router,
+    dependencies=[Depends(obtener_usuario_actual)],
+)
+app.include_router(
+    documentos_router,
+    dependencies=[Depends(exigir_personal_clinico)],
+)
+app.include_router(
+    finanzas_router,
+    dependencies=[Depends(obtener_usuario_actual)],
+)
+app.include_router(
+    pacientes_router,
+    dependencies=[Depends(obtener_usuario_actual)],
+)
+
 app.include_router(salud_router)
-
 
 # =====================================================
 # FRONTEND REACT
