@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -17,7 +18,7 @@ EstadoCita = Literal[
 
 class ServicioCitaPayload(BaseModel):
     nombre: str = Field(min_length=2, max_length=150)
-    costo: float = Field(default=0, ge=0)
+    costo: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
 
 
 class CitaPagoPayload(BaseModel):
@@ -41,9 +42,9 @@ class CitaPagoPayload(BaseModel):
     notas: str = Field(default="", max_length=5000)
     estado: EstadoCita = "pendiente"
 
-    costo: float = Field(default=0, ge=0)
+    costo: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
     tipoPago: TipoPago = "contado"
-    montoPagado: float = Field(default=0, ge=0)
+    montoPagado: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
     metodoPago: str = Field(default="Efectivo", max_length=50)
 
     sesionNum: int = Field(default=1, ge=1)

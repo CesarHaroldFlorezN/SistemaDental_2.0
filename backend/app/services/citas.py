@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException
@@ -7,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from ..models import CitaDB, PacienteDB, PlanDB
 from ..schemas import CitaPagoPayload
+from .comun import redondear_monto
+
+CERO = Decimal("0.00")
 
 ESTADOS_QUE_BLOQUEAN_HORARIO = {
     "pendiente",
@@ -261,13 +265,15 @@ def normalizar_servicios(
         if not nombre:
             continue
 
+        # El costo por servicio se guarda dentro de la columna JSON
+        # `servicios`, que no admite Decimal directamente (json.dumps no
+        # sabe serializarlo) -> se guarda como float, ya redondeado con
+        # la misma lógica de redondear_monto para que sea consistente
+        # con costo_total.
         servicios.append(
             {
                 "nombre": nombre,
-                "costo": round(
-                    float(servicio.costo or 0),
-                    2,
-                ),
+                "costo": float(redondear_monto(servicio.costo)),
             }
         )
 
@@ -275,10 +281,7 @@ def normalizar_servicios(
         servicios = [
             {
                 "nombre": payload.procedimiento.strip(),
-                "costo": round(
-                    float(payload.costo or 0),
-                    2,
-                ),
+                "costo": float(redondear_monto(payload.costo)),
             }
         ]
 
@@ -294,9 +297,8 @@ def normalizar_servicios(
     procedimiento = " + ".join(servicio["nombre"] for servicio in servicios)
     procedimiento = procedimiento[:200]
 
-    costo_total = round(
-        sum(servicio["costo"] for servicio in servicios),
-        2,
+    costo_total = redondear_monto(
+        sum((Decimal(str(servicio["costo"])) for servicio in servicios), start=CERO)
     )
 
     return {
@@ -308,28 +310,22 @@ def normalizar_servicios(
 
 def calcular_datos_pago(
     payload: CitaPagoPayload,
-    costo_total: float | None = None,
+    costo_total: Decimal | None = None,
 ) -> dict[str, Any]:
     tipo_pago = payload.tipoPago
 
     if tipo_pago in {"cortesia", "sesion"}:
-        total = 0.0
-        cobrado = 0.0
+        total = CERO
+        cobrado = CERO
     else:
-        total = round(
-            float(payload.costo if costo_total is None else costo_total),
-            2,
-        )
+        total = redondear_monto(payload.costo if costo_total is None else costo_total)
 
         if tipo_pago == "completo":
             cobrado = total
         elif tipo_pago == "contado":
-            cobrado = 0.0
+            cobrado = CERO
         else:
-            cobrado = round(
-                float(payload.montoPagado),
-                2,
-            )
+            cobrado = redondear_monto(payload.montoPagado)
 
     if cobrado > total:
         raise HTTPException(
@@ -366,7 +362,7 @@ def calcular_datos_pago(
             detail=("Una cita en cuotas debe tener un costo mayor que cero."),
         )
 
-    saldo = round(total - cobrado, 2)
+    saldo = redondear_monto(total - cobrado)
 
     metodo = (
         payload.metodoPago.strip()

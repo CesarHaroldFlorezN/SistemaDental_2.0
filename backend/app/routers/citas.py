@@ -21,6 +21,7 @@ from ..services import (
     minutos_a_hora,
     normalizar_servicios,
     obtener_paciente,
+    redondear_monto,
     serializar_modelo,
     validar_disponibilidad,
     validar_plan,
@@ -245,7 +246,7 @@ def actualizar_cita_con_pago(
     datos_pago = calcular_datos_pago(payload, detalle_servicios["costo_total"])
     ahora = ahora_iso()
 
-    if pago and datos_pago["cobrado"] < float(pago.cobrado or 0):
+    if pago and datos_pago["cobrado"] < redondear_monto(pago.cobrado):
         raise HTTPException(
             status_code=400,
             detail=(
@@ -462,7 +463,7 @@ def eliminar_cita_con_pago(
 
     pago = db.query(PagoDB).filter(PagoDB.citaId == cita_id).first()
 
-    if pago and float(pago.cobrado or 0) > 0:
+    if pago and redondear_monto(pago.cobrado) > 0:
         raise HTTPException(
             status_code=400,
             detail=(
