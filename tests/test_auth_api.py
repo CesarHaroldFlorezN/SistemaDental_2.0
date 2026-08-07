@@ -1,8 +1,11 @@
 from fastapi.testclient import TestClient
 
 from backend.app.database import SessionLocal
+from backend.app.dependencias import (
+    COOKIE_SESION,
+    obtener_usuario_actual,
+)
 from backend.app.main import app
-from backend.app.routers.autenticacion import COOKIE_SESION
 from backend.app.services import crear_usuario
 
 CONTRASENA_PRUEBA = "Contraseña segura de prueba 2026"
@@ -135,3 +138,31 @@ def test_usuario_bloqueado_recibe_respuesta_423() -> None:
         )
 
         assert respuesta_bloqueada.status_code == 423
+
+
+def test_rutas_clinicas_requieren_sesion() -> None:
+    reemplazo_pruebas = app.dependency_overrides.pop(
+        obtener_usuario_actual,
+        None,
+    )
+
+    try:
+        with TestClient(app) as client:
+            respuesta_pacientes = client.get("/api/pacientes")
+            respuesta_citas = client.get("/api/citas")
+            respuesta_pagos = client.get("/api/pagos")
+            respuesta_salud = client.get("/api/salud")
+
+        assert respuesta_pacientes.status_code == 401
+        assert respuesta_citas.status_code == 401
+        assert respuesta_pagos.status_code == 401
+
+        assert (
+            respuesta_pacientes.json()["detail"]
+            == "Debes iniciar sesión para continuar."
+        )
+
+        assert respuesta_salud.status_code == 200
+    finally:
+        if reemplazo_pruebas is not None:
+            app.dependency_overrides[obtener_usuario_actual] = reemplazo_pruebas

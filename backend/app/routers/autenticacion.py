@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..dependencias import COOKIE_SESION
 from ..schemas import (
     CredencialesPayload,
     SesionResponse,
@@ -17,7 +18,6 @@ from ..services import (
     revocar_sesion,
 )
 
-COOKIE_SESION = "dentalpro_sesion"
 DURACION_SESION_SEGUNDOS = DURACION_SESION_HORAS * 60 * 60
 
 router = APIRouter(
