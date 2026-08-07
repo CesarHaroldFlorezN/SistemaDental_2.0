@@ -69,3 +69,8 @@ exigir_personal_clinico = exigir_roles(
     "administrador",
     "odontologo",
 )
+
+exigir_personal_financiero = exigir_roles(
+    "administrador",
+    "recepcion",
+)

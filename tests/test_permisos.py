@@ -104,3 +104,65 @@ def test_documentos_solo_para_personal_clinico() -> None:
             )
         else:
             app.dependency_overrides[obtener_usuario_actual] = reemplazo_original
+
+
+def test_finanzas_para_administracion_y_recepcion() -> None:
+    reemplazo_original = app.dependency_overrides.get(
+        obtener_usuario_actual,
+    )
+
+    try:
+        app.dependency_overrides[obtener_usuario_actual] = usuario_recepcion
+
+        with TestClient(app) as client:
+            respuesta_recepcion = client.get("/api/pagos")
+
+        assert respuesta_recepcion.status_code == 200
+
+        app.dependency_overrides[obtener_usuario_actual] = usuario_odontologo
+
+        with TestClient(app) as client:
+            respuesta_odontologo = client.get("/api/pagos")
+
+        assert respuesta_odontologo.status_code == 403
+    finally:
+        if reemplazo_original is None:
+            app.dependency_overrides.pop(
+                obtener_usuario_actual,
+                None,
+            )
+        else:
+            app.dependency_overrides[obtener_usuario_actual] = reemplazo_original
+
+
+def test_eliminar_pago_solo_para_administrador() -> None:
+    reemplazo_original = app.dependency_overrides.get(
+        obtener_usuario_actual,
+    )
+
+    try:
+        app.dependency_overrides[obtener_usuario_actual] = usuario_recepcion
+
+        with TestClient(app) as client:
+            respuesta_recepcion = client.delete(
+                "/api/pagos/999999",
+            )
+
+        assert respuesta_recepcion.status_code == 403
+
+        app.dependency_overrides[obtener_usuario_actual] = usuario_administrador
+
+        with TestClient(app) as client:
+            respuesta_administrador = client.delete(
+                "/api/pagos/999999",
+            )
+
+        assert respuesta_administrador.status_code == 404
+    finally:
+        if reemplazo_original is None:
+            app.dependency_overrides.pop(
+                obtener_usuario_actual,
+                None,
+            )
+        else:
+            app.dependency_overrides[obtener_usuario_actual] = reemplazo_original

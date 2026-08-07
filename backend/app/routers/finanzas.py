@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..dependencias import (
+    exigir_administrador,
+    exigir_personal_financiero,
+)
 from ..models import (
     MovimientoCuentaDB,
     PagoDB,
@@ -136,14 +140,20 @@ def _eliminar_registro(
 # =====================================================
 
 
-@router.get("/api/pagos")
+@router.get(
+    "/api/pagos",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def listar_pagos(
     db: Session = Depends(get_db),
 ):
     return _listar_registros(PagoDB, db)
 
 
-@router.post("/api/pagos")
+@router.post(
+    "/api/pagos",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def crear_pago(
     data: dict[str, Any],
     db: Session = Depends(get_db),
@@ -151,7 +161,10 @@ def crear_pago(
     return _crear_registro(PagoDB, data, db)
 
 
-@router.put("/api/pagos/{item_id}")
+@router.put(
+    "/api/pagos/{item_id}",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
 def actualizar_pago(
     item_id: int,
     data: dict[str, Any],
@@ -165,7 +178,10 @@ def actualizar_pago(
     )
 
 
-@router.delete("/api/pagos/{item_id}")
+@router.delete(
+    "/api/pagos/{item_id}",
+    dependencies=[Depends(exigir_administrador)],
+)
 def eliminar_pago(
     item_id: int,
     db: Session = Depends(get_db),
@@ -331,6 +347,7 @@ def impedir_eliminacion_movimiento(
 
 @router.post(
     "/api/operaciones/pagos/{pago_id}/registrar",
+    dependencies=[Depends(exigir_personal_financiero)],
 )
 def registrar_pago_auditable(
     pago_id: int,
@@ -342,6 +359,7 @@ def registrar_pago_auditable(
 
 @router.post(
     "/api/operaciones/pagos/{pago_id}/anular",
+    dependencies=[Depends(exigir_administrador)],
 )
 def anular_pago_auditable(
     pago_id: int,
@@ -353,6 +371,7 @@ def anular_pago_auditable(
 
 @router.post(
     "/api/operaciones/pagos/{pago_id}/devolver",
+    dependencies=[Depends(exigir_administrador)],
 )
 def devolver_pago_auditable(
     pago_id: int,
@@ -364,6 +383,7 @@ def devolver_pago_auditable(
 
 @router.get(
     "/api/pacientes/{paciente_id}/cuenta",
+    dependencies=[Depends(exigir_personal_financiero)],
 )
 def obtener_cuenta_paciente(
     paciente_id: int,
