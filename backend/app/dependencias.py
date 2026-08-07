@@ -65,3 +65,7 @@ def exigir_roles(
 exigir_administrador = exigir_roles(
     "administrador",
 )
+exigir_personal_clinico = exigir_roles(
+    "administrador",
+    "odontologo",
+)

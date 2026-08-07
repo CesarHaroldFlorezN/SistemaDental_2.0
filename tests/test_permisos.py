@@ -16,6 +16,16 @@ def usuario_recepcion() -> SimpleNamespace:
     )
 
 
+def usuario_odontologo() -> SimpleNamespace:
+    return SimpleNamespace(
+        id=22,
+        nombre="Usuario Odontólogo",
+        nombre_usuario="odontologo.pruebas",
+        rol="odontologo",
+        activo=True,
+    )
+
+
 def usuario_administrador() -> SimpleNamespace:
     return SimpleNamespace(
         id=21,
@@ -53,6 +63,39 @@ def test_solo_administrador_puede_eliminar_pacientes() -> None:
             )
 
         assert respuesta_administrador.status_code == 404
+    finally:
+        if reemplazo_original is None:
+            app.dependency_overrides.pop(
+                obtener_usuario_actual,
+                None,
+            )
+        else:
+            app.dependency_overrides[obtener_usuario_actual] = reemplazo_original
+
+
+def test_documentos_solo_para_personal_clinico() -> None:
+    reemplazo_original = app.dependency_overrides.get(
+        obtener_usuario_actual,
+    )
+
+    try:
+        app.dependency_overrides[obtener_usuario_actual] = usuario_recepcion
+
+        with TestClient(app) as client:
+            respuesta_recepcion = client.get(
+                "/api/pacientes/999999/documentos",
+            )
+
+        assert respuesta_recepcion.status_code == 403
+
+        app.dependency_overrides[obtener_usuario_actual] = usuario_odontologo
+
+        with TestClient(app) as client:
+            respuesta_odontologo = client.get(
+                "/api/pacientes/999999/documentos",
+            )
+
+        assert respuesta_odontologo.status_code == 404
     finally:
         if reemplazo_original is None:
             app.dependency_overrides.pop(

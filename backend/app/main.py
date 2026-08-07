@@ -7,7 +7,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import ALLOWED_ORIGINS, FRONTEND_DIR
-from .dependencias import obtener_usuario_actual
+from .dependencias import (
+    exigir_personal_clinico,
+    obtener_usuario_actual,
+)
 from .migrations import inicializar_base_datos
 from .routers import (
     autenticacion_router,
@@ -55,7 +58,7 @@ app.include_router(
 )
 app.include_router(
     documentos_router,
-    dependencies=[Depends(obtener_usuario_actual)],
+    dependencies=[Depends(exigir_personal_clinico)],
 )
 app.include_router(
     finanzas_router,
