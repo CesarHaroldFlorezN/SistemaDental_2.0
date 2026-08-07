@@ -6,6 +6,7 @@ import PlanTratamientoModal from './features/tratamientos/components/PlanTratami
 import PacienteModal from './features/pacientes/components/PacienteModal';
 import CitaModal from './features/agenda/components/CitaModal';
 import Sidebar from './shared/components/Sidebar';
+import LoginPage from './features/autenticacion/components/LoginPage';
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api } from './services/api';
@@ -57,6 +58,9 @@ const normalizarTexto = (valor) => String(valor ?? '')
 
 export default function App() {
   const [vistaActiva, setVistaActiva] = useState('dashboard');
+  const [usuarioActual, setUsuarioActual] = useState(null);
+  const [verificandoSesion, setVerificandoSesion] = useState(true);
+
 
   // ==========================================
   // ESTADO Y LÓGICA DEL TEMA (CLARO / OSCURO)
@@ -81,7 +85,30 @@ export default function App() {
   const toggleTheme = () => {
     setTema((prevTema) => (prevTema === 'dark' ? 'light' : 'dark'));
   };
+  useEffect(() => {
+    let componenteActivo = true;
 
+    api.obtenerSesion()
+      .then((respuesta) => {
+        if (componenteActivo) {
+          setUsuarioActual(respuesta.usuario);
+        }
+      })
+      .catch(() => {
+        if (componenteActivo) {
+          setUsuarioActual(null);
+        }
+      })
+      .finally(() => {
+        if (componenteActivo) {
+          setVerificandoSesion(false);
+        }
+      });
+
+    return () => {
+      componenteActivo = false;
+    };
+  }, []);
   // ==========================================
   // ESTADOS DE PACIENTES
   // ==========================================
@@ -102,9 +129,9 @@ export default function App() {
 
     try {
       Swal.fire({ title: 'Importando...', text: 'Procesando pacientes, por favor espera.', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
-      
+
       const respuesta = await api.importarPacientes(file);
-      
+
       Swal.fire({
         title: '¡Importación Completa!',
         text: respuesta.message,
@@ -191,15 +218,94 @@ export default function App() {
   };
 
   useEffect(() => {
-    cargarPacientes();
-    cargarCitas();
-    cargarPagos();
-    cargarPlanPagos();
-    cargarPlanes();
-  }, []);
+    let componenteActivo = true;
 
+    if (usuarioActual) {
+      Promise.all([
+        api.getPacientes(),
+        api.getCitas(),
+        api.getPagos(),
+        api.getPlanPagos(),
+        api.getPlanes()
+      ])
+        .then(([
+          pacientesCargados,
+          citasCargadas,
+          pagosCargados,
+          planesPagoCargados,
+          planesCargados
+        ]) => {
+          if (!componenteActivo) return;
+
+          setPacientes(pacientesCargados || []);
+          setCitas(citasCargadas || []);
+          setPagos(pagosCargados || []);
+          setPlanPagos(planesPagoCargados || []);
+          setPlanes(planesCargados || []);
+        })
+        .catch((error) => {
+          console.error('No se pudieron cargar los datos iniciales:', error);
+        });
+    }
+
+    return () => {
+      componenteActivo = false;
+    };
+  }, [usuarioActual]);
+
+
+    const handleLogin = async ({
+    nombreUsuario,
+    contrasena
+  }) => {
+    const respuesta = await api.iniciarSesion(
+      nombreUsuario,
+      contrasena
+    );
+
+    setUsuarioActual(respuesta.usuario);
+  };
+  const handleCerrarSesion = async () => {
+    try {
+      await api.cerrarSesion();
+
+      setUsuarioActual(null);
+      setVistaActiva('dashboard');
+      setPacientes([]);
+      setCitas([]);
+      setPagos([]);
+      setPlanPagos([]);
+      setPlanes([]);
+    } catch (error) {
+      Swal.fire({
+        title: 'No se pudo cerrar la sesión',
+        text: error.message,
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
+    }
+  };
+
+  if (verificandoSesion) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
+          <p className="text-sm font-semibold text-slate-400">
+            Verificando sesión…
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!usuarioActual) {
+    return (
+      <LoginPage onLogin={handleLogin} />
+    );
+  }
   const fMon = (num) => `S/. ${parseFloat(num || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   const mesActualStr = new Date().toISOString().slice(0, 7);
   const totalCobrado = pagos.reduce((acc, g) => acc + parseFloat(g.cobrado || 0), 0);
   const ingresosMes = pagos.filter(g => (g.fechaUltPago || g.fecha || '').startsWith(mesActualStr)).reduce((acc, g) => acc + parseFloat(g.cobrado || 0), 0);
@@ -930,7 +1036,7 @@ export default function App() {
   };
 
   const handleGuardarNuevoPP = async (payload) => {
-    try { await api.crearPlanPago(payload); setModalPPAbierto(false); cargarPlanPagos(); Swal.fire({ title: 'Plan Creado 🗓️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false }); } 
+    try { await api.crearPlanPago(payload); setModalPPAbierto(false); cargarPlanPagos(); Swal.fire({ title: 'Plan Creado 🗓️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false }); }
     catch { Swal.fire({ title: 'Error', text: 'No se pudo crear el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' }); }
   };
 
@@ -939,7 +1045,7 @@ export default function App() {
 
   const handleGuardarPlan = async (payload, id) => {
     try {
-      if (id) { await api.actualizarPlan(id, payload); Swal.fire({ title: 'Plan Actualizado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); } 
+      if (id) { await api.actualizarPlan(id, payload); Swal.fire({ title: 'Plan Actualizado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); }
       else { await api.crearPlan(payload); Swal.fire({ title: 'Plan Creado 🗂️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); }
       setModalPlanAbierto(false); cargarPlanes();
     } catch { Swal.fire({ title: 'Error', text: 'No se pudo guardar el plan.', icon: 'error', background: '#1e293b', color: '#fff' }); }
@@ -1033,10 +1139,15 @@ export default function App() {
 
   return (
     <div className="dp-app-shell flex min-h-screen bg-slate-900 font-sans text-slate-100">
-      <Sidebar vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
+            <Sidebar
+        vistaActiva={vistaActiva}
+        setVistaActiva={setVistaActiva}
+        usuarioActual={usuarioActual}
+        onCerrarSesion={handleCerrarSesion}
+      />
 
       <main className="dp-main min-w-0 flex-1 overflow-y-auto bg-slate-900 p-4 transition-colors duration-200 sm:p-6 xl:p-8">
-        
+
         <div className="dp-theme-toolbar sticky top-0 z-30 mx-auto mb-4 flex max-w-[1800px] items-center justify-end py-1">
           <button onClick={toggleTheme} className="dp-theme-toggle flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold shadow-lg backdrop-blur transition duration-200 cursor-pointer select-none">
             {tema === 'dark' ? <><span role="img" aria-label="claro">☀️</span><span>Modo Claro</span></> : <><span role="img" aria-label="oscuro">🌙</span><span>Modo Oscuro</span></>}
@@ -1044,7 +1155,7 @@ export default function App() {
         </div>
 
         <div className="mx-auto w-full max-w-[1800px]">
-          
+
           {vistaActiva === 'dashboard' && (
   <Suspense
     fallback={
@@ -1195,7 +1306,7 @@ export default function App() {
               PANTALLA 4 Y 5: PLANES DE TRATAMIENTO Y PAGOS EN CUOTAS
           =============================================== */}
           {/* Se conservan igual, pero para no exceder el tamaño del código he simplificado la lógica visual de las tarjetas */}
-          
+
           {vistaActiva === 'planes' && (
             <div>
               <div className="flex justify-between items-center mb-8">
