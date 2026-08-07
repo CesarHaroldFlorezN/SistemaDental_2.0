@@ -14,6 +14,18 @@ from .services.usuarios import crear_usuario
 
 LectorContrasena = Callable[[str], str]
 
+ROLES_CLI = (
+    "administrador",
+    "odontologo",
+    "recepcion",
+)
+
+NOMBRES_ROL = {
+    "administrador": "Administrador",
+    "odontologo": "Odontólogo",
+    "recepcion": "Recepción",
+}
+
 
 def solicitar_contrasena(
     lector: LectorContrasena = getpass.getpass,
@@ -30,11 +42,13 @@ def solicitar_contrasena(
     return contrasena
 
 
-def ejecutar_creacion_administrador(
+def _ejecutar_creacion_usuario(
     *,
     nombre: str,
     nombre_usuario: str,
     contrasena: str,
+    rol: str,
+    etiqueta: str,
     fabrica_sesiones=SessionLocal,
 ) -> int:
     try:
@@ -44,22 +58,79 @@ def ejecutar_creacion_administrador(
                 nombre=nombre,
                 nombre_usuario=nombre_usuario,
                 contrasena=contrasena,
-                rol="administrador",
+                rol=rol,
             )
 
             resumen = (
                 usuario.nombre_usuario,
                 usuario.nombre,
+                usuario.rol,
             )
     except (ValueError, SQLAlchemyError) as error:
         print(
-            f"No se pudo crear el administrador: {error}",
+            f"No se pudo crear el {etiqueta.lower()}: {error}",
             file=sys.stderr,
         )
         return 1
 
-    print(f"Administrador creado correctamente: {resumen[0]} ({resumen[1]}).")
+    nombre_rol = NOMBRES_ROL.get(resumen[2], resumen[2])
+    print(
+        f"{etiqueta} creado correctamente: "
+        f"{resumen[0]} ({resumen[1]}). Rol: {nombre_rol}."
+    )
     return 0
+
+
+def ejecutar_creacion_usuario(
+    *,
+    nombre: str,
+    nombre_usuario: str,
+    contrasena: str,
+    rol: str,
+    fabrica_sesiones=SessionLocal,
+) -> int:
+    return _ejecutar_creacion_usuario(
+        nombre=nombre,
+        nombre_usuario=nombre_usuario,
+        contrasena=contrasena,
+        rol=rol,
+        etiqueta="Usuario",
+        fabrica_sesiones=fabrica_sesiones,
+    )
+
+
+def ejecutar_creacion_administrador(
+    *,
+    nombre: str,
+    nombre_usuario: str,
+    contrasena: str,
+    fabrica_sesiones=SessionLocal,
+) -> int:
+    return _ejecutar_creacion_usuario(
+        nombre=nombre,
+        nombre_usuario=nombre_usuario,
+        contrasena=contrasena,
+        rol="administrador",
+        etiqueta="Administrador",
+        fabrica_sesiones=fabrica_sesiones,
+    )
+
+
+def _agregar_argumentos_cuenta(
+    comando: argparse.ArgumentParser,
+    *,
+    tipo_usuario: str,
+) -> None:
+    comando.add_argument(
+        "--nombre",
+        required=True,
+        help=f"Nombre completo del {tipo_usuario}.",
+    )
+    comando.add_argument(
+        "--usuario",
+        required=True,
+        help="Nombre utilizado para iniciar sesión.",
+    )
 
 
 def crear_parser() -> argparse.ArgumentParser:
@@ -76,15 +147,24 @@ def crear_parser() -> argparse.ArgumentParser:
         "crear-admin",
         help="Crea una cuenta con permisos de administrador.",
     )
-    crear_admin.add_argument(
-        "--nombre",
-        required=True,
-        help="Nombre completo del administrador.",
+    _agregar_argumentos_cuenta(
+        crear_admin,
+        tipo_usuario="administrador",
     )
-    crear_admin.add_argument(
-        "--usuario",
+
+    crear_cuenta = comandos.add_parser(
+        "crear-usuario",
+        help="Crea una cuenta seleccionando su rol.",
+    )
+    _agregar_argumentos_cuenta(
+        crear_cuenta,
+        tipo_usuario="usuario",
+    )
+    crear_cuenta.add_argument(
+        "--rol",
         required=True,
-        help="Nombre utilizado para iniciar sesión.",
+        choices=ROLES_CLI,
+        help="Permisos asignados a la cuenta.",
     )
 
     return parser
@@ -103,10 +183,18 @@ def main(argumentos: list[str] | None = None) -> int:
         print("\nOperación cancelada.", file=sys.stderr)
         return 130
 
-    return ejecutar_creacion_administrador(
+    if opciones.comando == "crear-admin":
+        return ejecutar_creacion_administrador(
+            nombre=opciones.nombre,
+            nombre_usuario=opciones.usuario,
+            contrasena=contrasena,
+        )
+
+    return ejecutar_creacion_usuario(
         nombre=opciones.nombre,
         nombre_usuario=opciones.usuario,
         contrasena=contrasena,
+        rol=opciones.rol,
     )
 
 

@@ -5,7 +5,9 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.gestion_usuarios import (
+    crear_parser,
     ejecutar_creacion_administrador,
+    ejecutar_creacion_usuario,
     solicitar_contrasena,
 )
 from backend.app.models import UsuarioDB
@@ -100,3 +102,65 @@ def test_impedir_administrador_duplicado(
     assert "ya existe" in salida.err
 
     motor.dispose()
+
+
+@pytest.mark.parametrize(
+    "rol,nombre_usuario",
+    [
+        ("odontologo", "odontologo.prueba"),
+        ("recepcion", "recepcion.prueba"),
+    ],
+)
+def test_crear_usuario_segun_rol(
+    tmp_path: Path,
+    capsys,
+    rol: str,
+    nombre_usuario: str,
+) -> None:
+    motor, fabrica = crear_fabrica_sesiones(tmp_path)
+    contrasena = "Clave de prueba segura 2026"
+
+    codigo = ejecutar_creacion_usuario(
+        nombre="Usuario de prueba",
+        nombre_usuario=nombre_usuario,
+        contrasena=contrasena,
+        rol=rol,
+        fabrica_sesiones=fabrica,
+    )
+
+    salida = capsys.readouterr()
+
+    assert codigo == 0
+    assert "Usuario creado correctamente" in salida.out
+    assert contrasena not in salida.out
+    assert contrasena not in salida.err
+
+    with fabrica() as db:
+        usuario = db.scalar(select(UsuarioDB))
+
+        assert usuario is not None
+        assert usuario.nombre_usuario == nombre_usuario
+        assert usuario.rol == rol
+        assert verificar_contrasena(
+            contrasena,
+            usuario.contrasena_hash,
+        )
+
+    motor.dispose()
+
+
+def test_parser_acepta_crear_usuario_con_rol() -> None:
+    opciones = crear_parser().parse_args(
+        [
+            "crear-usuario",
+            "--nombre",
+            "Odontóloga de prueba",
+            "--usuario",
+            "odontologa.prueba",
+            "--rol",
+            "odontologo",
+        ]
+    )
+
+    assert opciones.comando == "crear-usuario"
+    assert opciones.rol == "odontologo"
