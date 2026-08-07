@@ -13,6 +13,18 @@ import {
   Users
 } from 'lucide-react';
 
+const ROLES_TODOS = [
+  'administrador',
+  'odontologo',
+  'recepcion'
+];
+
+const NOMBRES_ROL = {
+  administrador: 'Administrador',
+  odontologo: 'Odontólogo',
+  recepcion: 'Recepción'
+};
+
 export default function Sidebar({
   vistaActiva,
   setVistaActiva,
@@ -22,13 +34,54 @@ export default function Sidebar({
   const [contraido, setContraido] = useState(() => localStorage.getItem('dp-sidebar-contraido') === '1');
 
   const menuItems = [
-    { id: 'dashboard', nombre: 'Dashboard', icono: LayoutDashboard },
-    { id: 'pacientes', nombre: 'Pacientes', icono: Users },
-    { id: 'citas', nombre: 'Agenda / Citas', icono: Calendar },
-    { id: 'planes', nombre: 'Planes Tratamiento', icono: FolderKanban },
-    { id: 'finanzas', nombre: 'Finanzas', icono: DollarSign },
-    { id: 'planpagos', nombre: 'Planes de Pago', icono: CreditCard }
-  ];
+    {
+      id: 'dashboard',
+      nombre: 'Dashboard',
+      icono: LayoutDashboard,
+      roles: ROLES_TODOS
+    },
+    {
+      id: 'pacientes',
+      nombre: 'Pacientes',
+      icono: Users,
+      roles: ROLES_TODOS
+    },
+    {
+      id: 'citas',
+      nombre: 'Agenda / Citas',
+      icono: Calendar,
+      roles: ROLES_TODOS
+    },
+    {
+      id: 'planes',
+      nombre: 'Planes Tratamiento',
+      icono: FolderKanban,
+      roles: [
+        'administrador',
+        'odontologo'
+      ]
+    },
+    {
+      id: 'finanzas',
+      nombre: 'Finanzas',
+      icono: DollarSign,
+      roles: [
+        'administrador',
+        'recepcion'
+      ]
+    },
+    {
+      id: 'planpagos',
+      nombre: 'Planes de Pago',
+      icono: CreditCard,
+      roles: [
+        'administrador',
+        'recepcion'
+      ]
+    }
+  ].filter((item) =>
+    item.roles.includes(usuarioActual?.rol)
+  );
 
   const alternar = () => {
     setContraido((actual) => {
@@ -87,14 +140,14 @@ export default function Sidebar({
         </nav>
       </div>
 
-            <div className="border-t border-slate-700/80 pt-4">
+      <div className="border-t border-slate-700/80 pt-4">
         <div
           className={`mb-3 flex items-center ${
             contraido ? 'justify-center' : 'gap-3 px-2'
           }`}
           title={
             contraido
-              ? `${usuarioActual?.nombre} · ${usuarioActual?.rol}`
+              ? `${usuarioActual?.nombre} · ${NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol}`
               : undefined
           }
         >
@@ -109,7 +162,7 @@ export default function Sidebar({
               </p>
 
               <p className="truncate text-[10px] capitalize text-cyan-400">
-                {usuarioActual?.rol}
+                {NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol}
               </p>
             </div>
           )}
