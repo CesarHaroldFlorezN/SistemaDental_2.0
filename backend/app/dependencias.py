@@ -60,3 +60,8 @@ def exigir_roles(
         return usuario
 
     return comprobar_rol
+
+
+exigir_administrador = exigir_roles(
+    "administrador",
+)
