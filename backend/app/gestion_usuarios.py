@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .database import SessionLocal
 from .migrations import inicializar_base_datos
-from .services.usuarios import crear_usuario
+from .services.usuarios import cambiar_contrasena_usuario, crear_usuario
 
 LectorContrasena = Callable[[str], str]
 
@@ -116,6 +116,34 @@ def ejecutar_creacion_administrador(
     )
 
 
+def ejecutar_cambio_contrasena(
+    *,
+    nombre_usuario: str,
+    nueva_contrasena: str,
+    fabrica_sesiones=SessionLocal,
+) -> int:
+    try:
+        with fabrica_sesiones.begin() as db:
+            usuario = cambiar_contrasena_usuario(
+                db,
+                nombre_usuario=nombre_usuario,
+                nueva_contrasena=nueva_contrasena,
+            )
+            usuario_actualizado = usuario.nombre_usuario
+    except (ValueError, SQLAlchemyError) as error:
+        print(
+            f"No se pudo cambiar la contraseña: {error}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        "Contraseña actualizada correctamente para "
+        f"'{usuario_actualizado}'. Las sesiones abiertas fueron cerradas."
+    )
+    return 0
+
+
 def _agregar_argumentos_cuenta(
     comando: argparse.ArgumentParser,
     *,
@@ -167,6 +195,16 @@ def crear_parser() -> argparse.ArgumentParser:
         help="Permisos asignados a la cuenta.",
     )
 
+    cambiar_clave = comandos.add_parser(
+        "cambiar-clave",
+        help="Cambia la contraseña y cierra las sesiones abiertas.",
+    )
+    cambiar_clave.add_argument(
+        "--usuario",
+        required=True,
+        help="Nombre de la cuenta que será actualizada.",
+    )
+
     return parser
 
 
@@ -190,11 +228,17 @@ def main(argumentos: list[str] | None = None) -> int:
             contrasena=contrasena,
         )
 
-    return ejecutar_creacion_usuario(
-        nombre=opciones.nombre,
+    if opciones.comando == "crear-usuario":
+        return ejecutar_creacion_usuario(
+            nombre=opciones.nombre,
+            nombre_usuario=opciones.usuario,
+            contrasena=contrasena,
+            rol=opciones.rol,
+        )
+
+    return ejecutar_cambio_contrasena(
         nombre_usuario=opciones.usuario,
-        contrasena=contrasena,
-        rol=opciones.rol,
+        nueva_contrasena=contrasena,
     )
 
 

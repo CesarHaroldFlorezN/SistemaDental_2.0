@@ -6,17 +6,19 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.gestion_usuarios import (
     crear_parser,
+    ejecutar_cambio_contrasena,
     ejecutar_creacion_administrador,
     ejecutar_creacion_usuario,
     solicitar_contrasena,
 )
-from backend.app.models import UsuarioDB
+from backend.app.models import SesionDB, UsuarioDB
 from backend.app.seguridad import verificar_contrasena
 
 
 def crear_fabrica_sesiones(tmp_path: Path):
     motor = create_engine(f"sqlite:///{(tmp_path / 'gestion-usuarios.db').as_posix()}")
     UsuarioDB.__table__.create(motor)
+    SesionDB.__table__.create(motor)
 
     return motor, sessionmaker(bind=motor)
 
@@ -164,3 +166,61 @@ def test_parser_acepta_crear_usuario_con_rol() -> None:
 
     assert opciones.comando == "crear-usuario"
     assert opciones.rol == "odontologo"
+
+
+def test_cambiar_contrasena_desde_gestion(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    motor, fabrica = crear_fabrica_sesiones(tmp_path)
+    contrasena_anterior = "Clave anterior segura 2026"
+    contrasena_nueva = "Clave nueva segura 2026"
+
+    assert (
+        ejecutar_creacion_usuario(
+            nombre="Recepción",
+            nombre_usuario="recepcion.prueba",
+            contrasena=contrasena_anterior,
+            rol="recepcion",
+            fabrica_sesiones=fabrica,
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    codigo = ejecutar_cambio_contrasena(
+        nombre_usuario="recepcion.prueba",
+        nueva_contrasena=contrasena_nueva,
+        fabrica_sesiones=fabrica,
+    )
+
+    salida = capsys.readouterr()
+
+    assert codigo == 0
+    assert "Contraseña actualizada correctamente" in salida.out
+    assert contrasena_nueva not in salida.out
+    assert contrasena_nueva not in salida.err
+
+    with fabrica() as db:
+        usuario = db.scalar(select(UsuarioDB))
+
+        assert usuario is not None
+        assert verificar_contrasena(
+            contrasena_nueva,
+            usuario.contrasena_hash,
+        )
+
+    motor.dispose()
+
+
+def test_parser_acepta_cambiar_clave() -> None:
+    opciones = crear_parser().parse_args(
+        [
+            "cambiar-clave",
+            "--usuario",
+            "recepcion.prueba",
+        ]
+    )
+
+    assert opciones.comando == "cambiar-clave"
+    assert opciones.usuario == "recepcion.prueba"
