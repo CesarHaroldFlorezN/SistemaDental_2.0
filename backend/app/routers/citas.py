@@ -209,6 +209,7 @@ def crear_cita_con_pago(
                 saldo=datos_pago["saldo"],
                 metodo=datos_pago["metodo"],
                 tipoPago=payload_efectivo.tipoPago,
+                servicios=detalle_servicios["servicios"],
                 cuotas=[],
                 creadoEn=ahora,
                 fechaUltPago=(
@@ -374,6 +375,7 @@ def actualizar_cita_con_pago(
             pago.saldo = datos_pago["saldo"]
             pago.metodo = datos_pago["metodo"]
             pago.tipoPago = payload_efectivo.tipoPago
+            pago.servicios = detalle_servicios["servicios"]
             pago.fechaUltPago = (
                 payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
             )

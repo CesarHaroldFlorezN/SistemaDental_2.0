@@ -720,6 +720,7 @@ export default function App() {
         saldo: nuevoSaldo,
         metodo: metodoRegistro,
         tipoPago: tipoPagoFinal,
+        servicios: serviciosLimpios,
         cuotas: pagoActual?.cuotas || [],
         creadoEn: pagoActual?.creadoEn || new Date().toISOString(),
         fechaUltPago: cobroRegistrado > 0 ? obtenerFechaLocal() : (pagoActual?.fechaUltPago || null),
@@ -731,7 +732,7 @@ export default function App() {
       let pagoGuardado = pagoActual;
       if (pagoActual) {
         await api.actualizarPago(pagoActual.id, datosPago);
-      } else {
+      } else if (!citaActual.planId || total > 0) {
         pagoGuardado = await api.crearPago(datosPago);
       }
 
@@ -809,15 +810,22 @@ export default function App() {
 
       if (accionSaldo === 'agregar_plan' && nuevoSaldo > 0 && !planVinculado) {
         const paciente = pacientes.find((item) => Number(item.id) === Number(pacienteId));
-        setBusquedaPP(paciente?.nombre || '');
-        setVistaActiva('planpagos');
-        Swal.fire({
-          title: 'Atención finalizada',
-          text: `El saldo de ${fMon(nuevoSaldo)} quedó preparado. Crea o completa ahora el plan de pagos del paciente.`,
-          icon: 'info',
-          background: '#1e293b',
-          color: '#fff'
+        const deudaCreada = pagoGuardado || pagoActual;
+        if (!deudaCreada?.id) {
+          throw new Error('La atención terminó, pero no se pudo identificar la deuda que debe financiarse.');
+        }
+        setPlanPagoContexto({
+          pacienteId,
+          pagoId: deudaCreada.id,
+          citaId,
+          casoClinicoId: citaActual.casoClinicoId || null,
+          concepto: procedimiento || citaActual.procedimiento || 'Atención dental',
+          totalAcordado: total,
+          cobrado: nuevoCobrado,
+          origen: 'procedimiento',
+          nombrePaciente: paciente?.nombre || 'Paciente'
         });
+        setModalPPAbierto(true);
         return;
       }
 
@@ -1007,17 +1015,67 @@ export default function App() {
   const handlePagarCuota = async (plan, idx) => {
     const cuota = plan.cuotas[idx];
     if (!cuota || cuota.pagado) return;
-    cuota.pagado = true; cuota.fechaPago = new Date().toISOString().split('T')[0]; cuota.metodoPago = plan.metodoPreferido || 'Efectivo';
-    plan.cobrado = Number(plan.anticipo || 0) + plan.cuotas.filter(c => c.pagado).reduce((acc, c) => acc + c.monto, 0);
-    plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
-    if (plan.saldo === 0) plan.estado = 'completado';
-    await api.actualizarPlanPago(plan.id, plan);
-    if (plan.pagoId) {
-      const pagoAsociado = pagos.find(p => p.id === plan.pagoId);
-      if (pagoAsociado) await api.actualizarPago(pagoAsociado.id, { ...pagoAsociado, cobrado: plan.cobrado, saldo: plan.saldo, fechaUltPago: cuota.fechaPago, cuotas: plan.cuotas });
+    const etiquetaSesion = plan.origen === 'plan_tratamiento'
+      ? `Cuota ${cuota.num} vinculada a la sesión ${cuota.sesionNum || cuota.num}`
+      : `Cuota ${cuota.num}`;
+    const resultado = await Swal.fire({
+      title: `Registrar ${etiquetaSesion.toLowerCase()}`,
+      html: `<div style="text-align:left;display:grid;gap:12px"><div>${etiquetaSesion}</div><div>Monto: <strong>${fMon(cuota.monto)}</strong></div><select id="dp-metodo-cuota" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-cuota" class="swal2-input" placeholder="Referencia u operación (opcional)" style="margin:0;width:100%"></div>`,
+      showCancelButton: true,
+      confirmButtonText: plan.origen === 'plan_tratamiento' ? `Pagar cuota ${cuota.num}` : 'Registrar pago',
+      cancelButtonText: 'Cancelar',
+      background: '#1e293b',
+      color: '#fff',
+      preConfirm: () => ({ metodo: document.getElementById('dp-metodo-cuota')?.value || 'Efectivo', referencia: document.getElementById('dp-ref-cuota')?.value || '' })
+    });
+    if (!resultado.isConfirmed) return;
+    const cuotasActualizadas = plan.cuotas.map((item, indice) => indice === idx ? {
+      ...item,
+      pagado: true,
+      fechaPago: obtenerFechaLocal(),
+      metodoPago: resultado.value.metodo,
+      referencia: resultado.value.referencia
+    } : { ...item });
+    try {
+      await api.actualizarPlanPago(plan.id, { ...plan, cuotas: cuotasActualizadas });
+      await Promise.all([cargarPlanPagos(), cargarPagos()]);
+      Swal.fire({ title: `Cuota ${cuota.num} pagada`, text: plan.origen === 'plan_tratamiento' ? `Quedó vinculada a la sesión ${cuota.sesionNum || cuota.num}.` : undefined, icon: 'success', background: '#1e293b', color: '#fff', timer: 1700, showConfirmButton: false });
+    } catch (error) {
+      Swal.fire({ title: 'No se pudo pagar la cuota', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
     }
-    cargarPlanPagos(); cargarPagos();
-    Swal.fire({ title: 'Cuota Pagada ✅', icon: 'success', background: '#1e293b', color: '#fff', timer: 1400, showConfirmButton: false });
+  };
+
+  const handleRegistrarAdelantoPlan = async (plan) => {
+    const saldo = Number(plan.saldo || 0);
+    if (saldo <= 0) return;
+    const resultado = await Swal.fire({
+      title: 'Registrar adelanto del plan',
+      html: `<div style="text-align:left;display:grid;gap:12px"><div>Saldo actual: <strong>${fMon(saldo)}</strong></div><div style="font-size:12px;color:#94a3b8">El adelanto se registra aparte y recalcula únicamente las cuotas pendientes, sin borrar las ya pagadas.</div><input id="dp-monto-adelanto" type="number" min="0.01" max="${saldo}" step="0.01" class="swal2-input" placeholder="Monto del adelanto" style="margin:0;width:100%"><select id="dp-metodo-adelanto" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-adelanto" class="swal2-input" placeholder="Referencia u operación (opcional)" style="margin:0;width:100%"></div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Registrar adelanto',
+      cancelButtonText: 'Cancelar',
+      background: '#1e293b',
+      color: '#fff',
+      preConfirm: () => {
+        const monto = Number(document.getElementById('dp-monto-adelanto')?.value || 0);
+        if (monto <= 0 || monto > saldo) return Swal.showValidationMessage('Ingresa un monto válido que no supere el saldo.');
+        return {
+          monto,
+          metodo: document.getElementById('dp-metodo-adelanto')?.value || 'Efectivo',
+          referencia: document.getElementById('dp-ref-adelanto')?.value || '',
+          motivo: 'Adelanto voluntario del paciente',
+          usuario: usuarioActual?.nombre || 'Administrador'
+        };
+      }
+    });
+    if (!resultado.isConfirmed) return;
+    try {
+      await api.registrarAdelantoPlanPago(plan.id, resultado.value);
+      await Promise.all([cargarPlanPagos(), cargarPagos()]);
+      Swal.fire({ title: 'Adelanto registrado', text: 'Las cuotas pendientes fueron recalculadas y el movimiento quedó auditado.', icon: 'success', background: '#1e293b', color: '#fff', timer: 2200, showConfirmButton: false });
+    } catch (error) {
+      Swal.fire({ title: 'No se pudo registrar el adelanto', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
+    }
   };
 
   const handleRevertirCuota = async (plan, idx) => {
@@ -1213,9 +1271,15 @@ export default function App() {
     return pl.nombrePaciente.toLowerCase().includes(q) || (pl.nombre || '').toLowerCase().includes(q) || (pl.tipo || '').toLowerCase().includes(q);
   }).sort((a, b) => (b.creadoEn || '').localeCompare(a.creadoEn || ''));
 
-    const getBadgeTipoPago = (tipo) => {
+  const getBadgeTipoPago = (tipo) => {
     const nombres = { contado: 'Contado', completo: 'Pagado', anticipo: 'Anticipo', cuotas: 'Cuotas', sesion: 'Plan', cortesia: 'Cortesía' };
     return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2.5 py-1 rounded-md text-xs font-semibold">{nombres[(tipo || '').toLowerCase()] || tipo || 'Contado'}</span>;
+  };
+
+  const estadoSesionDeCuota = (planPago, cuota) => {
+    if (planPago.origen !== 'plan_tratamiento') return null;
+    const planClinico = planes.find((plan) => Number(plan.id) === Number(planPago.planId));
+    return (planClinico?.sesiones || []).find((sesion) => Number(sesion.id) === Number(cuota.sesionPlanId))?.estado || 'pendiente';
   };
 
   return (
@@ -1388,7 +1452,16 @@ export default function App() {
                         return (
                           <tr key={g.id} className="hover:bg-slate-700/40 transition">
                             <td className="p-4"><div className="font-semibold text-white">{g.nombrePaciente}</div><div className="text-xs text-slate-400">{g.cedulaPaciente !== '—' ? `DNI: ${g.cedulaPaciente}` : ''}</div></td>
-                            <td className="p-4 font-medium text-slate-200">{g.concepto || 'Consulta General'}</td>
+                            <td className="p-4">
+                              <div className="space-y-1">
+                                {(Array.isArray(g.servicios) && g.servicios.length ? g.servicios : [{ nombre: g.concepto || 'Consulta General', costo: g.total }]).map((servicio, indice) => (
+                                  <div key={`${g.id}-servicio-${indice}`} className="flex min-w-[220px] items-start justify-between gap-3 text-xs">
+                                    <span className="font-medium text-slate-200">{servicio.nombre}</span>
+                                    <span className="shrink-0 text-cyan-300">{fMon(servicio.costo)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
                             <td className="p-4 text-slate-400 text-xs whitespace-nowrap">{g.fecha || '—'}</td>
                             <td className="p-4 font-serif text-slate-300">{fMon(g.total)}</td>
                             <td className="p-4 font-serif font-bold text-emerald-400">{fMon(cobradoReal)}</td>
@@ -1517,7 +1590,7 @@ export default function App() {
                             <div>
                               <div className="text-lg font-bold text-white leading-tight">{pl.nombrePaciente}</div>
                               <div className="text-xs text-cyan-400 font-medium mt-0.5">{pl.concepto || 'Financiamiento Odontológico'}</div>
-                              <div className="mt-1 text-[10px] font-bold uppercase text-slate-500">{pl.origen === 'plan_tratamiento' ? 'Una cuota por sesión clínica' : 'Procedimiento puntual · cuotas libres'}</div>
+                              <div className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${pl.origen === 'plan_tratamiento' ? 'border-violet-500/30 bg-violet-500/10 text-violet-300' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300'}`}>{pl.origen === 'plan_tratamiento' ? 'Plan clínico · una cuota por sesión' : 'Procedimiento puntual · cuotas libres'}</div>
                             </div>
                           </div>
                           <div className="text-right">
@@ -1532,17 +1605,18 @@ export default function App() {
                         </div>
                         <div className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden mb-5">
                           <table className="w-full text-left border-collapse text-xs">
-                            <thead><tr className="border-b border-slate-700 bg-slate-800 text-slate-400 uppercase"><th className="p-3">#</th><th className="p-3">Vencimiento</th><th className="p-3">Monto</th><th className="p-3 text-right">Acción</th></tr></thead>
+                            <thead><tr className="border-b border-slate-700 bg-slate-800 text-slate-400 uppercase"><th className="p-3">Cuota</th>{pl.origen === 'plan_tratamiento' && <th className="p-3">Sesión clínica</th>}<th className="p-3">Vencimiento</th><th className="p-3">Monto</th><th className="p-3 text-right">Acción</th></tr></thead>
                             <tbody className="divide-y divide-slate-800">
                               {cuotas.map((q, idx) => (
                                 <tr key={idx} className="hover:bg-slate-800/40 transition">
                                   <td className="p-3 font-bold"><span className="px-2 py-0.5 rounded text-[10px] bg-cyan-500/15 text-cyan-400">{q.tipo === 'anticipo' ? 'Anticipo' : `#${q.num}`}</span></td>
+                                  {pl.origen === 'plan_tratamiento' && <td className="p-3"><div className="font-bold text-violet-300">Sesión {q.sesionNum || q.num} · {estadoSesionDeCuota(pl, q)}</div><div className="mt-0.5 text-[10px] text-slate-500">{q.pagado ? 'Cuota pagada' : q.cubiertaPorAdelanto ? 'Cubierta por adelanto' : 'Pendiente de pago'}</div></td>}
                                   <td className="p-3 text-slate-300">{q.fecha || '—'}</td>
                                   <td className="p-3 font-serif font-bold text-white">S/. {parseFloat(q.monto || 0).toFixed(2)}</td>
                                   <td className="p-3 text-right space-x-1.5">
-                                    {!q.pagado ? (
-                                      <><button onClick={() => handlePagarCuota(pl, idx)} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold transition cursor-pointer">💵 Pagar</button>{pl.origen !== 'plan_tratamiento' && <button onClick={() => handleQuitarCuota(pl, idx)} className="p-1 bg-slate-800 hover:bg-rose-600/80 text-slate-400 hover:text-white rounded transition cursor-pointer">🗑️</button>}</>
-                                    ) : (<button onClick={() => handleRevertirCuota(pl, idx)} className="px-2 py-1 bg-slate-700 hover:bg-amber-600/80 text-slate-300 hover:text-white rounded font-semibold flex items-center gap-1 ml-auto transition cursor-pointer"><Undo2 size={12} /> Revertir</button>)}
+                                    {!q.pagado && !q.cubiertaPorAdelanto ? (
+                                      <><button onClick={() => handlePagarCuota(pl, idx)} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold transition cursor-pointer">💵 {pl.origen === 'plan_tratamiento' ? `Pagar cuota ${q.num}` : 'Pagar'}</button>{pl.origen !== 'plan_tratamiento' && <button onClick={() => handleQuitarCuota(pl, idx)} className="p-1 bg-slate-800 hover:bg-rose-600/80 text-slate-400 hover:text-white rounded transition cursor-pointer">🗑️</button>}</>
+                                    ) : q.pagado ? (<button onClick={() => handleRevertirCuota(pl, idx)} className="px-2 py-1 bg-slate-700 hover:bg-amber-600/80 text-slate-300 hover:text-white rounded font-semibold flex items-center gap-1 ml-auto transition cursor-pointer"><Undo2 size={12} /> Revertir</button>) : <span className="text-[10px] font-bold text-amber-300">Adelanto aplicado</span>}
                                   </td>
                                 </tr>
                               ))}
@@ -1551,6 +1625,7 @@ export default function App() {
                         </div>
                         <div className="flex gap-2 pt-2">
                           {pl.origen !== 'plan_tratamiento' && <button onClick={() => handleAgregarCuota(pl)} className="px-3 py-1.5 bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"><PlusCircle size={15} /> ＋ Añadir Cuota</button>}
+                          {Number(pl.saldo || 0) > 0 && <button onClick={() => handleRegistrarAdelantoPlan(pl)} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500 hover:text-slate-950">Registrar adelanto</button>}
                           <button onClick={() => handleEliminarPlan(pl.id)} className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/30 transition cursor-pointer ml-auto">🗑 Eliminar Plan</button>
                         </div>
                       </div>

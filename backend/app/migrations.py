@@ -277,6 +277,41 @@ def migracion_004_flujo_clinico_financiero(
     )
 
 
+def migracion_005_odontograma_y_detalle_financiero(
+    connection: Connection,
+) -> None:
+    """Conserva el detalle del cobro y versiones inalterables del odontograma."""
+
+    if _existe_tabla(connection, "pagos"):
+        columnas = _columnas_tabla(connection, "pagos")
+        if "servicios" not in columnas:
+            connection.exec_driver_sql("ALTER TABLE pagos ADD COLUMN servicios JSON")
+
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS odontogramas (
+            id INTEGER PRIMARY KEY,
+            pacienteId INTEGER NOT NULL,
+            motivo VARCHAR(80) NOT NULL,
+            denticion VARCHAR(20) NOT NULL DEFAULT 'permanente',
+            hallazgos JSON NOT NULL,
+            especificaciones TEXT,
+            observaciones TEXT,
+            norma VARCHAR(100) NOT NULL DEFAULT 'NTS 188-MINSA/DGIESP-2022',
+            profesionalId INTEGER NOT NULL,
+            profesionalNombre VARCHAR(120) NOT NULL,
+            creadoEn VARCHAR(50) NOT NULL
+        )
+        """
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_odontogramas_paciente ON odontogramas (pacienteId)"
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_odontogramas_fecha ON odontogramas (creadoEn)"
+    )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -297,6 +332,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         4,
         "flujo_clinico_financiero",
         migracion_004_flujo_clinico_financiero,
+    ),
+    (
+        5,
+        "odontograma_y_detalle_financiero",
+        migracion_005_odontograma_y_detalle_financiero,
     ),
 )
 

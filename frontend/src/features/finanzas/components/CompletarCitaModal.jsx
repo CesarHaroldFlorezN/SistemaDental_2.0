@@ -144,7 +144,7 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
   if (!isOpen || !cita) return null;
 
   const actualizarServicio = (clave, cambios) => setServicios((actuales) => actuales.map((item) => item.clave === clave ? { ...item, ...cambios } : item));
-  const agregarServicio = () => setServicios((actuales) => [...actuales, { clave: crearClave(), nombre: 'Profilaxis / Limpieza dental', costo: 0, realizado: true, origen: 'adicional' }]);
+  const agregarServicio = () => setServicios((actuales) => [...actuales, { clave: crearClave(), nombre: '', costo: 0, realizado: true, origen: 'adicional' }]);
   const eliminarServicio = (clave) => setServicios((actuales) => actuales.length > 1 ? actuales.filter((item) => item.clave !== clave) : actuales);
 
   const enviar = async (event) => {
@@ -191,6 +191,13 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
         <form onSubmit={enviar} className="grid min-h-0 flex-1 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-5 p-5">
             {error && <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300">{error}</div>}
+
+            {cita.planId && (
+              <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 text-sm text-violet-100">
+                <strong>Sesión incluida en un plan de tratamiento.</strong>
+                <p className="mt-1 text-xs text-slate-400">La sesión programada cuesta S/. 0.00 en esta atención. Su cuota se cobra desde el cronograma del plan; aquí solo se facturan servicios adicionales, por ejemplo una profilaxis.</p>
+              </div>
+            )}
 
             <section className="rounded-2xl border border-slate-700 bg-slate-900/45 p-4">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="flex items-center gap-2 font-bold text-white"><ReceiptText size={17} className="text-cyan-400" />Servicios realizados</h3><p className="mt-1 text-xs text-slate-500">Desmarca lo no realizado o agrega un servicio solicitado durante la consulta.</p></div><button type="button" onClick={agregarServicio} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-3.5 py-2.5 text-xs font-bold text-white"><ListPlus size={16} />Agregar servicio</button></div>

@@ -5,13 +5,13 @@ from backend.app.main import app
 client = TestClient(app)
 
 
-def crear_paciente() -> int:
+def crear_paciente(sufijo: str = "001") -> int:
     respuesta = client.post(
         "/api/pacientes",
         json={
-            "nombre": "Paciente Flujo Clínico",
-            "cedula": "FLUJO-CLINICO-001",
-            "codigo_ficha": "F-FLUJO-001",
+            "nombre": f"Paciente Flujo Clínico {sufijo}",
+            "cedula": f"FLUJO-CLINICO-{sufijo}",
+            "codigo_ficha": f"F-FLUJO-{sufijo}",
             "telefono": "999111222",
         },
     )
@@ -49,7 +49,7 @@ def datos_cita(
 
 
 def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
-    paciente_id = crear_paciente()
+    paciente_id = crear_paciente("002")
 
     diagnostico = client.post(
         "/api/operaciones/citas",
@@ -217,3 +217,73 @@ def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
     )
     assert romper_vinculo.status_code == 400
     assert "cuota por sesión" in romper_vinculo.json()["detail"]
+
+
+def test_adelanto_del_plan_recalcula_cuotas_y_deja_movimiento() -> None:
+    paciente_id = crear_paciente()
+    respuesta_plan = client.post(
+        "/api/planes",
+        json={
+            "pacienteId": paciente_id,
+            "nombre": "Endodoncia con adelanto",
+            "tipo": "Endodoncia",
+            "duracion": "3 meses",
+            "costo": 900,
+            "nSesiones": 3,
+            "descripcion": "Plan para probar el adelanto auditable",
+            "estado": "activo",
+        },
+    )
+    assert respuesta_plan.status_code == 200
+    plan = respuesta_plan.json()
+    cuotas = [
+        {
+            "num": sesion["numero"],
+            "tipo": "cuota",
+            "fecha": f"2041-0{sesion['numero']}-10",
+            "monto": 300,
+            "pagado": False,
+            "sesionPlanId": sesion["id"],
+            "sesionNum": sesion["numero"],
+        }
+        for sesion in plan["sesiones"]
+    ]
+    creado = client.post(
+        "/api/planPagos",
+        json={
+            "pacienteId": paciente_id,
+            "planId": plan["id"],
+            "pagoId": plan["pago"]["id"],
+            "concepto": plan["nombre"],
+            "cuotas": cuotas,
+            "fechaCreacion": "2040-12-10",
+        },
+    )
+    assert creado.status_code == 200
+
+    adelanto = client.post(
+        f"/api/planPagos/{creado.json()['id']}/adelantos",
+        json={
+            "monto": 60,
+            "metodo": "Yape",
+            "referencia": "ADELANTO-001",
+            "motivo": "Adelanto voluntario",
+            "usuario": "Pruebas",
+        },
+    )
+    assert adelanto.status_code == 200
+    registro = adelanto.json()["registro"]
+    assert registro["anticipo"] == 60
+    assert registro["cobrado"] == 60
+    assert registro["saldo"] == 840
+    assert [cuota["monto"] for cuota in registro["cuotas"]] == [280, 280, 280]
+
+    cuenta = client.get(f"/api/pacientes/{paciente_id}/cuenta")
+    assert cuenta.status_code == 200
+    movimiento = next(
+        item
+        for item in cuenta.json()["movimientos"]
+        if item["tipo"] == "adelanto_plan"
+    )
+    assert movimiento["abono"] == 60
+    assert movimiento["referencia"] == "ADELANTO-001"

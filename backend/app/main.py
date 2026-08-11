@@ -18,6 +18,7 @@ from .routers import (
     clinica_router,
     documentos_router,
     finanzas_router,
+    odontograma_router,
     pacientes_router,
     salud_router,
 )
@@ -72,6 +73,10 @@ app.include_router(
 app.include_router(
     pacientes_router,
     dependencies=[Depends(obtener_usuario_actual)],
+)
+app.include_router(
+    odontograma_router,
+    dependencies=[Depends(exigir_personal_clinico)],
 )
 
 app.include_router(salud_router)
