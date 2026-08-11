@@ -7,6 +7,7 @@ from .finanzas import (
     PlanDB,
     PlanPagoDB,
 )
+from .odontograma import OdontogramaDB
 from .paciente import PacienteDB
 from .usuario import SesionDB, UsuarioDB
 
@@ -15,6 +16,7 @@ __all__ = [
     "CitaDB",
     "DocumentoPacienteDB",
     "MovimientoCuentaDB",
+    "OdontogramaDB",
     "PacienteDB",
     "PagoDB",
     "PlanDB",

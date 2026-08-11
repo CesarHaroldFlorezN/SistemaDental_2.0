@@ -80,6 +80,7 @@ def test_aplicar_migracion_y_registrar_version(
         (2, "identificadores_unicos_pacientes"),
         (3, "usuarios_y_sesiones"),
         (4, "flujo_clinico_financiero"),
+        (5, "odontograma_y_detalle_financiero"),
     ]
     assert not hay_migraciones_pendientes(motor)
 
@@ -102,7 +103,7 @@ def test_no_repetir_migracion_aplicada(
             "SELECT COUNT(*) FROM schema_migrations"
         ).scalar_one()
 
-    assert cantidad == 4
+    assert cantidad == 5
 
     motor.dispose()
 

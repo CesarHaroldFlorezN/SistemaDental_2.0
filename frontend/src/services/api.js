@@ -203,8 +203,20 @@ export const api = {
   actualizarPlanPago: (id, data) =>
     request(`${API_URL}/planPagos/${id}`, jsonOptions('PUT', data)),
 
+  registrarAdelantoPlanPago: (id, data) =>
+    request(`${API_URL}/planPagos/${id}/adelantos`, jsonOptions('POST', data)),
+
   eliminarPlanPago: (id) =>
     request(`${API_URL}/planPagos/${id}`, { method: 'DELETE' }),
+
+  // ===================================================
+  // ODONTOGRAMA CLÍNICO
+  // ===================================================
+  getOdontogramas: (pacienteId) =>
+    request(`${API_URL}/odontogramas?pacienteId=${pacienteId}`),
+
+  crearOdontograma: (data) =>
+    request(`${API_URL}/odontogramas`, jsonOptions('POST', data)),
 
   // ===================================================
   // PLANES DE TRATAMIENTO

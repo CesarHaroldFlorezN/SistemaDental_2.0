@@ -18,6 +18,7 @@ class PagoDB(Base):
     saldo = Column(Numeric(10, 2))
     metodo = Column(String(50))
     tipoPago = Column(String(50))
+    servicios = Column(JSON)
     cuotas = Column(JSON)
     creadoEn = Column(String(50))
     fechaUltPago = Column(String(50))

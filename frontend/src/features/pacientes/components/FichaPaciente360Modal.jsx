@@ -17,6 +17,7 @@ import {
   ReceiptText,
   RefreshCw,
   RotateCcw,
+  ScanLine,
   Trash2,
   Upload,
   UserRound,
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { api } from '../../../services/api';
+import OdontogramaPanel from './OdontogramaPanel';
 
 const moneda = (valor) => `S/. ${Number(valor || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
@@ -239,6 +241,7 @@ export default function FichaPaciente360Modal({
     ['casos', 'Casos y diagnósticos', FileText],
     ['atenciones', 'Atenciones', ClipboardList],
     ['tratamientos', 'Tratamientos y sesiones', CalendarPlus],
+    ['odontograma', 'Odontograma', ScanLine],
     ['cuenta', 'Cuenta y pagos', ReceiptText],
     ['documentos', 'Documentos', FolderOpen]
   ];
@@ -313,6 +316,8 @@ export default function FichaPaciente360Modal({
               }) : <div className="rounded-2xl border border-dashed border-slate-700 py-14 text-center text-slate-500">No hay planes de tratamiento. Crea uno desde un caso diagnosticado.</div>}
             </div>
           )}
+
+          {pestana === 'odontograma' && <OdontogramaPanel paciente={paciente} />}
 
           {pestana === 'cuenta' && <div className="space-y-5"><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><div className="text-xs uppercase text-slate-500">Cargos</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.cargos ?? pagosPaciente.reduce((s, p) => s + Number(p.total || 0), 0))}</div></div><div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="text-xs uppercase text-emerald-400">Pagos netos</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.abonos ?? totalPagado)}</div></div><div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4"><div className="text-xs uppercase text-rose-400">Saldo</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.saldo ?? saldoPendiente)}</div></div><div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><div className="text-xs uppercase text-cyan-400">Credito a favor</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.creditoFavor ?? creditoFavor)}</div></div></section><section className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><h3 className="mb-3 flex items-center gap-2 font-black text-white"><History size={17} className="text-cyan-400" />Estado de cuenta</h3><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-xs"><thead className="text-slate-500"><tr><th className="p-2">Fecha</th><th className="p-2">Movimiento</th><th className="p-2 text-right">Cargo</th><th className="p-2 text-right">Abono</th><th className="p-2 text-right">Saldo</th></tr></thead><tbody className="divide-y divide-slate-700">{(cuenta.movimientos || []).map((m, i) => <tr key={`${m.tipo}-${m.id || i}`}><td className="p-2 text-slate-400">{m.fecha || '—'}</td><td className="p-2"><div className="font-semibold text-white">{m.descripcion}</div><div className="text-[10px] text-slate-500">{m.metodo || m.tipo}</div></td><td className="p-2 text-right text-rose-300">{Number(m.cargo || 0) ? moneda(m.cargo) : '—'}</td><td className="p-2 text-right text-emerald-300">{Number(m.abono || 0) ? moneda(m.abono) : '—'}</td><td className="p-2 text-right font-bold text-white">{moneda(m.saldoAcumulado)}</td></tr>)}</tbody></table></div></section><section className="space-y-2"><h3 className="font-black text-white">Cuentas por atencion</h3>{pagosPaciente.map((pago) => <div key={pago.id} className="flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-800/60 p-3 md:flex-row md:items-center md:justify-between"><div><div className="font-bold text-white">{pago.concepto}</div><div className="mt-1 text-xs text-slate-400">Total {moneda(pago.total)} · Pagado {moneda(pago.cobrado)} · Saldo {moneda(pago.saldo)}</div></div><div className="flex flex-wrap gap-2">{pago.tipoPago === 'cuotas' ? <button type="button" onClick={() => onVerPlanPagos?.(paciente)} className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white"><WalletCards size={13} />Gestionar cuotas</button> : <>{Number(pago.saldo || 0) > 0 && <button type="button" onClick={() => registrarPago(pago)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Registrar pago</button>}{Number(pago.cobrado || 0) > 0 && <><button type="button" onClick={() => pedirOperacionPago(pago, 'anular')} className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-300"><RotateCcw size={13} />Anular</button><button type="button" onClick={() => pedirOperacionPago(pago, 'devolver')} className="rounded-lg border border-rose-500/30 px-3 py-2 text-xs font-bold text-rose-300">Devolver</button></>}</>}</div></div>)}</section></div>}
 

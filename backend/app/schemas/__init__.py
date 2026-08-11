@@ -19,6 +19,7 @@ from .clinica import (
     TipoCasoClinico,
 )
 from .finanzas import OperacionPagoPayload, TipoPago
+from .odontograma import OdontogramaPayload
 
 __all__ = [
     "CambioEstadoPayload",
@@ -28,6 +29,7 @@ __all__ = [
     "DiagnosticoCasoPayload",
     "EstadoCasoClinico",
     "EstadoCita",
+    "OdontogramaPayload",
     "OperacionPagoPayload",
     "PlanTratamientoPayload",
     "ReprogramarCitaPayload",
