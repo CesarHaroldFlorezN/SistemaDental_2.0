@@ -10,19 +10,47 @@ from ..services import ahora_iso, obtener_paciente, serializar_modelo
 router = APIRouter(tags=["Odontograma"])
 
 CODIGOS_AZULES = {
-    "diastema", "edentulo_total", "fosas_fisuras", "fusion", "geminacion",
-    "giroversion", "impactacion", "macrodoncia", "microdoncia", "ausente",
-    "clavija", "ectopica", "erupcion", "extruida", "intruida",
-    "supernumeraria", "posicion_anormal", "transposicion",
+    "diastema",
+    "edentulo_total",
+    "fosas_fisuras",
+    "fusion",
+    "geminacion",
+    "giroversion",
+    "impactacion",
+    "macrodoncia",
+    "microdoncia",
+    "ausente",
+    "clavija",
+    "ectopica",
+    "erupcion",
+    "extruida",
+    "intruida",
+    "supernumeraria",
+    "posicion_anormal",
+    "transposicion",
 }
 CODIGOS_ROJOS = {
-    "corona_temporal", "defecto_esmalte", "fractura", "caries", "movilidad",
-    "remanente_radicular", "restauracion_temporal", "superficie_desgastada",
+    "corona_temporal",
+    "defecto_esmalte",
+    "fractura",
+    "caries",
+    "movilidad",
+    "remanente_radicular",
+    "restauracion_temporal",
+    "superficie_desgastada",
 }
 CODIGOS_VARIABLES = {
-    "ortodontico_fijo", "ortodontico_removible", "corona", "espigo_munon",
-    "implante", "pulpotomia", "protesis_fija", "protesis_completa",
-    "protesis_removible", "restauracion_definitiva", "sellante",
+    "ortodontico_fijo",
+    "ortodontico_removible",
+    "corona",
+    "espigo_munon",
+    "implante",
+    "pulpotomia",
+    "protesis_fija",
+    "protesis_completa",
+    "protesis_removible",
+    "restauracion_definitiva",
+    "sellante",
     "tratamiento_conducto",
 }
 CODIGOS_NTS = CODIGOS_AZULES | CODIGOS_ROJOS | CODIGOS_VARIABLES
@@ -38,8 +66,10 @@ def _validar_hallazgos(payload: OdontogramaPayload) -> list[dict]:
                 detail=f"El hallazgo {datos['codigo']} no pertenece a la nomenclatura NTS 188.",
             )
         color_obligatorio = (
-            "azul" if datos["codigo"] in CODIGOS_AZULES
-            else "rojo" if datos["codigo"] in CODIGOS_ROJOS
+            "azul"
+            if datos["codigo"] in CODIGOS_AZULES
+            else "rojo"
+            if datos["codigo"] in CODIGOS_ROJOS
             else None
         )
         if color_obligatorio and datos["color"] != color_obligatorio:

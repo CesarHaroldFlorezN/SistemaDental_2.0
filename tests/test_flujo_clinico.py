@@ -204,8 +204,7 @@ def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
     assert pago_primera_cuota.json()["registro"]["saldo"] == 600
 
     cuotas_segunda = [
-        dict(cuota)
-        for cuota in pago_primera_cuota.json()["registro"]["cuotas"]
+        dict(cuota) for cuota in pago_primera_cuota.json()["registro"]["cuotas"]
     ]
     cuotas_segunda[1] = {
         **cuotas_segunda[1],
@@ -223,8 +222,7 @@ def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
     assert pago_segunda_cuota.json()["registro"]["saldo"] == 300
 
     cuotas_adulteradas = [
-        dict(cuota)
-        for cuota in pago_segunda_cuota.json()["registro"]["cuotas"]
+        dict(cuota) for cuota in pago_segunda_cuota.json()["registro"]["cuotas"]
     ]
     cuotas_adulteradas[0]["monto"] = 599
     cuotas_adulteradas[2] = {
@@ -325,9 +323,7 @@ def test_adelanto_del_plan_recalcula_cuotas_y_deja_movimiento() -> None:
     cuenta = client.get(f"/api/pacientes/{paciente_id}/cuenta")
     assert cuenta.status_code == 200
     movimiento = next(
-        item
-        for item in cuenta.json()["movimientos"]
-        if item["tipo"] == "adelanto_plan"
+        item for item in cuenta.json()["movimientos"] if item["tipo"] == "adelanto_plan"
     )
     assert movimiento["abono"] == 60
     assert movimiento["referencia"] == "ADELANTO-001"

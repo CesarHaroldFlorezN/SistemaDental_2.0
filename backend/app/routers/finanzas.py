@@ -645,7 +645,9 @@ def registrar_adelanto_plan_pago(
         raise HTTPException(status_code=404, detail="Plan de pagos no encontrado.")
     pago = db.query(PagoDB).filter(PagoDB.id == registro.pagoId).first()
     if not pago:
-        raise HTTPException(status_code=409, detail="El plan no conserva su deuda de origen.")
+        raise HTTPException(
+            status_code=409, detail="El plan no conserva su deuda de origen."
+        )
 
     monto = redondear_monto(payload.monto)
     saldo_actual = redondear_monto(registro.saldo)
@@ -770,10 +772,7 @@ def actualizar_plan_pago(
             )
 
     cuotas_anteriores = [dict(cuota) for cuota in (registro.cuotas or [])]
-    cuotas = [
-        dict(cuota)
-        for cuota in (data.get("cuotas", cuotas_anteriores) or [])
-    ]
+    cuotas = [dict(cuota) for cuota in (data.get("cuotas", cuotas_anteriores) or [])]
 
     def clave_cuota(cuota: dict[str, Any], posicion: int) -> tuple[str, int, int]:
         return (
@@ -787,8 +786,7 @@ def actualizar_plan_pago(
         for posicion, cuota in enumerate(cuotas_anteriores)
     }
     nuevas_por_clave = {
-        clave_cuota(cuota, posicion): cuota
-        for posicion, cuota in enumerate(cuotas)
+        clave_cuota(cuota, posicion): cuota for posicion, cuota in enumerate(cuotas)
     }
     if len(anteriores_por_clave) != len(cuotas_anteriores) or len(
         nuevas_por_clave
@@ -829,8 +827,7 @@ def actualizar_plan_pago(
         for clave in anteriores_por_clave.keys() & nuevas_por_clave.keys()
     )
     if cambios_estado and (
-        montos_modificados
-        or anteriores_por_clave.keys() != nuevas_por_clave.keys()
+        montos_modificados or anteriores_por_clave.keys() != nuevas_por_clave.keys()
     ):
         raise HTTPException(
             status_code=400,
