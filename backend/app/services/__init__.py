@@ -25,6 +25,7 @@ from .citas import (
 from .comun import (
     ahora_iso,
     limpiar_valor_csv,
+    redondear_monto,
     serializar_modelo,
 )
 from .finanzas import (
@@ -69,6 +70,7 @@ __all__ = [
     "normalizar_servicios",
     "obtener_paciente",
     "obtener_usuario_por_token",
+    "redondear_monto",
     "registrar_pago",
     "revocar_sesion",
     "serializar_modelo",

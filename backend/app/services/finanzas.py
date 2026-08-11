@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -10,7 +11,9 @@ from ..models import (
 )
 from ..schemas import OperacionPagoPayload
 from .citas import obtener_paciente
-from .comun import ahora_iso, serializar_modelo
+from .comun import ahora_iso, redondear_monto, serializar_modelo
+
+CERO = Decimal("0.00")
 
 
 def _obtener_pago(
@@ -50,8 +53,8 @@ def _crear_movimiento(
     pago: PagoDB,
     tipo: str,
     descripcion: str,
-    cargo: float = 0,
-    abono: float = 0,
+    cargo: Decimal | float = 0,
+    abono: Decimal | float = 0,
     metodo: str = "",
     referencia: str = "",
     motivo: str = "",
@@ -63,8 +66,8 @@ def _crear_movimiento(
         pagoId=pago.id,
         tipo=tipo,
         descripcion=descripcion,
-        cargo=round(float(cargo or 0), 2),
-        abono=round(float(abono or 0), 2),
+        cargo=redondear_monto(cargo),
+        abono=redondear_monto(abono),
         fecha=(datetime.now().astimezone().date().isoformat()),
         metodo=metodo,
         referencia=referencia,
@@ -85,8 +88,8 @@ def registrar_pago(
     pago = _obtener_pago(db, pago_id)
     _asegurar_sin_plan_de_cuotas(db, pago)
 
-    saldo = round(float(pago.saldo or 0), 2)
-    monto = round(float(payload.monto), 2)
+    saldo = redondear_monto(pago.saldo)
+    monto = redondear_monto(payload.monto)
 
     if monto > saldo:
         raise HTTPException(
@@ -94,16 +97,12 @@ def registrar_pago(
             detail=("El monto no puede superar el saldo pendiente."),
         )
 
-    pago.cobrado = round(
-        float(pago.cobrado or 0) + monto,
-        2,
-    )
-    pago.saldo = round(
+    pago.cobrado = redondear_monto(redondear_monto(pago.cobrado) + monto)
+    pago.saldo = redondear_monto(
         max(
-            0,
-            float(pago.total or 0) - pago.cobrado,
-        ),
-        2,
+            CERO,
+            redondear_monto(pago.total) - pago.cobrado,
+        )
     )
     pago.metodo = payload.metodo.strip() or "Efectivo"
     pago.fechaUltPago = datetime.now().astimezone().date().isoformat()
@@ -145,8 +144,8 @@ def anular_pago(
     pago = _obtener_pago(db, pago_id)
     _asegurar_sin_plan_de_cuotas(db, pago)
 
-    monto = round(float(payload.monto), 2)
-    cobrado = round(float(pago.cobrado or 0), 2)
+    monto = redondear_monto(payload.monto)
+    cobrado = redondear_monto(pago.cobrado)
 
     if monto > cobrado:
         raise HTTPException(
@@ -160,13 +159,12 @@ def anular_pago(
             detail=("El motivo de la anulación es obligatorio."),
         )
 
-    pago.cobrado = round(cobrado - monto, 2)
-    pago.saldo = round(
+    pago.cobrado = redondear_monto(cobrado - monto)
+    pago.saldo = redondear_monto(
         max(
-            0,
-            float(pago.total or 0) - pago.cobrado,
-        ),
-        2,
+            CERO,
+            redondear_monto(pago.total) - pago.cobrado,
+        )
     )
     pago.tipoPago = "contado" if pago.cobrado <= 0 else "anticipo"
 
@@ -201,8 +199,8 @@ def devolver_pago(
     pago = _obtener_pago(db, pago_id)
     _asegurar_sin_plan_de_cuotas(db, pago)
 
-    monto = round(float(payload.monto), 2)
-    cobrado = round(float(pago.cobrado or 0), 2)
+    monto = redondear_monto(payload.monto)
+    cobrado = redondear_monto(pago.cobrado)
 
     if monto > cobrado:
         raise HTTPException(
@@ -216,18 +214,14 @@ def devolver_pago(
             detail=("El motivo de la devolución es obligatorio."),
         )
 
-    pago.cobrado = round(cobrado - monto, 2)
-    pago.saldo = round(
+    pago.cobrado = redondear_monto(cobrado - monto)
+    pago.saldo = redondear_monto(
         max(
-            0,
-            float(pago.total or 0) - pago.cobrado,
-        ),
-        2,
+            CERO,
+            redondear_monto(pago.total) - pago.cobrado,
+        )
     )
-    pago.devuelto = round(
-        float(pago.devuelto or 0) + monto,
-        2,
-    )
+    pago.devuelto = redondear_monto(redondear_monto(pago.devuelto) + monto)
     pago.tipoPago = "contado" if pago.cobrado <= 0 else "anticipo"
 
     movimiento = _crear_movimiento(
@@ -275,11 +269,8 @@ def construir_cuenta_paciente(
                 "pagoId": pago.id,
                 "fecha": (pago.fecha or (pago.creadoEn or "")[:10]),
                 "descripcion": (pago.concepto or "Atención dental"),
-                "cargo": round(
-                    float(pago.total or 0),
-                    2,
-                ),
-                "abono": 0,
+                "cargo": redondear_monto(pago.total),
+                "abono": CERO,
                 "metodo": "Cargo clínico",
                 "orden": 0,
             }
@@ -292,16 +283,18 @@ def construir_cuenta_paciente(
         ]
 
         neto_registrado = sum(
-            float(movimiento.abono or 0) - float(movimiento.cargo or 0)
-            for movimiento in vinculados
+            (
+                redondear_monto(movimiento.abono) - redondear_monto(movimiento.cargo)
+                for movimiento in vinculados
+            ),
+            start=CERO,
         )
 
-        legado = round(
+        legado = redondear_monto(
             max(
-                0,
-                float(pago.cobrado or 0) - neto_registrado,
-            ),
-            2,
+                CERO,
+                redondear_monto(pago.cobrado) - neto_registrado,
+            )
         )
 
         if legado > 0:
@@ -338,37 +331,30 @@ def construir_cuenta_paciente(
         )
     )
 
-    saldo = 0.0
-    cargos = 0.0
-    abonos = 0.0
-    creditos = round(
-        sum(float(pago.creditoFavor or 0) for pago in pagos),
-        2,
+    saldo = CERO
+    cargos = CERO
+    abonos = CERO
+    creditos = redondear_monto(
+        sum((redondear_monto(pago.creditoFavor) for pago in pagos), start=CERO)
     )
 
     for item in movimientos:
-        cargo = round(
-            float(item.get("cargo") or 0),
-            2,
-        )
-        abono = round(
-            float(item.get("abono") or 0),
-            2,
-        )
+        cargo = redondear_monto(item.get("cargo"))
+        abono = redondear_monto(item.get("abono"))
 
         cargos += cargo
         abonos += abono
-        saldo = round(saldo + cargo - abono, 2)
+        saldo = redondear_monto(saldo + cargo - abono)
 
-        item["saldoAcumulado"] = max(0, saldo)
+        item["saldoAcumulado"] = max(CERO, saldo)
         item.pop("orden", None)
 
     return {
         "movimientos": movimientos,
         "resumen": {
-            "cargos": round(cargos, 2),
-            "abonos": round(abonos, 2),
-            "saldo": round(max(0, saldo), 2),
+            "cargos": redondear_monto(cargos),
+            "abonos": redondear_monto(abonos),
+            "saldo": redondear_monto(max(CERO, saldo)),
             "creditoFavor": creditos,
         },
     }

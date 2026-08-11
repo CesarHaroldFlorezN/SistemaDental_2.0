@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, Column, Float, Integer, String, Text
+from sqlalchemy import JSON, Column, Integer, Numeric, String, Text
 
 from ..database import Base
 
@@ -18,7 +18,7 @@ class CitaDB(Base):
     servicios = Column(JSON)
     notas = Column(Text)
     notasFin = Column(Text)
-    costo = Column(Float)
+    costo = Column(Numeric(10, 2))
     tipoPago = Column(String(50))
     estado = Column(String(50), index=True)
     sesionNum = Column(Integer)
