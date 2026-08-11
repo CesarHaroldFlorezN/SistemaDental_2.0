@@ -8,8 +8,13 @@ class CitaDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
+    casoClinicoId = Column(Integer, nullable=True, index=True)
     planId = Column(Integer, nullable=True)
+    sesionPlanId = Column(Integer, nullable=True, index=True)
     citaBaseId = Column(Integer, nullable=True)
+    tipoCita = Column(String(50), default="procedimiento")
+    motivoConsulta = Column(Text)
+    piezaDental = Column(String(30))
     fecha = Column(String(50), index=True)
     hora = Column(String(50), index=True)
     horaFin = Column(String(50), index=True)

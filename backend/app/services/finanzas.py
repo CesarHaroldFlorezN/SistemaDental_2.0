@@ -62,6 +62,8 @@ def _crear_movimiento(
 ) -> MovimientoCuentaDB:
     movimiento = MovimientoCuentaDB(
         pacienteId=pago.pacienteId,
+        casoClinicoId=pago.casoClinicoId,
+        planId=pago.planId,
         citaId=pago.citaId,
         pagoId=pago.id,
         tipo=tipo,

@@ -8,7 +8,9 @@ class PagoDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
-    citaId = Column(Integer, index=True)
+    casoClinicoId = Column(Integer, nullable=True, index=True)
+    planId = Column(Integer, nullable=True, index=True)
+    citaId = Column(Integer, nullable=True, index=True)
     concepto = Column(String(200))
     fecha = Column(String(50))
     total = Column(Numeric(10, 2))
@@ -29,6 +31,8 @@ class PlanDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
+    casoClinicoId = Column(Integer, nullable=True, index=True)
+    pagoId = Column(Integer, nullable=True, index=True)
     nombre = Column(String(150))
     tipo = Column(String(100))
     duracion = Column(String(50))
@@ -44,8 +48,11 @@ class PlanPagoDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
-    pagoId = Column(Integer, index=True)
-    citaId = Column(Integer, index=True)
+    casoClinicoId = Column(Integer, nullable=True, index=True)
+    planId = Column(Integer, nullable=True, index=True)
+    pagoId = Column(Integer, nullable=True, index=True)
+    citaId = Column(Integer, nullable=True, index=True)
+    origen = Column(String(50), default="procedimiento")
     concepto = Column(String(200))
     totalAcordado = Column(Numeric(10, 2))
     anticipo = Column(Numeric(10, 2))
@@ -64,6 +71,8 @@ class MovimientoCuentaDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     pacienteId = Column(Integer, index=True)
+    casoClinicoId = Column(Integer, nullable=True, index=True)
+    planId = Column(Integer, nullable=True, index=True)
     citaId = Column(Integer, nullable=True, index=True)
     pagoId = Column(Integer, nullable=True, index=True)
     tipo = Column(String(50), index=True)

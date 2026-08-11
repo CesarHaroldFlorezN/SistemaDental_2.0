@@ -128,6 +128,24 @@ export const api = {
     request(`${API_URL}/operaciones/citas/${id}`, { method: 'DELETE' }),
 
   // ===================================================
+  // CASOS CLÍNICOS Y SESIONES PLANIFICADAS
+  // ===================================================
+  getCasosClinicos: (pacienteId = null) =>
+    request(`${API_URL}/casosClinicos${pacienteId ? `?pacienteId=${pacienteId}` : ''}`),
+
+  crearCasoClinico: (data) =>
+    request(`${API_URL}/casosClinicos`, jsonOptions('POST', data)),
+
+  actualizarCasoClinico: (id, data) =>
+    request(`${API_URL}/casosClinicos/${id}`, jsonOptions('PUT', data)),
+
+  registrarDiagnosticoCaso: (id, data) =>
+    request(`${API_URL}/casosClinicos/${id}/diagnostico`, jsonOptions('PATCH', data)),
+
+  getSesionesPlan: (planId = null) =>
+    request(`${API_URL}/sesionesPlan${planId ? `?planId=${planId}` : ''}`),
+
+  // ===================================================
   // PAGOS Y FINANZAS
   // ===================================================
   getPagos: () => request(`${API_URL}/pagos`),

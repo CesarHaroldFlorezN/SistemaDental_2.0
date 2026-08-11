@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencias import exigir_administrador
 from ..models import (
+    CasoClinicoDB,
     CitaDB,
     DocumentoPacienteDB,
     MovimientoCuentaDB,
@@ -181,6 +182,9 @@ def eliminar_paciente(
 
     tiene_historial = any(
         (
+            db.query(CasoClinicoDB)
+            .filter(CasoClinicoDB.pacienteId == paciente_id)
+            .first(),
             db.query(CitaDB).filter(CitaDB.pacienteId == paciente_id).first(),
             db.query(PagoDB).filter(PagoDB.pacienteId == paciente_id).first(),
             db.query(PlanDB).filter(PlanDB.pacienteId == paciente_id).first(),

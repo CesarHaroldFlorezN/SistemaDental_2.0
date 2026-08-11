@@ -15,6 +15,7 @@ from .migrations import inicializar_base_datos
 from .routers import (
     autenticacion_router,
     citas_router,
+    clinica_router,
     documentos_router,
     finanzas_router,
     pacientes_router,
@@ -54,6 +55,10 @@ app.include_router(autenticacion_router)
 
 app.include_router(
     citas_router,
+    dependencies=[Depends(obtener_usuario_actual)],
+)
+app.include_router(
+    clinica_router,
     dependencies=[Depends(obtener_usuario_actual)],
 )
 app.include_router(

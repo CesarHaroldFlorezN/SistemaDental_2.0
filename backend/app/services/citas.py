@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..models import CitaDB, PacienteDB, PlanDB
+from ..models import CitaDB, PacienteDB, PlanDB, SesionPlanDB
 from ..schemas import CitaPagoPayload
 from .comun import redondear_monto
 
@@ -219,6 +219,31 @@ def validar_secuencia_sesion(
     db: Session,
     cita: CitaDB,
 ) -> None:
+    if cita.sesionPlanId:
+        sesion = (
+            db.query(SesionPlanDB).filter(SesionPlanDB.id == cita.sesionPlanId).first()
+        )
+        if not sesion or int(sesion.numero or 1) <= 1:
+            return
+
+        anterior = (
+            db.query(SesionPlanDB)
+            .filter(
+                SesionPlanDB.planId == sesion.planId,
+                SesionPlanDB.numero == int(sesion.numero) - 1,
+            )
+            .first()
+        )
+        if not anterior or anterior.estado != "completada":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Debes completar primero la sesión {int(sesion.numero) - 1} "
+                    f"antes de iniciar la sesión {sesion.numero}."
+                ),
+            )
+        return
+
     sesion_num = int(cita.sesionNum or 1)
     total_sesiones = int(cita.totalSesiones or 1)
 

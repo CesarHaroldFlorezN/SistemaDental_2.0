@@ -40,6 +40,7 @@ export default function FichaPaciente360Modal({
   citas = [],
   pagos = [],
   planes = [],
+  casosClinicos = [],
   planPagos = [],
   onNuevaCita,
   onEditarPaciente,
@@ -57,6 +58,7 @@ export default function FichaPaciente360Modal({
   const citasPaciente = useMemo(() => citas.filter((c) => Number(c.pacienteId) === Number(paciente?.id)).sort((a, b) => `${b.fecha || ''}${b.hora || ''}`.localeCompare(`${a.fecha || ''}${a.hora || ''}`)), [citas, paciente]);
   const pagosPaciente = useMemo(() => pagos.filter((p) => Number(p.pacienteId) === Number(paciente?.id)), [pagos, paciente]);
   const planesPaciente = useMemo(() => planes.filter((p) => Number(p.pacienteId) === Number(paciente?.id)), [planes, paciente]);
+  const casosPaciente = useMemo(() => casosClinicos.filter((caso) => Number(caso.pacienteId) === Number(paciente?.id)).sort((a, b) => String(b.creadoEn || '').localeCompare(String(a.creadoEn || ''))), [casosClinicos, paciente]);
   const totalPagado = pagosPaciente.reduce((s, p) => s + Number(p.cobrado || 0), 0);
   const saldoPendiente = pagosPaciente.reduce((s, p) => s + Number(p.saldo || 0), 0);
   const creditoFavor = pagosPaciente.reduce((s, p) => s + Number(p.creditoFavor || 0), 0);
@@ -164,18 +166,30 @@ export default function FichaPaciente360Modal({
     recargarCuenta();
   };
 
-  const abrirCronograma = (plan) => {
-    const sesionesExistentes = citasPaciente.filter((c) => Number(c.planId) === Number(plan.id));
-    setCronograma({
-      plan,
-      cantidad: Math.max(1, Number(plan.nSesiones || 1) - sesionesExistentes.length),
-      fechaInicio: sumarDias(fechaHoy(), 1),
-      hora: '09:00',
-      intervaloDias: 30,
-      duracion: 60,
-      servicio: plan.nombre || 'Sesion de tratamiento',
-      existentes: sesionesExistentes
+  const registrarDiagnostico = async (caso) => {
+    const resultado = await Swal.fire({
+      title: 'Diagnóstico del caso',
+      input: 'textarea',
+      inputValue: caso.diagnostico || '',
+      inputPlaceholder: 'Describe el diagnóstico clínico y los hallazgos...',
+      showCancelButton: true,
+      confirmButtonText: 'Guardar diagnóstico',
+      cancelButtonText: 'Cancelar',
+      background: '#1e293b',
+      color: '#fff',
+      inputValidator: (valor) => !valor?.trim() ? 'El diagnóstico es obligatorio.' : undefined
     });
+    if (!resultado.isConfirmed) return;
+    try {
+      await api.registrarDiagnosticoCaso(caso.id, {
+        diagnostico: resultado.value.trim(),
+        estado: caso.planId ? 'en_tratamiento' : 'abierto'
+      });
+      await onDatosActualizados?.();
+      Swal.fire({ title: 'Diagnóstico guardado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1400, showConfirmButton: false });
+    } catch (error) {
+      Swal.fire({ title: 'No se pudo guardar', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
+    }
   };
 
   const generarSesiones = async () => {
@@ -222,6 +236,7 @@ export default function FichaPaciente360Modal({
 
   const tabs = [
     ['resumen', 'Resumen', UserRound],
+    ['casos', 'Casos y diagnósticos', FileText],
     ['atenciones', 'Atenciones', ClipboardList],
     ['tratamientos', 'Tratamientos y sesiones', CalendarPlus],
     ['cuenta', 'Cuenta y pagos', ReceiptText],
@@ -245,9 +260,59 @@ export default function FichaPaciente360Modal({
             <section className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><h3 className="mb-3 font-black text-white">Ultimas atenciones</h3><div className="space-y-2">{citasPaciente.slice(0, 5).map((c) => <div key={c.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3"><div><div className="text-xs text-slate-500">{c.fecha} · {c.hora}</div><div className="mt-1 font-bold text-white">{serviciosDeCita(c).map((s) => s.nombre).join(' + ')}</div></div><span className="text-xs font-bold text-cyan-300">{estadoTexto(c.estado)}</span></div>)}</div></section>
           </div>}
 
+          {pestana === 'casos' && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-sm text-slate-300">
+                Cada nueva molestia se registra como un caso distinto. Las citas de control o las sesiones posteriores pueden conservar el mismo caso para mantener un historial clínico claro.
+              </div>
+              {casosPaciente.length ? casosPaciente.map((caso) => {
+                const planCaso = planesPaciente.find((plan) => Number(plan.id) === Number(caso.planId));
+                const siguienteSesionCaso = (planCaso?.sesiones || []).find((sesion) => sesion.estado === 'pendiente');
+                const citasCaso = citasPaciente.filter((cita) => Number(cita.casoClinicoId) === Number(caso.id));
+                return (
+                  <article key={caso.id} className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-black text-white">{caso.titulo}</h3><span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-cyan-300">{caso.tipo}</span><span className="rounded-full border border-slate-600 px-2.5 py-1 text-[10px] uppercase text-slate-400">{caso.estado}</span></div>
+                        <div className="mt-2 text-xs text-slate-400">Motivo: {caso.motivoConsulta || 'Sin detalle'}{caso.piezaDental ? ` · Pieza ${caso.piezaDental}` : ''} · {citasCaso.length} atención(es)</div>
+                        <div className={`mt-3 rounded-xl border p-3 text-sm ${caso.diagnostico ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-100' : 'border-amber-500/25 bg-amber-500/5 text-amber-200'}`}><strong>Diagnóstico:</strong> {caso.diagnostico || 'Pendiente de registrar durante la evaluación.'}</div>
+                        {planCaso && <div className="mt-2 text-xs font-semibold text-purple-300">Plan vinculado: {planCaso.nombre}</div>}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button type="button" onClick={() => registrarDiagnostico(caso)} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300">{caso.diagnostico ? 'Editar diagnóstico' : 'Registrar diagnóstico'}</button>
+                        {!caso.planId && <button type="button" onClick={() => onCrearPlan?.(paciente, caso)} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white">Crear plan de tratamiento</button>}
+                        <button type="button" onClick={() => onNuevaCita?.(paciente, planCaso && siguienteSesionCaso ? { casoClinicoId: caso.id, planId: planCaso.id, sesionPlanId: siguienteSesionCaso.id, tipoCita: 'sesion_tratamiento', procedimiento: siguienteSesionCaso.titulo, costo: 0, tipoPago: 'sesion' } : { casoClinicoId: caso.id, tipoCita: 'control' })} className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white">{planCaso && siguienteSesionCaso ? `Agendar sesión ${siguienteSesionCaso.numero}` : 'Nueva atención del caso'}</button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              }) : <div className="rounded-2xl border border-dashed border-slate-700 py-14 text-center text-slate-500">Aún no hay casos. La primera cita o una nueva molestia crearán uno automáticamente.</div>}
+            </div>
+          )}
+
           {pestana === 'atenciones' && <div className="space-y-3">{citasPaciente.length ? citasPaciente.map((cita) => { const pago = pagosPaciente.find((p) => Number(p.citaId) === Number(cita.id)); return <article key={cita.id} className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="text-xs font-semibold text-slate-500">{cita.fecha} · {cita.hora} - {cita.horaFin || '—'}</div><div className="mt-2 space-y-1">{serviciosDeCita(cita).map((s, i) => <div key={i} className="flex justify-between gap-4 text-sm"><span className="font-semibold text-white">{s.nombre}</span><span className="text-cyan-300">{moneda(s.costo)}</span></div>)}</div>{cita.notasFin && <div className="mt-3 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 text-xs text-cyan-100">{cita.notasFin}</div>}</div><div className="min-w-[190px] rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs"><div className="flex justify-between"><span>Estado</span><b className="text-cyan-300">{estadoTexto(cita.estado)}</b></div><div className="mt-2 flex justify-between"><span>Total</span><b>{moneda(pago?.total ?? cita.costo)}</b></div><div className="mt-1 flex justify-between"><span>Pagado</span><b className="text-emerald-300">{moneda(pago?.cobrado)}</b></div><div className="mt-1 flex justify-between"><span>Saldo</span><b className="text-rose-300">{moneda(pago?.saldo)}</b></div></div></div></article>; }) : <div className="py-12 text-center text-slate-500">Sin atenciones registradas.</div>}</div>}
 
-          {pestana === 'tratamientos' && <div className="space-y-4"><div className="flex justify-end"><button type="button" onClick={() => onCrearPlan?.(paciente)} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold text-white"><Plus size={15} />Crear plan de tratamiento</button></div>{planesPaciente.length ? planesPaciente.map((plan) => { const sesiones = citasPaciente.filter((c) => Number(c.planId) === Number(plan.id)).sort((a, b) => Number(a.sesionNum || 1) - Number(b.sesionNum || 1)); const completadas = sesiones.filter((c) => c.estado === 'completada').length; const planPago = planPagos.find((p) => Number(p.pacienteId) === Number(paciente.id) && String(p.concepto || '').toLowerCase().includes(String(plan.nombre || '').toLowerCase())); return <article key={plan.id} className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div><h3 className="text-lg font-black text-white">{plan.nombre}</h3><div className="mt-1 text-xs text-slate-400">{plan.descripcion || plan.tipo || 'Plan de tratamiento'}</div><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-lg border border-violet-500/30 px-3 py-1 text-violet-300">{completadas} de {Math.max(Number(plan.nSesiones || 0), sesiones.length)} sesiones completadas</span><span className="rounded-lg border border-slate-700 px-3 py-1 text-slate-300">Costo acordado {moneda(plan.costo)}</span>{planPago && <span className="rounded-lg border border-rose-500/30 px-3 py-1 text-rose-300">Saldo {moneda(planPago.saldo)}</span>}</div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => abrirCronograma(plan)} className="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-bold text-white">{sesiones.length ? 'Agregar sesiones' : 'Generar cronograma'}</button><button type="button" onClick={() => onVerPlanPagos?.(paciente)} className="rounded-xl border border-slate-600 px-4 py-2 text-xs font-bold text-slate-200"><WalletCards size={14} className="mr-1 inline" />Plan de pagos</button></div></div><div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{sesiones.map((s) => <div key={s.id} className="rounded-xl border border-slate-700 bg-slate-900/60 p-3"><div className="flex justify-between text-xs"><b className="text-cyan-300">Sesion {s.sesionNum || 1}</b><span className="text-slate-400">{estadoTexto(s.estado)}</span></div><div className="mt-1 text-sm font-semibold text-white">{s.fecha} · {s.hora}</div></div>)}</div></article>; }) : <div className="rounded-2xl border border-dashed border-slate-700 py-14 text-center text-slate-500">No hay planes de tratamiento. Crea uno y luego genera su cronograma de sesiones.</div>}</div>}
+          {pestana === 'tratamientos' && (
+            <div className="space-y-4">
+              <div className="flex justify-end"><button type="button" onClick={() => onCrearPlan?.(paciente)} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold text-white"><Plus size={15} />Crear plan de tratamiento</button></div>
+              {planesPaciente.length ? planesPaciente.map((plan) => {
+                const sesiones = [...(plan.sesiones || [])].sort((a, b) => Number(a.numero) - Number(b.numero));
+                const completadas = sesiones.filter((sesion) => sesion.estado === 'completada').length;
+                const siguiente = sesiones.find((sesion) => sesion.estado === 'pendiente');
+                const pagoPlan = plan.pago || pagosPaciente.find((pago) => Number(pago.id) === Number(plan.pagoId));
+                const planPago = plan.planPago || planPagos.find((item) => Number(item.planId) === Number(plan.id));
+                return (
+                  <article key={plan.id} className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div><h3 className="text-lg font-black text-white">{plan.nombre}</h3><div className="mt-1 text-xs text-slate-400">{plan.descripcion || plan.tipo || 'Plan de tratamiento'}</div><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-lg border border-violet-500/30 px-3 py-1 text-violet-300">{completadas} de {sesiones.length || plan.nSesiones} sesiones completadas</span><span className="rounded-lg border border-slate-700 px-3 py-1 text-slate-300">Costo {moneda(pagoPlan?.total ?? plan.costo)}</span><span className="rounded-lg border border-rose-500/30 px-3 py-1 text-rose-300">Saldo {moneda(pagoPlan?.saldo ?? plan.costo)}</span>{planPago && <span className="rounded-lg border border-cyan-500/30 px-3 py-1 text-cyan-300">Cuotas vinculadas</span>}</div></div>
+                      <div className="flex flex-wrap gap-2"><button type="button" disabled={!siguiente} onClick={() => onNuevaCita?.(paciente, { casoClinicoId: plan.casoClinicoId, planId: plan.id, sesionPlanId: siguiente?.id, tipoCita: 'sesion_tratamiento', procedimiento: siguiente?.titulo || plan.nombre, costo: 0, tipoPago: 'sesion' })} className="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{siguiente ? `Agendar sesión ${siguiente.numero}` : 'Sesiones ya agendadas'}</button><button type="button" onClick={() => onVerPlanPagos?.(paciente)} className="rounded-xl border border-slate-600 px-4 py-2 text-xs font-bold text-slate-200"><WalletCards size={14} className="mr-1 inline" />Plan de pagos</button></div>
+                    </div>
+                    <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">{sesiones.map((sesion) => <div key={sesion.id} className={`rounded-xl border p-3 ${sesion.estado === 'completada' ? 'border-emerald-500/30 bg-emerald-500/5' : sesion.estado === 'agendada' ? 'border-cyan-500/30 bg-cyan-500/5' : 'border-slate-700 bg-slate-900/60'}`}><div className="flex justify-between text-xs"><b className={sesion.estado === 'completada' ? 'text-emerald-300' : 'text-cyan-300'}>Sesión {sesion.numero}</b><span className="text-slate-400">{sesion.estado}</span></div><div className="mt-1 text-xs font-semibold text-white">{sesion.fechaProgramada || 'Sin fecha programada'}</div>{planPago?.cuotas?.find((cuota) => Number(cuota.sesionPlanId) === Number(sesion.id)) && <div className="mt-2 text-[10px] text-amber-300">Cuota {sesion.numero}: {moneda(planPago.cuotas.find((cuota) => Number(cuota.sesionPlanId) === Number(sesion.id))?.monto)}</div>}</div>)}</div>
+                  </article>
+                );
+              }) : <div className="rounded-2xl border border-dashed border-slate-700 py-14 text-center text-slate-500">No hay planes de tratamiento. Crea uno desde un caso diagnosticado.</div>}
+            </div>
+          )}
 
           {pestana === 'cuenta' && <div className="space-y-5"><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><div className="text-xs uppercase text-slate-500">Cargos</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.cargos ?? pagosPaciente.reduce((s, p) => s + Number(p.total || 0), 0))}</div></div><div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="text-xs uppercase text-emerald-400">Pagos netos</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.abonos ?? totalPagado)}</div></div><div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4"><div className="text-xs uppercase text-rose-400">Saldo</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.saldo ?? saldoPendiente)}</div></div><div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><div className="text-xs uppercase text-cyan-400">Credito a favor</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.creditoFavor ?? creditoFavor)}</div></div></section><section className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><h3 className="mb-3 flex items-center gap-2 font-black text-white"><History size={17} className="text-cyan-400" />Estado de cuenta</h3><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-xs"><thead className="text-slate-500"><tr><th className="p-2">Fecha</th><th className="p-2">Movimiento</th><th className="p-2 text-right">Cargo</th><th className="p-2 text-right">Abono</th><th className="p-2 text-right">Saldo</th></tr></thead><tbody className="divide-y divide-slate-700">{(cuenta.movimientos || []).map((m, i) => <tr key={`${m.tipo}-${m.id || i}`}><td className="p-2 text-slate-400">{m.fecha || '—'}</td><td className="p-2"><div className="font-semibold text-white">{m.descripcion}</div><div className="text-[10px] text-slate-500">{m.metodo || m.tipo}</div></td><td className="p-2 text-right text-rose-300">{Number(m.cargo || 0) ? moneda(m.cargo) : '—'}</td><td className="p-2 text-right text-emerald-300">{Number(m.abono || 0) ? moneda(m.abono) : '—'}</td><td className="p-2 text-right font-bold text-white">{moneda(m.saldoAcumulado)}</td></tr>)}</tbody></table></div></section><section className="space-y-2"><h3 className="font-black text-white">Cuentas por atencion</h3>{pagosPaciente.map((pago) => <div key={pago.id} className="flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-800/60 p-3 md:flex-row md:items-center md:justify-between"><div><div className="font-bold text-white">{pago.concepto}</div><div className="mt-1 text-xs text-slate-400">Total {moneda(pago.total)} · Pagado {moneda(pago.cobrado)} · Saldo {moneda(pago.saldo)}</div></div><div className="flex flex-wrap gap-2">{pago.tipoPago === 'cuotas' ? <button type="button" onClick={() => onVerPlanPagos?.(paciente)} className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white"><WalletCards size={13} />Gestionar cuotas</button> : <>{Number(pago.saldo || 0) > 0 && <button type="button" onClick={() => registrarPago(pago)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Registrar pago</button>}{Number(pago.cobrado || 0) > 0 && <><button type="button" onClick={() => pedirOperacionPago(pago, 'anular')} className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-300"><RotateCcw size={13} />Anular</button><button type="button" onClick={() => pedirOperacionPago(pago, 'devolver')} className="rounded-lg border border-rose-500/30 px-3 py-2 text-xs font-bold text-rose-300">Devolver</button></>}</>}</div></div>)}</section></div>}
 

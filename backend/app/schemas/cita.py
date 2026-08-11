@@ -15,6 +15,14 @@ EstadoCita = Literal[
     "cancelada",
 ]
 
+TipoCita = Literal[
+    "diagnostico_inicial",
+    "urgencia",
+    "procedimiento",
+    "sesion_tratamiento",
+    "control",
+]
+
 
 class ServicioCitaPayload(BaseModel):
     nombre: str = Field(min_length=2, max_length=150)
@@ -23,8 +31,14 @@ class ServicioCitaPayload(BaseModel):
 
 class CitaPagoPayload(BaseModel):
     pacienteId: int = Field(gt=0)
+    casoClinicoId: int | None = Field(default=None, gt=0)
     planId: int | None = Field(default=None, gt=0)
+    sesionPlanId: int | None = Field(default=None, gt=0)
     citaBaseId: int | None = Field(default=None, gt=0)
+
+    tipoCita: TipoCita = "procedimiento"
+    motivoConsulta: str = Field(default="", max_length=5000)
+    piezaDental: str = Field(default="", max_length=30)
 
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)

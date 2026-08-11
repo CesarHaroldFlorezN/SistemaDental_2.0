@@ -124,6 +124,12 @@ const crearEstadoInicial = (citaEditar, pagoEditar) => {
 
   return {
     pacienteId: citaEditar?.pacienteId ?? '',
+    casoClinicoId: citaEditar?.casoClinicoId ?? '',
+    planId: citaEditar?.planId ?? '',
+    sesionPlanId: citaEditar?.sesionPlanId ?? '',
+    tipoCita: citaEditar?.tipoCita || 'procedimiento',
+    motivoConsulta: citaEditar?.motivoConsulta || '',
+    piezaDental: citaEditar?.piezaDental || '',
     fecha: citaEditar?.fecha || obtenerFechaLocal(),
     hora,
     horaFin,
@@ -141,8 +147,6 @@ const crearEstadoInicial = (citaEditar, pagoEditar) => {
         ? pagoEditar.metodo
         : 'Efectivo',
     estado: citaEditar?.estado || 'pendiente',
-    sesionNum: citaEditar?.sesionNum ?? 1,
-    totalSesiones: citaEditar?.totalSesiones ?? 1,
     notas: citaEditar?.notas || ''
   };
 };
@@ -154,7 +158,9 @@ export default function CitaModal({
   citaEditar,
   pagoEditar,
   pacientes = [],
-  citas = []
+  citas = [],
+  planes = [],
+  casosClinicos = []
 }) {
   const [formData, setFormData] = useState(() =>
     crearEstadoInicial(citaEditar, pagoEditar)
@@ -172,6 +178,13 @@ export default function CitaModal({
   citaEditar,
   pagoEditar
 );
+    if (
+      !citaEditar?.id
+      && estado.pacienteId
+      && !citas.some((cita) => Number(cita.pacienteId) === Number(estado.pacienteId))
+    ) {
+      estado.tipoCita = 'diagnostico_inicial';
+    }
     setFormData(estado);
     const seleccionado = pacientes.find((paciente) => Number(paciente.id) === Number(estado.pacienteId));
     setBusquedaPaciente(etiquetaPaciente(seleccionado));
@@ -179,7 +192,7 @@ export default function CitaModal({
     setIndiceSugerencia(0);
     setErrorFormulario('');
     setGuardando(false);
-  }, [isOpen, citaEditar, pagoEditar, pacientes]);
+  }, [isOpen, citaEditar, pagoEditar, pacientes, citas]);
 
   const pacientesFiltrados = useMemo(() => {
     const terminos = normalizar(busquedaPaciente).split(/\s+/).filter(Boolean);
@@ -204,6 +217,42 @@ export default function CitaModal({
   const pacienteSeleccionado = useMemo(
     () => pacientes.find((paciente) => Number(paciente.id) === Number(formData.pacienteId)) || null,
     [pacientes, formData.pacienteId]
+  );
+
+  const casosDelPaciente = useMemo(
+    () => casosClinicos.filter(
+      (caso) => Number(caso.pacienteId) === Number(formData.pacienteId)
+        && !['resuelto', 'cerrado'].includes(caso.estado)
+    ),
+    [casosClinicos, formData.pacienteId]
+  );
+
+  const planesDelPaciente = useMemo(
+    () => planes.filter(
+      (plan) => Number(plan.pacienteId) === Number(formData.pacienteId)
+        && !['completado', 'cancelado'].includes(plan.estado)
+    ),
+    [planes, formData.pacienteId]
+  );
+
+  const planSeleccionado = useMemo(
+    () => planesDelPaciente.find((plan) => Number(plan.id) === Number(formData.planId)) || null,
+    [planesDelPaciente, formData.planId]
+  );
+
+  const sesionesDisponibles = useMemo(
+    () => (planSeleccionado?.sesiones || []).filter(
+      (sesion) => sesion.estado === 'pendiente'
+        || Number(sesion.id) === Number(formData.sesionPlanId)
+    ),
+    [planSeleccionado, formData.sesionPlanId]
+  );
+
+  const sesionSeleccionada = useMemo(
+    () => (planSeleccionado?.sesiones || []).find(
+      (sesion) => Number(sesion.id) === Number(formData.sesionPlanId)
+    ) || null,
+    [planSeleccionado, formData.sesionPlanId]
   );
 
   const costoServicios = useMemo(
@@ -251,7 +300,18 @@ export default function CitaModal({
   const duracionActual = calcularDuracion(formData.hora, formData.horaFin);
 
   const seleccionarPaciente = (paciente) => {
-    setFormData((prev) => ({ ...prev, pacienteId: paciente.id }));
+    const esPrimeraAtencion = !citas.some(
+      (cita) => Number(cita.pacienteId) === Number(paciente.id)
+    );
+    setFormData((prev) => ({
+      ...prev,
+      pacienteId: paciente.id,
+      casoClinicoId: Number(prev.pacienteId) === Number(paciente.id) ? prev.casoClinicoId : '',
+      planId: Number(prev.pacienteId) === Number(paciente.id) ? prev.planId : '',
+      sesionPlanId: Number(prev.pacienteId) === Number(paciente.id) ? prev.sesionPlanId : '',
+      tipoPago: Number(prev.pacienteId) === Number(paciente.id) ? prev.tipoPago : 'contado',
+      tipoCita: esPrimeraAtencion ? 'diagnostico_inicial' : prev.tipoCita
+    }));
     setBusquedaPaciente(etiquetaPaciente(paciente));
     setMostrarSugerencias(false);
     setErrorFormulario('');
@@ -296,6 +356,20 @@ export default function CitaModal({
           siguiente.montoPagado = 0;
         }
         if (['contado', 'cortesia', 'sesion'].includes(value)) siguiente.montoPagado = 0;
+      }
+      if (name === 'planId') {
+        const plan = planes.find((item) => Number(item.id) === Number(value));
+        const sesionActual = (plan?.sesiones || []).find(
+          (sesion) => Number(sesion.id) === Number(citaEditar?.sesionPlanId)
+        );
+        const siguienteSesion = sesionActual || (plan?.sesiones || []).find(
+          (sesion) => sesion.estado === 'pendiente'
+        );
+        siguiente.casoClinicoId = plan?.casoClinicoId || siguiente.casoClinicoId || '';
+        siguiente.sesionPlanId = siguienteSesion?.id || '';
+        siguiente.tipoCita = plan ? 'sesion_tratamiento' : siguiente.tipoCita;
+        siguiente.tipoPago = plan ? 'sesion' : 'contado';
+        siguiente.montoPagado = 0;
       }
       return siguiente;
     });
@@ -404,22 +478,27 @@ export default function CitaModal({
 
     if (formData.tipoPago === 'cuotas') {
       if (costoNumerico <= 0) return setErrorFormulario('Un plan de pagos debe tener un costo mayor que cero.');
-      if (montoPagado > costoNumerico) return setErrorFormulario('El pago inicial no puede superar el total.');
-      tipoPagoBackend = montoPagado >= costoNumerico ? 'completo' : 'cuotas';
+      montoPagado = 0;
+      tipoPagoBackend = 'cuotas';
     }
 
     if (formData.tipoPago === 'cortesia') tipoPagoBackend = 'cortesia';
     if (formData.tipoPago === 'sesion') tipoPagoBackend = 'sesion';
 
-    const sesionNum = Math.max(1, Number.parseInt(formData.sesionNum, 10) || 1);
-    const totalSesiones = Math.max(1, Number.parseInt(formData.totalSesiones, 10) || 1);
-    if (sesionNum > totalSesiones) return setErrorFormulario('La sesión actual no puede superar el total.');
+    if (planSeleccionado && !sesionSeleccionada) {
+      return setErrorFormulario('Selecciona una sesión pendiente del plan de tratamiento.');
+    }
 
     const procedimiento = servicios.map((servicio) => servicio.nombre).join(' + ');
     const payload = {
       pacienteId,
-      planId: citaEditar?.planId ?? null,
+      casoClinicoId: Number(formData.casoClinicoId) || null,
+      planId: Number(formData.planId) || null,
+      sesionPlanId: Number(formData.sesionPlanId) || null,
       citaBaseId: citaEditar?.citaBaseId ?? null,
+      tipoCita: planSeleccionado ? 'sesion_tratamiento' : formData.tipoCita,
+      motivoConsulta: formData.motivoConsulta.trim(),
+      piezaDental: formData.piezaDental.trim(),
       fecha: formData.fecha,
       hora: formData.hora,
       horaFin: formData.horaFin,
@@ -429,10 +508,10 @@ export default function CitaModal({
       costo: costoNumerico,
       tipoPago: tipoPagoBackend,
       montoPagado,
-      metodoPago: montoPagado > 0 ? formData.metodoPago : 'Pendiente',
+      metodoPago: montoPagado > 0 && formData.tipoPago !== 'cuotas' ? formData.metodoPago : 'Pendiente',
       estado: formData.estado,
-      sesionNum,
-      totalSesiones,
+      sesionNum: sesionSeleccionada?.numero || 1,
+      totalSesiones: planSeleccionado?.nSesiones || 1,
       notas: [
         formData.notas.trim(),
         formData.tipoPago === 'cortesia'
@@ -443,7 +522,9 @@ export default function CitaModal({
 
     try {
       setGuardando(true);
-      await onSave(payload, citaEditar?.id);
+      await onSave(payload, citaEditar?.id, {
+        abrirPlanPagos: !planSeleccionado && formData.tipoPago === 'cuotas'
+      });
     } finally {
       setGuardando(false);
     }
@@ -508,6 +589,61 @@ export default function CitaModal({
             )}
           </section>
 
+          <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <div className="mb-4">
+              <h3 className="flex items-center gap-2 font-bold text-white"><Layers size={17} className="text-emerald-400" /> Contexto clínico</h3>
+              <p className="mt-1 text-xs text-slate-500">Una nueva molestia crea un caso nuevo; una sesión puede vincularse a un plan ya definido.</p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="font-medium text-slate-300">Tipo de atención
+                <select name="tipoCita" value={formData.tipoCita} onChange={handleChange} disabled={Boolean(planSeleccionado)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-emerald-500 disabled:opacity-60">
+                  <option value="diagnostico_inicial">Diagnóstico / evaluación inicial</option>
+                  <option value="urgencia">Urgencia por nueva molestia</option>
+                  <option value="procedimiento">Procedimiento puntual</option>
+                  <option value="sesion_tratamiento">Sesión de plan de tratamiento</option>
+                  <option value="control">Control o seguimiento</option>
+                </select>
+              </label>
+              <label className="font-medium text-slate-300">Pieza dental (opcional)
+                <input type="text" name="piezaDental" value={formData.piezaDental} onChange={handleChange} placeholder="Ej.: 26, cuadrante superior izquierdo" className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-emerald-500" />
+              </label>
+            </div>
+
+            <label className="mt-4 block font-medium text-slate-300">Motivo de consulta
+              <textarea name="motivoConsulta" value={formData.motivoConsulta} onChange={handleChange} rows="2" placeholder="Ej.: regresó después de un mes por dolor en una muela..." className="mt-1.5 w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-emerald-500" />
+            </label>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="font-medium text-slate-300">Caso clínico
+                <select name="casoClinicoId" value={formData.casoClinicoId} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-emerald-500">
+                  <option value="">Crear un caso nuevo con esta atención</option>
+                  {casosDelPaciente.map((caso) => <option key={caso.id} value={caso.id}>{caso.titulo} · {caso.estado}</option>)}
+                </select>
+              </label>
+              <label className="font-medium text-slate-300">Plan de tratamiento
+                <select name="planId" value={formData.planId} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-purple-500">
+                  <option value="">Sin plan · atención puntual</option>
+                  {planesDelPaciente.map((plan) => <option key={plan.id} value={plan.id}>{plan.nombre} · {plan.nSesiones} sesiones</option>)}
+                </select>
+              </label>
+            </div>
+
+            {planSeleccionado && (
+              <div className="mt-4 rounded-xl border border-purple-500/30 bg-purple-500/10 p-4">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <label className="font-medium text-purple-100">Sesión del plan
+                    <select name="sesionPlanId" required value={formData.sesionPlanId} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-purple-500/30 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-purple-400">
+                      <option value="">Selecciona una sesión pendiente</option>
+                      {sesionesDisponibles.map((sesion) => <option key={sesion.id} value={sesion.id}>Sesión {sesion.numero} de {planSeleccionado.nSesiones} · {sesion.estado}</option>)}
+                    </select>
+                  </label>
+                  <div className="rounded-lg bg-slate-950/40 px-4 py-2.5 text-xs text-purple-200">{sesionSeleccionada ? `Sesión ${sesionSeleccionada.numero} de ${planSeleccionado.nSesiones}` : 'Elige la siguiente sesión'}</div>
+                </div>
+              </div>
+            )}
+          </section>
+
           <section className="rounded-2xl border border-slate-700 bg-slate-900/40 p-4">
             <div className="mb-3 flex items-center gap-2"><Clock size={17} className="text-cyan-400" /><div><h3 className="font-bold text-white">Fecha y rango de atención</h3><p className="text-xs text-slate-500">El sistema bloqueará automáticamente los horarios que se crucen.</p></div></div>
             <div className="grid gap-4 md:grid-cols-[1.15fr_1fr_auto_1fr] md:items-end">
@@ -563,11 +699,18 @@ export default function CitaModal({
               <p className="mt-1 text-xs text-slate-500">El sistema calculará automáticamente si queda pendiente, pago parcial o pagado.</p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {planSeleccionado && (
+              <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+                <div className="font-bold text-cyan-200">Sesión incluida en {planSeleccionado.nombre}</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-400">Esta cita no generará una deuda duplicada. El cobro pertenece al presupuesto completo del plan de tratamiento.</div>
+              </div>
+            )}
+
+            {!planSeleccionado && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['contado', 'Cobrar al finalizar', 'No ingresa dinero ahora.'],
                 ['pago_ahora', 'Registrar pago ahora', 'Pago total o parcial.'],
-                ['cuotas', 'Plan de pagos', 'Saldo financiado con pago inicial opcional.'],
+                ['cuotas', 'Plan de pagos', 'Al guardar se abrirá el cronograma de cuotas.'],
                 ['cortesia', 'Sin costo', 'Cortesía, promoción o garantía.']
               ].map(([valor, titulo, descripcion]) => (
                 <button key={valor} type="button" onClick={() => handleChange({ target: { name: 'tipoPago', value: valor } })} className={`rounded-xl border p-3 text-left transition ${formData.tipoPago === valor ? 'border-violet-500 bg-violet-500/15 ring-2 ring-violet-500/10' : 'border-slate-700 bg-slate-900/70 hover:border-slate-600'}`}>
@@ -575,18 +718,12 @@ export default function CitaModal({
                   <div className="mt-1 text-[11px] leading-relaxed text-slate-500">{descripcion}</div>
                 </button>
               ))}
-              {(citaEditar?.citaBaseId || formData.tipoPago === 'sesion') && (
-                <button type="button" onClick={() => handleChange({ target: { name: 'tipoPago', value: 'sesion' } })} className={`rounded-xl border p-3 text-left transition ${formData.tipoPago === 'sesion' ? 'border-cyan-500 bg-cyan-500/15' : 'border-slate-700 bg-slate-900/70'}`}>
-                  <div className="text-sm font-bold text-white">Incluido en plan</div>
-                  <div className="mt-1 text-[11px] text-slate-500">La sesión ya está cubierta por un tratamiento.</div>
-                </button>
-              )}
-            </div>
+            </div>}
 
-            {['pago_ahora', 'cuotas'].includes(formData.tipoPago) && (
+            {!planSeleccionado && formData.tipoPago === 'pago_ahora' && (
               <div className="mt-4 grid gap-4 rounded-xl border border-violet-500/20 bg-slate-900/55 p-4 sm:grid-cols-2">
                 <label className="font-medium text-slate-300">
-                  {formData.tipoPago === 'cuotas' ? 'Pago inicial hoy (opcional)' : 'Monto recibido hoy'}
+                  Monto recibido hoy
                   <input type="number" min="0" max={costoNumerico} step="0.01" name="montoPagado" value={formData.montoPagado} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-right text-lg font-black text-violet-200 outline-none focus:border-violet-500" />
                 </label>
                 <label className="font-medium text-slate-300">Método de pago
@@ -594,6 +731,12 @@ export default function CitaModal({
                     <option>Efectivo</option><option>Yape</option><option>Plin</option><option value="Transferencia">Transferencia bancaria</option><option>Tarjeta</option>
                   </select>
                 </label>
+              </div>
+            )}
+
+            {!planSeleccionado && formData.tipoPago === 'cuotas' && (
+              <div className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
+                Al programar la atención se abrirá <strong>Crear plan de pago en cuotas</strong> con el paciente y los S/. {costoNumerico.toFixed(2)} ya vinculados. El adelanto se registra después como un cobro auditable.
               </div>
             )}
 
@@ -631,8 +774,6 @@ export default function CitaModal({
             </div>
           </section>
 
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Layers size={15} className="text-cyan-400" />Sesión actual</span><input type="number" min="1" name="sesionNum" value={formData.sesionNum} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label><label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Layers size={15} className="text-cyan-400" />Total de sesiones</span><input type="number" min="1" name="totalSesiones" value={formData.totalSesiones} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label></div>
 
           <label className="font-medium text-slate-300">Notas o indicaciones<textarea name="notas" value={formData.notas} onChange={handleChange} rows="3" placeholder="Observaciones clínicas o indicaciones..." className="mt-1.5 w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label>
 
