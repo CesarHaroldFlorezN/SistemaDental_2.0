@@ -6,6 +6,8 @@ import PlanTratamientoModal from './features/tratamientos/components/PlanTratami
 import PacienteModal from './features/pacientes/components/PacienteModal';
 import CitaModal from './features/agenda/components/CitaModal';
 import Sidebar from './shared/components/Sidebar';
+import ThemeSelector from './shared/components/ThemeSelector';
+import { normalizarTemaGuardado } from './shared/themeConfig';
 import LoginPage from './features/autenticacion/components/LoginPage';
 
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -63,28 +65,19 @@ export default function App() {
 
 
   // ==========================================
-  // ESTADO Y LÓGICA DEL TEMA (CLARO / OSCURO)
+  // ESTADO Y LÓGICA DE LAS CUATRO PALETAS VISUALES
   // ==========================================
   const [tema, setTema] = useState(() => {
-    return localStorage.getItem('dp-theme') || 'dark';
+    return normalizarTemaGuardado(localStorage.getItem('dp-theme'));
   });
 
   useEffect(() => {
     const raiz = document.documentElement;
     raiz.setAttribute('data-theme', tema);
-    if (tema === 'dark') {
-      raiz.classList.add('dark');
-      raiz.classList.remove('light');
-    } else {
-      raiz.classList.add('light');
-      raiz.classList.remove('dark');
-    }
+    raiz.classList.add('light');
+    raiz.classList.remove('dark');
     localStorage.setItem('dp-theme', tema);
   }, [tema]);
-
-  const toggleTheme = () => {
-    setTema((prevTema) => (prevTema === 'dark' ? 'light' : 'dark'));
-  };
   useEffect(() => {
     let componenteActivo = true;
 
@@ -162,6 +155,20 @@ export default function App() {
   // ==========================================
   const [pagos, setPagos] = useState([]);
   const [busquedaFinanzas, setBusquedaFinanzas] = useState('');
+  const [filtroFinanzas, setFiltroFinanzas] = useState('todos');
+
+  const handleCambiarVista = (vista) => {
+    if (vista === 'finanzas') {
+      setFiltroFinanzas('todos');
+    }
+    setVistaActiva(vista);
+  };
+
+  const handleVerCobrosPendientes = () => {
+    setBusquedaFinanzas('');
+    setFiltroFinanzas('pendientes');
+    setVistaActiva('finanzas');
+  };
 
   const [planPagos, setPlanPagos] = useState([]);
   const [busquedaPP, setBusquedaPP] = useState('');
@@ -1090,7 +1097,7 @@ export default function App() {
     };
   });
 
-  const pagosFiltrados = pagos.map(g => {
+  const pagosConPaciente = pagos.map(g => {
     const pac = pacientes.find(p => Number(p.id) === Number(g.pacienteId)) || {};
     return {
       ...g,
@@ -1099,6 +1106,18 @@ export default function App() {
       codigoFicha: pac.codigo_ficha || '',
       telefonoPaciente: pac.telefono || '—'
     };
+  });
+
+  const conteoPagosPendientes = pagosConPaciente.filter(
+    (pago) => Number.parseFloat(pago.saldo || 0) > 0
+  ).length;
+  const conteoPagosAlDia = pagosConPaciente.length - conteoPagosPendientes;
+
+  const pagosFiltrados = pagosConPaciente.filter((pago) => {
+    const saldo = Number.parseFloat(pago.saldo || 0);
+    if (filtroFinanzas === 'pendientes') return saldo > 0;
+    if (filtroFinanzas === 'aldia') return saldo <= 0;
+    return true;
   }).filter(g => {
     const terminos = normalizarTexto(busquedaFinanzas).split(/\s+/).filter(Boolean);
     if (!terminos.length) return true;
@@ -1139,9 +1158,9 @@ export default function App() {
 
   return (
     <div className="dp-app-shell flex min-h-screen bg-slate-900 font-sans text-slate-100">
-            <Sidebar
+      <Sidebar
         vistaActiva={vistaActiva}
-        setVistaActiva={setVistaActiva}
+        setVistaActiva={handleCambiarVista}
         usuarioActual={usuarioActual}
         onCerrarSesion={handleCerrarSesion}
       />
@@ -1149,9 +1168,7 @@ export default function App() {
       <main className="dp-main min-w-0 flex-1 overflow-y-auto bg-slate-900 p-4 transition-colors duration-200 sm:p-6 xl:p-8">
 
         <div className="dp-theme-toolbar sticky top-0 z-30 mx-auto mb-4 flex max-w-[1800px] items-center justify-end py-1">
-          <button onClick={toggleTheme} className="dp-theme-toggle flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold shadow-lg backdrop-blur transition duration-200 cursor-pointer select-none">
-            {tema === 'dark' ? <><span role="img" aria-label="claro">☀️</span><span>Modo Claro</span></> : <><span role="img" aria-label="oscuro">🌙</span><span>Modo Oscuro</span></>}
-          </button>
+          <ThemeSelector tema={tema} onChange={setTema} />
         </div>
 
         <div className="mx-auto w-full max-w-[1800px]">
@@ -1168,7 +1185,8 @@ export default function App() {
       pacientes={pacientes}
       citas={citasFiltradas}
       pagos={pagos}
-      onCambiarVista={setVistaActiva}
+      onCambiarVista={handleCambiarVista}
+      onVerCobrosPendientes={handleVerCobrosPendientes}
       onNuevaCita={handleNuevaCita}
       onAbrirCompletar={handleAbrirCompletar}
       onCambiarEstadoCita={handleCambiarEstadoCita}
@@ -1263,9 +1281,35 @@ export default function App() {
                   <div className="text-2xl font-bold text-rose-400 font-serif">{fMon(porCobrarTotal)}</div>
                 </div>
               </div>
-              <div className="relative mb-6">
-                <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
-                <input type="text" placeholder="Buscar por paciente, DNI, ficha, teléfono, tratamiento o método..." value={busquedaFinanzas} onChange={(e) => setBusquedaFinanzas(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
+              <div className="mb-6 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="relative">
+                  <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                  <input type="text" placeholder="Buscar por paciente, DNI, ficha, teléfono, tratamiento o método..." value={busquedaFinanzas} onChange={(e) => setBusquedaFinanzas(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:border-cyan-500 outline-none transition text-sm shadow-sm" />
+                </div>
+
+                <div className="flex flex-wrap rounded-xl border border-slate-700 bg-slate-800 p-1" role="group" aria-label="Filtrar movimientos por estado de deuda">
+                  {[
+                    ['todos', 'Todos', pagosConPaciente.length],
+                    ['pendientes', 'Con saldo', conteoPagosPendientes],
+                    ['aldia', 'Al día', conteoPagosAlDia]
+                  ].map(([valor, texto, cantidad]) => (
+                    <button
+                      key={valor}
+                      type="button"
+                      onClick={() => setFiltroFinanzas(valor)}
+                      aria-pressed={filtroFinanzas === valor}
+                      className={`rounded-lg px-3.5 py-2 text-xs font-bold transition ${
+                        filtroFinanzas === valor
+                          ? valor === 'pendientes'
+                            ? 'bg-rose-500 text-white shadow-md'
+                            : 'bg-cyan-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {texto} · {cantidad}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
                 <table className="w-full text-left border-collapse">
@@ -1295,7 +1339,7 @@ export default function App() {
                           </tr>
                         );
                       })
-                    ) : (<tr><td colSpan="9" className="p-12 text-center text-slate-400">No se encontraron registros.</td></tr>)}
+                    ) : (<tr><td colSpan="9" className="p-12 text-center text-slate-400">{filtroFinanzas === 'pendientes' ? 'No hay cuentas con saldo pendiente.' : 'No se encontraron registros.'}</td></tr>)}
                   </tbody>
                 </table>
               </div>

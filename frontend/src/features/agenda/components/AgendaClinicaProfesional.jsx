@@ -33,6 +33,7 @@ import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { format, getDay, parse, startOfWeek as startOfWeekDateFns } from 'date-fns';
 import { es } from 'date-fns/locale';
+import CalendarioMensualResumen from './CalendarioMensualResumen.jsx';
 
 const CalendarioDnD = lazy(() => import('./CalendarioDnD.jsx'));
 
@@ -283,27 +284,6 @@ function LeyendaEstados() {
   );
 }
 
-function ResumenMes({ event }) {
-  const orden = [
-    ['pendiente', 'Programada'],
-    ['en_espera', 'En espera'],
-    ['en_atencion', 'En atención'],
-    ['completada', 'Finalizada'],
-    ['no_asistio', 'No asistió'],
-    ['cancelada', 'Cancelada']
-  ];
-  return (
-    <div className="space-y-1 py-0.5">
-      {orden.filter(([estado]) => event.conteos[estado]).map(([estado, texto]) => (
-        <div key={estado} className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-bold" style={{ color: ESTADOS[estado].color, backgroundColor: `${ESTADOS[estado].color}16` }}>
-          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ESTADOS[estado].color }} />
-          <span>{event.conteos[estado]} {texto}{event.conteos[estado] === 1 ? '' : 's'}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd }) {
   const pago = cita.pago;
   const saldo = Number(pago?.saldo ?? cita.costo ?? 0);
@@ -503,16 +483,6 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
     return { id: cita.id, title: cita.nombrePaciente, start, end, citaData: cita };
   }), [filtradas]);
 
-  const resumenMes = useMemo(() => {
-    const mapa = new Map();
-    filtradas.forEach((cita) => {
-      if (!mapa.has(cita.fecha)) mapa.set(cita.fecha, { pendiente: 0, en_espera: 0, en_atencion: 0, completada: 0, no_asistio: 0, cancelada: 0 });
-      const clave = estadoVisual(cita.estado);
-      mapa.get(cita.fecha)[clave] += 1;
-    });
-    return [...mapa.entries()].map(([fecha, conteos]) => ({ id: `r-${fecha}`, title: 'Resumen', start: fechaDesdeTexto(fecha), end: new Date(fechaDesdeTexto(fecha).getTime() + 86400000), allDay: true, esResumen: true, conteos }));
-  }, [filtradas]);
-
   const recepcion = useMemo(() => enriquecidas.filter((c) => c.fecha === fechaRecepcion).sort((a, b) => String(a.hora).localeCompare(String(b.hora))), [enriquecidas, fechaRecepcion]);
   const columnas = {
     pendiente: recepcion.filter((c) => ['pendiente', 'confirmada'].includes(c.estado)),
@@ -592,7 +562,7 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
   const calendarioComun = {
     localizer,
     culture: 'es',
-    events: vista === 'month' ? resumenMes : eventos,
+    events: eventos,
     startAccessor: 'start',
     endAccessor: 'end',
     view: vista,
@@ -608,7 +578,7 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
     onSelectSlot: seleccionarSlot,
     onSelectEvent: abrirEvento,
     eventPropGetter: propiedadesEvento,
-    components: { toolbar: Toolbar, event: (props) => props.event.esResumen ? <ResumenMes {...props} /> : <Evento {...props} editable={edicionHorarios} /> },
+    components: { toolbar: Toolbar, event: (props) => <Evento {...props} editable={edicionHorarios} /> },
     formats: {
       dayFormat: (fecha) => format(fecha, 'EEE dd', { locale: es }),
       weekdayFormat: (fecha) => format(fecha, 'EEEE', { locale: es }),
@@ -702,7 +672,20 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
           </label>
         </div>
         <div className="mb-4"><LeyendaEstados /></div>
-        {edicionHorarios && vista !== 'month' ? (
+        {vista === 'month' ? (
+          <CalendarioMensualResumen
+            citas={filtradas}
+            fecha={fechaCalendario}
+            onCambiarFecha={setFechaCalendario}
+            onSeleccionarFecha={(fecha) => {
+              setFechaCalendario(fecha);
+              setVista('day');
+            }}
+            onCambiarVista={setVista}
+            mostrarVistas
+            altura={720}
+          />
+        ) : edicionHorarios ? (
           <LimiteErrorCalendario fallback={fallbackCalendario}>
             <Suspense fallback={<div className="flex h-[720px] items-center justify-center text-sm text-slate-400">Cargando calendario interactivo...</div>}>
               <CalendarioDnD {...calendarioComun} selectable={false} draggableAccessor={(event) => ACTIVAS.has(event.citaData?.estado)} resizable resizableAccessor={(event) => ACTIVAS.has(event.citaData?.estado)} onEventDrop={guardarCambioHorario} onEventResize={guardarCambioHorario} popup />
@@ -735,49 +718,49 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
         .rbc-today { box-shadow: inset 0 0 0 2px rgba(6,182,212,.35); }
         .rbc-month-view .rbc-date-cell.rbc-now button::after { content: ' HOY'; margin-left: 5px; font-size: 9px; color: #22d3ee; font-weight: 900; }
 
-        html[data-theme="light"] .dp-agenda-profesional .dp-barra-agenda,
-        html[data-theme="light"] .dp-agenda-profesional .dp-leyenda-calendario,
-        html[data-theme="light"] .dp-agenda-profesional .dp-resumen-indicador,
-        html[data-theme="light"] .dp-agenda-profesional .dp-resumen-fila {
-          background: #ffffff !important;
-          border-color: #C5D0E0 !important;
-          box-shadow: 0 5px 16px rgba(40,54,82,.07);
+        html[data-theme] .dp-agenda-profesional .dp-barra-agenda,
+        html[data-theme] .dp-agenda-profesional .dp-leyenda-calendario,
+        html[data-theme] .dp-agenda-profesional .dp-resumen-indicador,
+        html[data-theme] .dp-agenda-profesional .dp-resumen-fila {
+          background: var(--dp-surface) !important;
+          border-color: var(--dp-border) !important;
+          box-shadow: 0 5px 16px var(--dp-shadow);
         }
-        html[data-theme="light"] .dp-agenda-profesional .dp-control-filtro {
-          background: #ffffff !important;
-          color: #283652 !important;
-          border-color: #B7C4D8 !important;
-          box-shadow: inset 0 1px 2px rgba(40,54,82,.04);
+        html[data-theme] .dp-agenda-profesional .dp-control-filtro {
+          background: var(--dp-surface) !important;
+          color: var(--dp-text) !important;
+          border-color: var(--dp-border) !important;
+          box-shadow: inset 0 1px 2px var(--dp-shadow);
         }
-        html[data-theme="light"] .dp-agenda-profesional .dp-control-filtro:focus {
-          border-color: #56759E !important;
-          box-shadow: 0 0 0 3px rgba(86,117,158,.15);
+        html[data-theme] .dp-agenda-profesional .dp-control-filtro:focus {
+          border-color: var(--dp-primary) !important;
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--dp-primary) 15%, transparent);
         }
-        html[data-theme="light"] .dp-agenda-profesional .text-slate-500,
-        html[data-theme="light"] .dp-agenda-profesional .text-slate-600 {
-          color: #5E7191 !important;
+        html[data-theme] .dp-agenda-profesional .text-slate-500,
+        html[data-theme] .dp-agenda-profesional .text-slate-600 {
+          color: var(--dp-muted) !important;
         }
-        html[data-theme="light"] .dp-agenda-profesional .text-slate-300,
-        html[data-theme="light"] .dp-agenda-profesional .text-slate-400 {
-          color: #425A7D !important;
+        html[data-theme] .dp-agenda-profesional .text-slate-300,
+        html[data-theme] .dp-agenda-profesional .text-slate-400 {
+          color: var(--dp-muted) !important;
         }
-        html[data-theme="light"] .dp-agenda-profesional .rbc-label,
-        html[data-theme="light"] .dp-agenda-profesional .rbc-time-gutter,
-        html[data-theme="light"] .dp-agenda-profesional .rbc-date-cell,
-        html[data-theme="light"] .dp-agenda-profesional .rbc-button-link {
-          color: #283652 !important;
+        html[data-theme] .dp-agenda-profesional .rbc-label,
+        html[data-theme] .dp-agenda-profesional .rbc-time-gutter,
+        html[data-theme] .dp-agenda-profesional .rbc-date-cell,
+        html[data-theme] .dp-agenda-profesional .rbc-button-link {
+          color: var(--dp-text) !important;
         }
-        html[data-theme="light"] .dp-agenda-profesional .rbc-time-slot {
-          color: #56759E !important;
+        html[data-theme] .dp-agenda-profesional .rbc-time-slot {
+          color: var(--dp-muted) !important;
         }
-        html[data-theme="light"] .dp-agenda-profesional .dp-tarjeta-calendario {
-          background-color: color-mix(in srgb, var(--dp-event-color) 24%, white) !important;
-          color: #283652 !important;
-          box-shadow: 0 4px 11px rgba(40,54,82,.14) !important;
+        html[data-theme] .dp-agenda-profesional .dp-tarjeta-calendario {
+          background-color: color-mix(in srgb, var(--dp-event-color) 24%, var(--dp-surface)) !important;
+          color: var(--dp-text) !important;
+          box-shadow: 0 4px 11px var(--dp-shadow) !important;
         }
-        html[data-theme="light"] .dp-agenda-profesional .dp-evento-calendario,
-        html[data-theme="light"] .dp-agenda-profesional .dp-evento-calendario * {
-          color: #283652 !important;
+        html[data-theme] .dp-agenda-profesional .dp-evento-calendario,
+        html[data-theme] .dp-agenda-profesional .dp-evento-calendario * {
+          color: var(--dp-text) !important;
         }
       `}</style>
     </div>
