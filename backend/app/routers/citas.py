@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import CitaDB, PagoDB, PlanPagoDB
+from ..models import CasoClinicoDB, CitaDB, PagoDB, PlanPagoDB
 from ..schemas import (
     CambioEstadoPayload,
     CitaPagoPayload,
@@ -15,17 +15,22 @@ from ..schemas import (
 from ..services import (
     ESTADOS_QUE_BLOQUEAN_HORARIO,
     TRANSICIONES_ESTADO,
+    actualizar_sesion_desde_cita,
     ahora_iso,
     calcular_datos_pago,
     convertir_hora_a_minutos,
+    crear_caso_automatico_para_cita,
+    liberar_sesion_de_cita,
     minutos_a_hora,
     normalizar_servicios,
     obtener_paciente,
+    obtener_plan_clinico,
+    obtener_sesion_para_cita,
     redondear_monto,
     serializar_modelo,
     validar_disponibilidad,
-    validar_plan,
     validar_secuencia_sesion,
+    vincular_sesion_a_cita,
 )
 
 router = APIRouter()
@@ -103,6 +108,8 @@ def actualizar_cita_directa(
         if clave in columnas_validas and clave != "id":
             setattr(cita, clave, valor)
 
+    actualizar_sesion_desde_cita(db, cita)
+
     try:
         db.commit()
         db.refresh(cita)
@@ -124,82 +131,105 @@ def crear_cita_con_pago(
     db: Session = Depends(get_db),
 ):
     obtener_paciente(db, payload.pacienteId)
-    validar_plan(db, payload.planId, payload.pacienteId)
-
-    if payload.sesionNum > payload.totalSesiones:
-        raise HTTPException(
-            status_code=400,
-            detail="La sesión actual no puede superar el total de sesiones.",
-        )
+    plan = obtener_plan_clinico(db, payload.planId, payload.pacienteId)
+    sesion = obtener_sesion_para_cita(db, plan, payload.sesionPlanId)
+    caso = crear_caso_automatico_para_cita(db, payload, plan)
+    payload_efectivo = payload.model_copy(
+        update={
+            "casoClinicoId": caso.id,
+            "tipoCita": "sesion_tratamiento" if plan else payload.tipoCita,
+            "tipoPago": "sesion" if plan else payload.tipoPago,
+            "montoPagado": 0 if plan else payload.montoPagado,
+            "sesionNum": sesion.numero if sesion else 1,
+            "totalSesiones": int(plan.nSesiones or 1) if plan else 1,
+        }
+    )
 
     hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
-        payload.fecha,
-        payload.hora,
-        payload.horaFin,
-        payload.duracionMinutos,
-        payload.estado,
+        payload_efectivo.fecha,
+        payload_efectivo.hora,
+        payload_efectivo.horaFin,
+        payload_efectivo.duracionMinutos,
+        payload_efectivo.estado,
     )
 
-    detalle_servicios = normalizar_servicios(payload)
+    detalle_servicios = normalizar_servicios(payload_efectivo)
     datos_pago = calcular_datos_pago(
-        payload,
+        payload_efectivo,
         detalle_servicios["costo_total"],
     )
     ahora = ahora_iso()
 
     nueva_cita = CitaDB(
-        pacienteId=payload.pacienteId,
-        planId=payload.planId,
-        citaBaseId=payload.citaBaseId,
-        fecha=payload.fecha,
-        hora=payload.hora,
+        pacienteId=payload_efectivo.pacienteId,
+        casoClinicoId=caso.id,
+        planId=plan.id if plan else None,
+        sesionPlanId=sesion.id if sesion else None,
+        citaBaseId=payload_efectivo.citaBaseId,
+        tipoCita=payload_efectivo.tipoCita,
+        motivoConsulta=payload_efectivo.motivoConsulta.strip(),
+        piezaDental=payload_efectivo.piezaDental.strip(),
+        fecha=payload_efectivo.fecha,
+        hora=payload_efectivo.hora,
         horaFin=hora_fin_resuelta,
         duracionMinutos=duracion_resuelta,
         procedimiento=detalle_servicios["procedimiento"],
         servicios=detalle_servicios["servicios"],
-        notas=payload.notas.strip(),
+        notas=payload_efectivo.notas.strip(),
         costo=datos_pago["total"],
-        tipoPago=payload.tipoPago,
-        estado=payload.estado,
-        sesionNum=payload.sesionNum,
-        totalSesiones=payload.totalSesiones,
+        tipoPago=payload_efectivo.tipoPago,
+        estado=payload_efectivo.estado,
+        sesionNum=payload_efectivo.sesionNum,
+        totalSesiones=payload_efectivo.totalSesiones,
         creadaEn=ahora,
-        inicio=(ahora if payload.estado == "en_atencion" else None),
-        fin=(ahora if payload.estado in {"completada", "no_asistio"} else None),
+        inicio=(ahora if payload_efectivo.estado == "en_atencion" else None),
+        fin=(
+            ahora if payload_efectivo.estado in {"completada", "no_asistio"} else None
+        ),
     )
 
     try:
         db.add(nueva_cita)
         db.flush()
+        vincular_sesion_a_cita(sesion, nueva_cita)
 
-        nuevo_pago = PagoDB(
-            pacienteId=payload.pacienteId,
-            citaId=nueva_cita.id,
-            concepto=detalle_servicios["procedimiento"],
-            fecha=payload.fecha,
-            total=datos_pago["total"],
-            cobrado=datos_pago["cobrado"],
-            saldo=datos_pago["saldo"],
-            metodo=datos_pago["metodo"],
-            tipoPago=payload.tipoPago,
-            cuotas=[],
-            creadoEn=ahora,
-            fechaUltPago=(payload.fecha if datos_pago["cobrado"] > 0 else None),
-            nota=("Pago generado automáticamente desde la cita"),
-            devuelto=0,
-            creditoFavor=0,
-        )
-
-        db.add(nuevo_pago)
+        if plan and plan.pagoId:
+            nuevo_pago = db.query(PagoDB).filter(PagoDB.id == plan.pagoId).first()
+        else:
+            nuevo_pago = PagoDB(
+                pacienteId=payload_efectivo.pacienteId,
+                casoClinicoId=caso.id,
+                planId=None,
+                citaId=nueva_cita.id,
+                concepto=detalle_servicios["procedimiento"],
+                fecha=payload_efectivo.fecha,
+                total=datos_pago["total"],
+                cobrado=datos_pago["cobrado"],
+                saldo=datos_pago["saldo"],
+                metodo=datos_pago["metodo"],
+                tipoPago=payload_efectivo.tipoPago,
+                cuotas=[],
+                creadoEn=ahora,
+                fechaUltPago=(
+                    payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
+                ),
+                nota=("Cargo generado automáticamente desde la cita"),
+                devuelto=0,
+                creditoFavor=0,
+            )
+            db.add(nuevo_pago)
         db.commit()
         db.refresh(nueva_cita)
-        db.refresh(nuevo_pago)
+        if nuevo_pago:
+            db.refresh(nuevo_pago)
 
         return {
             "message": ("Cita y registro financiero creados correctamente."),
             "cita": serializar_modelo(nueva_cita),
-            "pago": serializar_modelo(nuevo_pago),
+            "pago": serializar_modelo(nuevo_pago) if nuevo_pago else None,
+            "casoClinico": serializar_modelo(caso),
+            "sesionPlan": serializar_modelo(sesion) if sesion else None,
         }
     except HTTPException:
         db.rollback()
@@ -223,30 +253,56 @@ def actualizar_cita_con_pago(
         raise HTTPException(status_code=404, detail="La cita no existe.")
 
     obtener_paciente(db, payload.pacienteId)
-    validar_plan(db, payload.planId, payload.pacienteId)
-
-    if payload.sesionNum > payload.totalSesiones:
-        raise HTTPException(
-            status_code=400,
-            detail="La sesión actual no puede superar el total de sesiones.",
+    plan = obtener_plan_clinico(db, payload.planId, payload.pacienteId)
+    sesion_id = payload.sesionPlanId or (
+        cita.sesionPlanId if int(cita.planId or 0) == int(payload.planId or 0) else None
+    )
+    sesion = obtener_sesion_para_cita(db, plan, sesion_id, cita_id=cita_id)
+    payload_para_caso = payload
+    if (
+        not payload.casoClinicoId
+        and cita.casoClinicoId
+        and int(cita.pacienteId or 0) == int(payload.pacienteId)
+    ):
+        payload_para_caso = payload.model_copy(
+            update={"casoClinicoId": cita.casoClinicoId}
         )
+    caso = crear_caso_automatico_para_cita(db, payload_para_caso, plan)
+    payload_efectivo = payload.model_copy(
+        update={
+            "casoClinicoId": caso.id,
+            "tipoCita": "sesion_tratamiento" if plan else payload.tipoCita,
+            "tipoPago": "sesion" if plan else payload.tipoPago,
+            "montoPagado": 0 if plan else payload.montoPagado,
+            "sesionNum": sesion.numero if sesion else 1,
+            "totalSesiones": int(plan.nSesiones or 1) if plan else 1,
+        }
+    )
 
     hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
-        payload.fecha,
-        payload.hora,
-        payload.horaFin,
-        payload.duracionMinutos,
-        payload.estado,
+        payload_efectivo.fecha,
+        payload_efectivo.hora,
+        payload_efectivo.horaFin,
+        payload_efectivo.duracionMinutos,
+        payload_efectivo.estado,
         cita_excluida_id=cita_id,
     )
 
-    pago = db.query(PagoDB).filter(PagoDB.citaId == cita_id).first()
-    detalle_servicios = normalizar_servicios(payload)
-    datos_pago = calcular_datos_pago(payload, detalle_servicios["costo_total"])
+    pago_cita = db.query(PagoDB).filter(PagoDB.citaId == cita_id).first()
+    pago = (
+        db.query(PagoDB).filter(PagoDB.id == plan.pagoId).first()
+        if plan and plan.pagoId
+        else pago_cita
+    )
+    detalle_servicios = normalizar_servicios(payload_efectivo)
+    datos_pago = calcular_datos_pago(
+        payload_efectivo,
+        detalle_servicios["costo_total"],
+    )
     ahora = ahora_iso()
 
-    if pago and datos_pago["cobrado"] < redondear_monto(pago.cobrado):
+    if not plan and pago and datos_pago["cobrado"] < redondear_monto(pago.cobrado):
         raise HTTPException(
             status_code=400,
             detail=(
@@ -255,21 +311,29 @@ def actualizar_cita_con_pago(
             ),
         )
 
-    cita.pacienteId = payload.pacienteId
-    cita.planId = payload.planId
-    cita.citaBaseId = payload.citaBaseId
-    cita.fecha = payload.fecha
-    cita.hora = payload.hora
+    if cita.sesionPlanId and int(cita.sesionPlanId) != int(sesion.id if sesion else 0):
+        liberar_sesion_de_cita(db, cita)
+
+    cita.pacienteId = payload_efectivo.pacienteId
+    cita.casoClinicoId = caso.id
+    cita.planId = plan.id if plan else None
+    cita.sesionPlanId = sesion.id if sesion else None
+    cita.citaBaseId = payload_efectivo.citaBaseId
+    cita.tipoCita = payload_efectivo.tipoCita
+    cita.motivoConsulta = payload_efectivo.motivoConsulta.strip()
+    cita.piezaDental = payload_efectivo.piezaDental.strip()
+    cita.fecha = payload_efectivo.fecha
+    cita.hora = payload_efectivo.hora
     cita.horaFin = hora_fin_resuelta
     cita.duracionMinutos = duracion_resuelta
     cita.procedimiento = detalle_servicios["procedimiento"]
     cita.servicios = detalle_servicios["servicios"]
-    cita.notas = payload.notas.strip()
+    cita.notas = payload_efectivo.notas.strip()
     cita.costo = datos_pago["total"]
-    cita.tipoPago = payload.tipoPago
-    cita.estado = payload.estado
-    cita.sesionNum = payload.sesionNum
-    cita.totalSesiones = payload.totalSesiones
+    cita.tipoPago = payload_efectivo.tipoPago
+    cita.estado = payload_efectivo.estado
+    cita.sesionNum = payload_efectivo.sesionNum
+    cita.totalSesiones = payload_efectivo.totalSesiones
 
     if payload.estado == "en_atencion" and not cita.inicio:
         cita.inicio = ahora
@@ -277,9 +341,20 @@ def actualizar_cita_con_pago(
         cita.fin = ahora
 
     try:
-        if not pago:
+        vincular_sesion_a_cita(sesion, cita)
+
+        if plan and pago_cita and pago_cita is not pago:
+            if redondear_monto(pago_cita.cobrado) > 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="La cita tiene cobros y no puede trasladarse a un plan.",
+                )
+            db.delete(pago_cita)
+
+        if not plan and not pago:
             pago = PagoDB(
-                pacienteId=payload.pacienteId,
+                pacienteId=payload_efectivo.pacienteId,
+                casoClinicoId=caso.id,
                 citaId=cita.id,
                 cuotas=[],
                 creadoEn=ahora,
@@ -288,25 +363,36 @@ def actualizar_cita_con_pago(
             )
             db.add(pago)
 
-        pago.pacienteId = payload.pacienteId
-        pago.concepto = detalle_servicios["procedimiento"]
-        pago.fecha = payload.fecha
-        pago.total = datos_pago["total"]
-        pago.cobrado = datos_pago["cobrado"]
-        pago.saldo = datos_pago["saldo"]
-        pago.metodo = datos_pago["metodo"]
-        pago.tipoPago = payload.tipoPago
-        pago.fechaUltPago = payload.fecha if datos_pago["cobrado"] > 0 else None
+        if not plan and pago:
+            pago.pacienteId = payload_efectivo.pacienteId
+            pago.casoClinicoId = caso.id
+            pago.planId = None
+            pago.concepto = detalle_servicios["procedimiento"]
+            pago.fecha = payload_efectivo.fecha
+            pago.total = datos_pago["total"]
+            pago.cobrado = datos_pago["cobrado"]
+            pago.saldo = datos_pago["saldo"]
+            pago.metodo = datos_pago["metodo"]
+            pago.tipoPago = payload_efectivo.tipoPago
+            pago.fechaUltPago = (
+                payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
+            )
 
         db.commit()
         db.refresh(cita)
-        db.refresh(pago)
+        if pago:
+            db.refresh(pago)
 
         return {
             "message": "Cita y registro financiero actualizados correctamente.",
             "cita": serializar_modelo(cita),
-            "pago": serializar_modelo(pago),
+            "pago": serializar_modelo(pago) if pago else None,
+            "casoClinico": serializar_modelo(caso),
+            "sesionPlan": serializar_modelo(sesion) if sesion else None,
         }
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as error:
         db.rollback()
         raise HTTPException(
@@ -350,6 +436,7 @@ def reprogramar_cita(
     cita.hora = payload.hora
     cita.horaFin = hora_fin_resuelta
     cita.duracionMinutos = duracion_resuelta
+    actualizar_sesion_desde_cita(db, cita)
 
     try:
         db.commit()
@@ -426,6 +513,8 @@ def cambiar_estado_cita(
         cita.canceladaEn = None
         cita.motivoCancelacion = None
 
+    actualizar_sesion_desde_cita(db, cita)
+
     try:
         db.commit()
         db.refresh(cita)
@@ -484,9 +573,35 @@ def eliminar_cita_con_pago(
             )
 
     try:
+        caso_huerfano = None
+        if cita.casoClinicoId and not cita.planId:
+            caso_huerfano = (
+                db.query(CasoClinicoDB)
+                .filter(CasoClinicoDB.id == cita.casoClinicoId)
+                .first()
+            )
+            otras_citas = (
+                db.query(CitaDB)
+                .filter(
+                    CitaDB.casoClinicoId == cita.casoClinicoId,
+                    CitaDB.id != cita.id,
+                )
+                .first()
+            )
+            if (
+                otras_citas
+                or not caso_huerfano
+                or caso_huerfano.planId
+                or (caso_huerfano.diagnostico or "").strip()
+            ):
+                caso_huerfano = None
+
+        liberar_sesion_de_cita(db, cita)
         if pago:
             db.delete(pago)
         db.delete(cita)
+        if caso_huerfano:
+            db.delete(caso_huerfano)
         db.commit()
         return {"message": "Cita y registro financiero eliminados correctamente."}
     except Exception as error:

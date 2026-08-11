@@ -173,11 +173,13 @@ export default function App() {
   const [planPagos, setPlanPagos] = useState([]);
   const [busquedaPP, setBusquedaPP] = useState('');
   const [modalPPAbierto, setModalPPAbierto] = useState(false);
+  const [planPagoContexto, setPlanPagoContexto] = useState(null);
 
   // ==========================================
   // NUEVO: ESTADOS PARA PLANES DE TRATAMIENTO
   // ==========================================
   const [planes, setPlanes] = useState([]);
+  const [casosClinicos, setCasosClinicos] = useState([]);
   const [busquedaPlan, setBusquedaPlan] = useState('');
   const [modalPlanAbierto, setModalPlanAbierto] = useState(false);
   const [planSeleccionado, setPlanSeleccionado] = useState(null);
@@ -223,6 +225,14 @@ export default function App() {
         throw err;
       });
   };
+  const cargarCasosClinicos = () => {
+    return api.getCasosClinicos()
+      .then(data => setCasosClinicos(data || []))
+      .catch(err => {
+        console.error(err);
+        throw err;
+      });
+  };
 
   useEffect(() => {
     let componenteActivo = true;
@@ -233,14 +243,16 @@ export default function App() {
         api.getCitas(),
         api.getPagos(),
         api.getPlanPagos(),
-        api.getPlanes()
+        api.getPlanes(),
+        api.getCasosClinicos()
       ])
         .then(([
           pacientesCargados,
           citasCargadas,
           pagosCargados,
           planesPagoCargados,
-          planesCargados
+          planesCargados,
+          casosCargados
         ]) => {
           if (!componenteActivo) return;
 
@@ -249,6 +261,7 @@ export default function App() {
           setPagos(pagosCargados || []);
           setPlanPagos(planesPagoCargados || []);
           setPlanes(planesCargados || []);
+          setCasosClinicos(casosCargados || []);
         })
         .catch((error) => {
           console.error('No se pudieron cargar los datos iniciales:', error);
@@ -283,6 +296,7 @@ export default function App() {
       setPagos([]);
       setPlanPagos([]);
       setPlanes([]);
+      setCasosClinicos([]);
     } catch (error) {
       Swal.fire({
         title: 'No se pudo cerrar la sesión',
@@ -381,10 +395,11 @@ export default function App() {
   };
   const handleEditarCita = (cita) => { setCitaSeleccionada(cita); setModalCitaAbierto(true); };
 
-  const handleGuardarCita = async (payload, id) => {
+  const handleGuardarCita = async (payload, id, opciones = {}) => {
     try {
+      let respuesta;
       if (id) {
-        await api.actualizarCitaConPago(id, payload);
+        respuesta = await api.actualizarCitaConPago(id, payload);
         Swal.fire({
           title: 'Cita actualizada',
           text: 'La cita y su información financiera se actualizaron correctamente.',
@@ -395,7 +410,7 @@ export default function App() {
           showConfirmButton: false
         });
       } else {
-        await api.crearCitaConPago(payload);
+        respuesta = await api.crearCitaConPago(payload);
         Swal.fire({
           title: 'Cita agendada',
           text: 'La cita y su registro financiero fueron creados correctamente.',
@@ -413,8 +428,24 @@ export default function App() {
       await Promise.all([
         cargarCitas(),
         cargarPagos(),
-        cargarPlanPagos()
+        cargarPlanPagos(),
+        cargarPlanes(),
+        cargarCasosClinicos()
       ]);
+
+      if (opciones.abrirPlanPagos && respuesta?.pago) {
+        setPlanPagoContexto({
+          pacienteId: respuesta.cita?.pacienteId,
+          pagoId: respuesta.pago.id,
+          citaId: respuesta.cita?.id,
+          casoClinicoId: respuesta.casoClinico?.id,
+          concepto: respuesta.pago.concepto,
+          totalAcordado: respuesta.pago.total,
+          cobrado: respuesta.pago.cobrado,
+          origen: 'procedimiento'
+        });
+        setModalPPAbierto(true);
+      }
     } catch (error) {
       Swal.fire({
         title: 'No se pudo guardar',
@@ -965,20 +996,20 @@ export default function App() {
     const pendientes = plan.cuotas.filter(q => !q.pagado && q.tipo !== 'anticipo');
     if (pendientes.length === 0) return;
     const pagado = plan.cuotas.filter(q => q.pagado).reduce((a, c) => a + c.monto, 0);
-    const antPend = plan.cuotas.filter(q => !q.pagado && q.tipo === 'anticipo').reduce((a, c) => a + c.monto, 0);
-    const nuevoMonto = parseFloat((Math.max(0, parseFloat(plan.totalAcordado || 0) - pagado - antPend) / pendientes.length).toFixed(2));
+    const anticipo = Number(plan.anticipo || 0);
+    const nuevoMonto = parseFloat((Math.max(0, parseFloat(plan.totalAcordado || 0) - anticipo - pagado) / pendientes.length).toFixed(2));
     pendientes.forEach(q => { q.monto = nuevoMonto; });
     plan.totalCuotas = plan.cuotas.reduce((a, q) => a + q.monto, 0);
-    plan.cobrado = pagado;
-    plan.saldo = Math.max(0, plan.totalCuotas - plan.cobrado);
+    plan.cobrado = anticipo + pagado;
+    plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
   };
 
   const handlePagarCuota = async (plan, idx) => {
     const cuota = plan.cuotas[idx];
     if (!cuota || cuota.pagado) return;
     cuota.pagado = true; cuota.fechaPago = new Date().toISOString().split('T')[0]; cuota.metodoPago = plan.metodoPreferido || 'Efectivo';
-    plan.cobrado = plan.cuotas.filter(c => c.pagado).reduce((acc, c) => acc + c.monto, 0);
-    plan.saldo = Math.max(0, (plan.totalCuotas || 0) - plan.cobrado);
+    plan.cobrado = Number(plan.anticipo || 0) + plan.cuotas.filter(c => c.pagado).reduce((acc, c) => acc + c.monto, 0);
+    plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
     if (plan.saldo === 0) plan.estado = 'completado';
     await api.actualizarPlanPago(plan.id, plan);
     if (plan.pagoId) {
@@ -994,8 +1025,8 @@ export default function App() {
     if (confirm.isConfirmed) {
       const cuota = plan.cuotas[idx];
       cuota.pagado = false; cuota.fechaPago = null; cuota.metodoPago = null; plan.estado = 'activo';
-      plan.cobrado = plan.cuotas.filter(c => c.pagado).reduce((acc, c) => acc + c.monto, 0);
-      plan.saldo = Math.max(0, (plan.totalCuotas || 0) - plan.cobrado);
+      plan.cobrado = Number(plan.anticipo || 0) + plan.cuotas.filter(c => c.pagado).reduce((acc, c) => acc + c.monto, 0);
+      plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
       await api.actualizarPlanPago(plan.id, plan);
       if (plan.pagoId) {
         const pagoAsociado = pagos.find(p => p.id === plan.pagoId);
@@ -1043,19 +1074,50 @@ export default function App() {
   };
 
   const handleGuardarNuevoPP = async (payload) => {
-    try { await api.crearPlanPago(payload); setModalPPAbierto(false); cargarPlanPagos(); Swal.fire({ title: 'Plan Creado 🗓️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false }); }
-    catch { Swal.fire({ title: 'Error', text: 'No se pudo crear el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' }); }
+    try {
+      await api.crearPlanPago(payload);
+      setModalPPAbierto(false);
+      setPlanPagoContexto(null);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      Swal.fire({ title: 'Plan de pagos vinculado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
+    } catch (error) {
+      Swal.fire({ title: 'No se pudo crear', text: error.message || 'No se pudo crear el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
   };
 
   const handleNuevoPlan = () => { setPlanSeleccionado(null); setModalPlanAbierto(true); };
   const handleEditarPlan = (plan) => { setPlanSeleccionado(plan); setModalPlanAbierto(true); };
 
-  const handleGuardarPlan = async (payload, id) => {
+  const handleGuardarPlan = async (payload, id, opciones = {}) => {
     try {
-      if (id) { await api.actualizarPlan(id, payload); Swal.fire({ title: 'Plan Actualizado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); }
-      else { await api.crearPlan(payload); Swal.fire({ title: 'Plan Creado 🗂️', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); }
-      setModalPlanAbierto(false); cargarPlanes();
-    } catch { Swal.fire({ title: 'Error', text: 'No se pudo guardar el plan.', icon: 'error', background: '#1e293b', color: '#fff' }); }
+      const respuesta = id
+        ? await api.actualizarPlan(id, payload)
+        : await api.crearPlan(payload);
+      const planGuardado = respuesta?.registro || respuesta;
+      setModalPlanAbierto(false);
+      setPlanSeleccionado(null);
+      await Promise.all([cargarPlanes(), cargarPagos(), cargarCasosClinicos()]);
+
+      if (opciones.abrirPlanPago && planGuardado?.pago) {
+        setPlanPagoContexto({
+          pacienteId: planGuardado.pacienteId,
+          pagoId: planGuardado.pago.id,
+          planId: planGuardado.id,
+          casoClinicoId: planGuardado.casoClinicoId,
+          concepto: planGuardado.nombre,
+          totalAcordado: planGuardado.pago.total,
+          cobrado: planGuardado.pago.cobrado,
+          nSesiones: planGuardado.nSesiones,
+          sesiones: planGuardado.sesiones || [],
+          origen: 'plan_tratamiento'
+        });
+        setModalPPAbierto(true);
+      }
+
+      Swal.fire({ title: id ? 'Plan actualizado' : 'Plan y sesiones creados', icon: 'success', background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+    } catch (error) {
+      Swal.fire({ title: 'No se pudo guardar', text: error.message || 'No se pudo guardar el plan.', icon: 'error', background: '#1e293b', color: '#fff' });
+    }
   };
 
   const handleEliminarPlanTratamiento = async (id, nombre) => {
@@ -1370,7 +1432,11 @@ export default function App() {
               <div className="space-y-6">
                 {planesFiltrados.length > 0 ? (
                   planesFiltrados.map((pl) => {
-                    const citasDelPlan = citas.filter(c => c.planId === pl.id).sort((a, b) => { const aComp = a.estado === 'completada' ? 1 : 0; const bComp = b.estado === 'completada' ? 1 : 0; if (aComp !== bComp) return aComp - bComp; return aComp === 1 ? (b.fecha || '').localeCompare(a.fecha || '') : (a.fecha || '').localeCompare(b.fecha || ''); });
+                    const sesiones = [...(pl.sesiones || [])].sort((a, b) => Number(a.numero) - Number(b.numero));
+                    const sesionesCompletadas = sesiones.filter(sesion => sesion.estado === 'completada').length;
+                    const siguienteSesion = sesiones.find(sesion => sesion.estado === 'pendiente');
+                    const pagoPlan = pl.pago || pagos.find(pago => Number(pago.id) === Number(pl.pagoId));
+                    const porcentajeClinico = sesiones.length ? Math.round((sesionesCompletadas / sesiones.length) * 100) : 0;
                     return (
                       <div key={pl.id} className="bg-slate-800/80 border border-purple-500/20 rounded-2xl p-6 shadow-xl hover:border-purple-500/40 transition">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-700/80 pb-4">
@@ -1390,8 +1456,27 @@ export default function App() {
                           <h3 className="text-base font-bold text-white">{pl.nombre}</h3>
                           <div className="text-xs text-slate-400 mt-0.5">{pl.tipo} · {pl.duracion}</div>
                         </div>
-                        <div className="flex gap-2 pt-2">
-                          <button onClick={() => { setCitaSeleccionada({ pacienteId: pl.pacienteId, planId: pl.id, procedimiento: `${pl.nombre} — Sesión ${citasDelPlan.length + 1}`, costo: 0, tipoPago: 'sesion' }); setModalCitaAbierto(true); }} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg transition cursor-pointer">📅 Agendar Sesión</button>
+
+                        <div className="mb-4 rounded-xl border border-slate-700 bg-slate-900/55 p-4">
+                          <div className="mb-3 flex items-center justify-between text-xs"><span className="font-bold text-purple-200">Avance clínico · sesión {Math.min(sesionesCompletadas + 1, sesiones.length || 1)} de {sesiones.length || pl.nSesiones}</span><span className="text-slate-400">{porcentajeClinico}% completado</span></div>
+                          <div className="flex gap-2 overflow-x-auto pb-2">
+                            {sesiones.map((sesion) => (
+                              <div key={sesion.id} title={`${sesion.titulo} · ${sesion.fechaProgramada || 'sin fecha'}`} className={`flex min-w-20 flex-col items-center rounded-xl border px-2 py-2 text-center ${sesion.estado === 'completada' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : sesion.estado === 'agendada' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' : 'border-slate-700 bg-slate-950/40 text-slate-500'}`}>
+                                <span className="text-sm font-black">{sesion.numero}</span><span className="mt-0.5 text-[9px] uppercase">{sesion.estado}</span>{sesion.fechaProgramada && <span className="mt-1 text-[9px]">{sesion.fechaProgramada}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-xl border border-slate-700 bg-slate-900/55 p-3"><div className="text-[10px] uppercase text-slate-500">Costo del plan</div><div className="mt-1 font-bold text-white">{fMon(pagoPlan?.total ?? pl.costo)}</div></div>
+                          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3"><div className="text-[10px] uppercase text-emerald-400">Cobrado</div><div className="mt-1 font-bold text-emerald-300">{fMon(pagoPlan?.cobrado)}</div></div>
+                          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3"><div className="text-[10px] uppercase text-rose-400">Saldo</div><div className="mt-1 font-bold text-rose-300">{fMon(pagoPlan?.saldo ?? pl.costo)}</div></div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          <button disabled={!siguienteSesion} onClick={() => { setCitaSeleccionada({ pacienteId: pl.pacienteId, casoClinicoId: pl.casoClinicoId, planId: pl.id, sesionPlanId: siguienteSesion?.id, tipoCita: 'sesion_tratamiento', procedimiento: siguienteSesion?.titulo || pl.nombre, costo: 0, tipoPago: 'sesion' }); setModalCitaAbierto(true); }} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">📅 {siguienteSesion ? `Agendar sesión ${siguienteSesion.numero}` : 'Todas agendadas'}</button>
+                          {!pl.planPago && Number(pagoPlan?.saldo || 0) > 0 && <button onClick={() => { setPlanPagoContexto({ pacienteId: pl.pacienteId, pagoId: pagoPlan?.id, planId: pl.id, casoClinicoId: pl.casoClinicoId, concepto: pl.nombre, totalAcordado: pagoPlan?.total ?? pl.costo, cobrado: pagoPlan?.cobrado || 0, nSesiones: pl.nSesiones, sesiones, origen: 'plan_tratamiento' }); setModalPPAbierto(true); }} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-600 hover:text-white">💳 Crear {sesiones.length} cuotas</button>}
                           <button onClick={() => handleEditarPlan(pl)} className="px-4 py-2 bg-slate-700 hover:bg-amber-600 text-slate-200 hover:text-white text-xs font-semibold rounded-xl transition cursor-pointer">✏️ Editar</button>
                           <button onClick={() => handleEliminarPlanTratamiento(pl.id, pl.nombre)} className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/30 transition cursor-pointer ml-auto">🗑 Eliminar Plan</button>
                         </div>
@@ -1410,7 +1495,7 @@ export default function App() {
                   <h1 className="text-3xl font-bold text-cyan-400">Planes de Pago en Cuotas</h1>
                   <p className="text-sm text-slate-400 mt-1">Cronogramas de financiamiento, vencimientos y abonos por cuota</p>
                 </div>
-                <button onClick={() => setModalPPAbierto(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-lg transition cursor-pointer"><PlusCircle size={18} /> Nuevo Plan de Pago</button>
+                <button onClick={() => { setPlanPagoContexto(null); setModalPPAbierto(true); }} className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 shadow-lg transition cursor-pointer"><PlusCircle size={18} /> Nuevo Plan de Pago</button>
               </div>
               <div className="relative mb-6">
                 <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
@@ -1421,7 +1506,7 @@ export default function App() {
                   planPagosFiltrados.map((pl) => {
                     const cuotas = pl.cuotas || [];
                     const cuotasPagadas = cuotas.filter(q => q.pagado);
-                    const totalPagado = cuotasPagadas.reduce((acc, q) => acc + (parseFloat(q.monto) || 0), 0);
+                    const totalPagado = Number(pl.anticipo || 0) + cuotasPagadas.reduce((acc, q) => acc + (parseFloat(q.monto) || 0), 0);
                     const totalCuotasNum = parseFloat(pl.totalAcordado || 0);
                     const porcentaje = totalCuotasNum > 0 ? Math.min(100, (totalPagado / totalCuotasNum) * 100).toFixed(1) : 0;
                     return (
@@ -1432,6 +1517,7 @@ export default function App() {
                             <div>
                               <div className="text-lg font-bold text-white leading-tight">{pl.nombrePaciente}</div>
                               <div className="text-xs text-cyan-400 font-medium mt-0.5">{pl.concepto || 'Financiamiento Odontológico'}</div>
+                              <div className="mt-1 text-[10px] font-bold uppercase text-slate-500">{pl.origen === 'plan_tratamiento' ? 'Una cuota por sesión clínica' : 'Procedimiento puntual · cuotas libres'}</div>
                             </div>
                           </div>
                           <div className="text-right">
@@ -1455,7 +1541,7 @@ export default function App() {
                                   <td className="p-3 font-serif font-bold text-white">S/. {parseFloat(q.monto || 0).toFixed(2)}</td>
                                   <td className="p-3 text-right space-x-1.5">
                                     {!q.pagado ? (
-                                      <><button onClick={() => handlePagarCuota(pl, idx)} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold transition cursor-pointer">💵 Pagar</button><button onClick={() => handleQuitarCuota(pl, idx)} className="p-1 bg-slate-800 hover:bg-rose-600/80 text-slate-400 hover:text-white rounded transition cursor-pointer">🗑️</button></>
+                                      <><button onClick={() => handlePagarCuota(pl, idx)} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold transition cursor-pointer">💵 Pagar</button>{pl.origen !== 'plan_tratamiento' && <button onClick={() => handleQuitarCuota(pl, idx)} className="p-1 bg-slate-800 hover:bg-rose-600/80 text-slate-400 hover:text-white rounded transition cursor-pointer">🗑️</button>}</>
                                     ) : (<button onClick={() => handleRevertirCuota(pl, idx)} className="px-2 py-1 bg-slate-700 hover:bg-amber-600/80 text-slate-300 hover:text-white rounded font-semibold flex items-center gap-1 ml-auto transition cursor-pointer"><Undo2 size={12} /> Revertir</button>)}
                                   </td>
                                 </tr>
@@ -1464,7 +1550,7 @@ export default function App() {
                           </table>
                         </div>
                         <div className="flex gap-2 pt-2">
-                          <button onClick={() => handleAgregarCuota(pl)} className="px-3 py-1.5 bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"><PlusCircle size={15} /> ＋ Añadir Cuota</button>
+                          {pl.origen !== 'plan_tratamiento' && <button onClick={() => handleAgregarCuota(pl)} className="px-3 py-1.5 bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"><PlusCircle size={15} /> ＋ Añadir Cuota</button>}
                           <button onClick={() => handleEliminarPlan(pl.id)} className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/30 transition cursor-pointer ml-auto">🗑 Eliminar Plan</button>
                         </div>
                       </div>
@@ -1500,6 +1586,8 @@ export default function App() {
         }
         pacientes={pacientes}
         citas={citas}
+        planes={planes}
+        casosClinicos={casosClinicos}
       />
       <CompletarCitaModal key={citaParaAccion ? `comp-${citaParaAccion.id}` : 'comp-modal'} isOpen={modalCompletarAbierto} onClose={() => setModalCompletarAbierto(false)} onSave={handleGuardarCompletado} cita={citaParaAccion} pago={pagoParaAccion} />
       <CancelarCitaModal key={citaParaAccion ? `canc-${citaParaAccion.id}` : 'canc-modal'} isOpen={modalCancelarAbierto} onClose={() => setModalCancelarAbierto(false)} onSave={handleGuardarCancelacion} cita={citaParaAccion} pago={pagoParaAccion} />
@@ -1510,10 +1598,11 @@ export default function App() {
         citas={citas}
         pagos={pagos}
         planes={planes}
+        casosClinicos={casosClinicos}
         planPagos={planPagos}
-        onDatosActualizados={() => Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos(), cargarPlanes()])}
-        onCrearPlan={(paciente) => {
-          setPlanSeleccionado({ pacienteId: paciente?.id || null });
+        onDatosActualizados={() => Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos(), cargarPlanes(), cargarCasosClinicos()])}
+        onCrearPlan={(paciente, caso = null) => {
+          setPlanSeleccionado({ pacienteId: paciente?.id || null, casoClinicoId: caso?.id || null });
           setModalPlanAbierto(true);
         }}
         onVerPlanPagos={(paciente) => {
@@ -1521,14 +1610,14 @@ export default function App() {
           setVistaActiva('planpagos');
           setModalFichaAbierto(false);
         }}
-        onNuevaCita={(paciente) => {
-          setCitaSeleccionada({ pacienteId: paciente?.id || null });
+        onNuevaCita={(paciente, datosIniciales = {}) => {
+          setCitaSeleccionada({ pacienteId: paciente?.id || null, ...datosIniciales });
           setModalCitaAbierto(true);
         }}
         onEditarPaciente={handleEditarPaciente}
       />
-      <PlanPagoModal isOpen={modalPPAbierto} onClose={() => setModalPPAbierto(false)} onSave={handleGuardarNuevoPP} pacientes={pacientes} />
-      <PlanTratamientoModal key={planSeleccionado ? planSeleccionado.id : 'nuevo-plan'} isOpen={modalPlanAbierto} onClose={() => setModalPlanAbierto(false)} onSave={handleGuardarPlan} planEditar={planSeleccionado} pacientes={pacientes} />
+      <PlanPagoModal isOpen={modalPPAbierto} onClose={() => { setModalPPAbierto(false); setPlanPagoContexto(null); }} onSave={handleGuardarNuevoPP} pacientes={pacientes} pagos={pagos} planes={planes} planPagos={planPagos} datosIniciales={planPagoContexto} />
+      <PlanTratamientoModal key={planSeleccionado?.id || planSeleccionado?.pacienteId || 'nuevo-plan'} isOpen={modalPlanAbierto} onClose={() => { setModalPlanAbierto(false); setPlanSeleccionado(null); }} onSave={handleGuardarPlan} planEditar={planSeleccionado} pacientes={pacientes} casosClinicos={casosClinicos} />
     </div>
   );
 }

@@ -72,10 +72,14 @@ def test_aplicar_migracion_y_registrar_version(
     assert "servicios" in columnas
     assert "horaFin" in columnas
     assert "duracionMinutos" in columnas
+    assert "casoClinicoId" in columnas
+    assert "sesionPlanId" in columnas
+    assert "tipoCita" in columnas
     assert versiones == [
         (1, "compatibilidad_columnas_citas"),
         (2, "identificadores_unicos_pacientes"),
         (3, "usuarios_y_sesiones"),
+        (4, "flujo_clinico_financiero"),
     ]
     assert not hay_migraciones_pendientes(motor)
 
@@ -98,7 +102,7 @@ def test_no_repetir_migracion_aplicada(
             "SELECT COUNT(*) FROM schema_migrations"
         ).scalar_one()
 
-    assert cantidad == 3
+    assert cantidad == 4
 
     motor.dispose()
 
@@ -303,4 +307,32 @@ def test_crear_esquema_de_autenticacion(
             ),
         )
 
+    motor.dispose()
+
+
+def test_crear_esquema_de_casos_y_sesiones(
+    tmp_path: Path,
+) -> None:
+    motor = crear_motor_temporal(tmp_path)
+    crear_esquema_antiguo(motor)
+
+    with motor.begin() as connection:
+        aplicar_migraciones(connection)
+        tablas = {
+            fila[0]
+            for fila in connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        indices = {
+            fila[0]
+            for fila in connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            ).fetchall()
+        }
+
+    assert "casosClinicos" in tablas
+    assert "sesionesPlan" in tablas
+    assert "ix_casos_clinicos_paciente" in indices
+    assert "ux_sesiones_plan_numero" in indices
     motor.dispose()

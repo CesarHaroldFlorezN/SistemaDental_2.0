@@ -167,6 +167,116 @@ def migracion_003_usuarios_y_sesiones(
     )
 
 
+def migracion_004_flujo_clinico_financiero(
+    connection: Connection,
+) -> None:
+    """Añade casos clínicos, sesiones planificadas y vínculos financieros."""
+
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS casosClinicos (
+            id INTEGER PRIMARY KEY,
+            pacienteId INTEGER NOT NULL,
+            planId INTEGER,
+            titulo VARCHAR(180) NOT NULL,
+            tipo VARCHAR(50) NOT NULL DEFAULT 'procedimiento',
+            motivoConsulta TEXT,
+            piezaDental VARCHAR(30),
+            diagnostico TEXT,
+            estado VARCHAR(50) NOT NULL DEFAULT 'abierto',
+            creadoEn VARCHAR(50) NOT NULL,
+            actualizadoEn VARCHAR(50)
+        )
+        """
+    )
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS sesionesPlan (
+            id INTEGER PRIMARY KEY,
+            planId INTEGER NOT NULL,
+            numero INTEGER NOT NULL,
+            titulo VARCHAR(180) NOT NULL,
+            estado VARCHAR(50) NOT NULL DEFAULT 'pendiente',
+            citaId INTEGER,
+            fechaProgramada VARCHAR(50),
+            cuotaNum INTEGER,
+            notas TEXT,
+            creadoEn VARCHAR(50) NOT NULL,
+            actualizadoEn VARCHAR(50)
+        )
+        """
+    )
+
+    cambios_por_tabla = {
+        "citas": (
+            ("casoClinicoId", "ALTER TABLE citas ADD COLUMN casoClinicoId INTEGER"),
+            ("sesionPlanId", "ALTER TABLE citas ADD COLUMN sesionPlanId INTEGER"),
+            (
+                "tipoCita",
+                "ALTER TABLE citas ADD COLUMN tipoCita VARCHAR(50) DEFAULT 'procedimiento'",
+            ),
+            ("motivoConsulta", "ALTER TABLE citas ADD COLUMN motivoConsulta TEXT"),
+            ("piezaDental", "ALTER TABLE citas ADD COLUMN piezaDental VARCHAR(30)"),
+        ),
+        "planes": (
+            (
+                "casoClinicoId",
+                "ALTER TABLE planes ADD COLUMN casoClinicoId INTEGER",
+            ),
+            ("pagoId", "ALTER TABLE planes ADD COLUMN pagoId INTEGER"),
+        ),
+        "pagos": (
+            (
+                "casoClinicoId",
+                "ALTER TABLE pagos ADD COLUMN casoClinicoId INTEGER",
+            ),
+            ("planId", "ALTER TABLE pagos ADD COLUMN planId INTEGER"),
+        ),
+        "planPagos": (
+            (
+                "casoClinicoId",
+                "ALTER TABLE planPagos ADD COLUMN casoClinicoId INTEGER",
+            ),
+            ("planId", "ALTER TABLE planPagos ADD COLUMN planId INTEGER"),
+            (
+                "origen",
+                "ALTER TABLE planPagos ADD COLUMN origen VARCHAR(50) DEFAULT 'procedimiento'",
+            ),
+        ),
+        "movimientosCuenta": (
+            (
+                "casoClinicoId",
+                "ALTER TABLE movimientosCuenta ADD COLUMN casoClinicoId INTEGER",
+            ),
+            (
+                "planId",
+                "ALTER TABLE movimientosCuenta ADD COLUMN planId INTEGER",
+            ),
+        ),
+    }
+
+    for tabla, cambios in cambios_por_tabla.items():
+        if not _existe_tabla(connection, tabla):
+            continue
+        columnas = _columnas_tabla(connection, tabla)
+        for columna, sentencia in cambios:
+            if columna not in columnas:
+                connection.exec_driver_sql(sentencia)
+
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_casos_clinicos_paciente ON casosClinicos (pacienteId)"
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_casos_clinicos_estado ON casosClinicos (estado)"
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_sesiones_plan_plan ON sesionesPlan (planId)"
+    )
+    connection.exec_driver_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_sesiones_plan_numero ON sesionesPlan (planId, numero)"
+    )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -182,6 +292,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         3,
         "usuarios_y_sesiones",
         migracion_003_usuarios_y_sesiones,
+    ),
+    (
+        4,
+        "flujo_clinico_financiero",
+        migracion_004_flujo_clinico_financiero,
     ),
 )
 

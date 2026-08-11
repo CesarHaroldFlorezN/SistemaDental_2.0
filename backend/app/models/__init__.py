@@ -1,4 +1,5 @@
 from .cita import CitaDB
+from .clinica import CasoClinicoDB, SesionPlanDB
 from .documento import DocumentoPacienteDB
 from .finanzas import (
     MovimientoCuentaDB,
@@ -10,6 +11,7 @@ from .paciente import PacienteDB
 from .usuario import SesionDB, UsuarioDB
 
 __all__ = [
+    "CasoClinicoDB",
     "CitaDB",
     "DocumentoPacienteDB",
     "MovimientoCuentaDB",
@@ -18,5 +20,6 @@ __all__ = [
     "PlanDB",
     "PlanPagoDB",
     "SesionDB",
+    "SesionPlanDB",
     "UsuarioDB",
 ]
