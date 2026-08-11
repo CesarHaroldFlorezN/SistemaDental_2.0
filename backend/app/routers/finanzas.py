@@ -689,7 +689,7 @@ def registrar_adelanto_plan_pago(
         base, sobrante = divmod(centavos, len(pendientes))
         for posicion, indice in enumerate(pendientes):
             monto_cuota = float(
-                Decimal(base + (1 if posicion < sobrante else 0)) / Decimal("100")
+                Decimal(base + (1 if posicion < sobrante else 0)) / Decimal(100)
             )
             cuotas[indice]["monto"] = monto_cuota
             cuotas[indice]["cubiertaPorAdelanto"] = monto_cuota <= 0
@@ -769,7 +769,74 @@ def actualizar_plan_pago(
                 detail="No se puede cambiar el origen clínico de un plan de pagos.",
             )
 
-    cuotas = data.get("cuotas", registro.cuotas or []) or []
+    cuotas_anteriores = [dict(cuota) for cuota in (registro.cuotas or [])]
+    cuotas = [
+        dict(cuota)
+        for cuota in (data.get("cuotas", cuotas_anteriores) or [])
+    ]
+
+    def clave_cuota(cuota: dict[str, Any], posicion: int) -> tuple[str, int, int]:
+        return (
+            str(cuota.get("tipo") or "cuota"),
+            int(cuota.get("sesionPlanId") or 0),
+            int(cuota.get("num") or posicion + 1),
+        )
+
+    anteriores_por_clave = {
+        clave_cuota(cuota, posicion): cuota
+        for posicion, cuota in enumerate(cuotas_anteriores)
+    }
+    nuevas_por_clave = {
+        clave_cuota(cuota, posicion): cuota
+        for posicion, cuota in enumerate(cuotas)
+    }
+    if len(anteriores_por_clave) != len(cuotas_anteriores) or len(
+        nuevas_por_clave
+    ) != len(cuotas):
+        raise HTTPException(
+            status_code=400,
+            detail="El cronograma contiene cuotas duplicadas.",
+        )
+
+    for clave, cuota_anterior in anteriores_por_clave.items():
+        if cuota_anterior.get("pagado") and clave not in nuevas_por_clave:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede eliminar una cuota que ya fue pagada.",
+            )
+    for clave, cuota_nueva in nuevas_por_clave.items():
+        if cuota_nueva.get("pagado") and clave not in anteriores_por_clave:
+            raise HTTPException(
+                status_code=400,
+                detail="Una cuota nueva debe registrarse primero como pendiente.",
+            )
+
+    cambios_estado = [
+        (anteriores_por_clave[clave], nuevas_por_clave[clave])
+        for clave in anteriores_por_clave.keys() & nuevas_por_clave.keys()
+        if bool(anteriores_por_clave[clave].get("pagado"))
+        != bool(nuevas_por_clave[clave].get("pagado"))
+    ]
+    if len(cambios_estado) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Registra o revierte una sola cuota por operación.",
+        )
+
+    montos_modificados = any(
+        redondear_monto(anteriores_por_clave[clave].get("monto"))
+        != redondear_monto(nuevas_por_clave[clave].get("monto"))
+        for clave in anteriores_por_clave.keys() & nuevas_por_clave.keys()
+    )
+    if cambios_estado and (
+        montos_modificados
+        or anteriores_por_clave.keys() != nuevas_por_clave.keys()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede modificar el cronograma mientras se registra un pago.",
+        )
+
     if registro.planId:
         plan = db.query(PlanDB).filter(PlanDB.id == registro.planId).first()
         sesiones = (
@@ -786,20 +853,50 @@ def actualizar_plan_pago(
             )
         if [int(cuota.get("sesionPlanId") or 0) for cuota in cuotas_reales] != [
             int(sesion.id) for sesion in sesiones
+        ] or [int(cuota.get("num") or 0) for cuota in cuotas_reales] != [
+            int(sesion.numero) for sesion in sesiones
         ]:
             raise HTTPException(
                 status_code=400,
                 detail="No se puede romper el vínculo entre cuotas y sesiones.",
             )
+        if montos_modificados:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Los montos de un plan de tratamiento solo cambian "
+                    "mediante un adelanto."
+                ),
+            )
 
     total = redondear_monto(registro.totalAcordado)
     anticipo = redondear_monto(registro.anticipo)
+    total_programado = redondear_monto(
+        sum(
+            (
+                Decimal(str(cuota.get("monto") or 0))
+                for cuota in cuotas
+                if cuota.get("tipo") == "cuota"
+            ),
+            start=Decimal("0.00"),
+        )
+    )
+    total_financiado = redondear_monto(max(Decimal("0.00"), total - anticipo))
+    if cuotas and total_programado != total_financiado:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "La suma de las cuotas debe coincidir con el monto "
+                "financiado pendiente del anticipo."
+            ),
+        )
+
     pagado_cuotas = redondear_monto(
         sum(
             (
                 Decimal(str(cuota.get("monto") or 0))
                 for cuota in cuotas
-                if cuota.get("pagado")
+                if cuota.get("tipo") == "cuota" and cuota.get("pagado")
             ),
             start=Decimal("0.00"),
         )
@@ -809,12 +906,7 @@ def actualizar_plan_pago(
     cobrado_anterior = redondear_monto(registro.cobrado)
 
     registro.cuotas = cuotas
-    registro.totalCuotas = redondear_monto(
-        sum(
-            (Decimal(str(cuota.get("monto") or 0)) for cuota in cuotas),
-            start=Decimal("0.00"),
-        )
-    )
+    registro.totalCuotas = total_programado
     registro.cobrado = nuevo_cobrado
     registro.saldo = saldo
     registro.estado = (
@@ -837,15 +929,13 @@ def actualizar_plan_pago(
         pago.tipoPago = "completo" if saldo <= Decimal("0.00") else "cuotas"
 
     if pago and diferencia != Decimal("0.00"):
-        cuota_cambiada = next(
-            (
-                cuota
-                for cuota in cuotas
-                if redondear_monto(cuota.get("monto")) == abs(diferencia)
-                and bool(cuota.get("pagado")) == (diferencia > 0)
-            ),
-            {},
-        )
+        if not cambios_estado:
+            raise HTTPException(
+                status_code=400,
+                detail="No se pudo identificar la cuota modificada.",
+            )
+        cuota_anterior, cuota_nueva = cambios_estado[0]
+        cuota_cambiada = cuota_nueva if diferencia > 0 else cuota_anterior
         db.add(
             MovimientoCuentaDB(
                 pacienteId=pago.pacienteId,

@@ -1003,11 +1003,16 @@ export default function App() {
   const reajustarCuotas = (plan) => {
     const pendientes = plan.cuotas.filter(q => !q.pagado && q.tipo !== 'anticipo');
     if (pendientes.length === 0) return;
-    const pagado = plan.cuotas.filter(q => q.pagado).reduce((a, c) => a + c.monto, 0);
+    const pagado = plan.cuotas.filter(q => q.pagado).reduce((a, c) => a + Number(c.monto || 0), 0);
     const anticipo = Number(plan.anticipo || 0);
-    const nuevoMonto = parseFloat((Math.max(0, parseFloat(plan.totalAcordado || 0) - anticipo - pagado) / pendientes.length).toFixed(2));
-    pendientes.forEach(q => { q.monto = nuevoMonto; });
-    plan.totalCuotas = plan.cuotas.reduce((a, q) => a + q.monto, 0);
+    const restante = Math.max(0, Number(plan.totalAcordado || 0) - anticipo - pagado);
+    const centavos = Math.round(restante * 100);
+    const base = Math.floor(centavos / pendientes.length);
+    const sobrante = centavos - (base * pendientes.length);
+    pendientes.forEach((cuota, indice) => {
+      cuota.monto = (base + (indice < sobrante ? 1 : 0)) / 100;
+    });
+    plan.totalCuotas = plan.cuotas.reduce((a, q) => a + Number(q.monto || 0), 0);
     plan.cobrado = anticipo + pagado;
     plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
   };
@@ -1081,16 +1086,15 @@ export default function App() {
   const handleRevertirCuota = async (plan, idx) => {
     const confirm = await Swal.fire({ title: '¿Revertir este pago?', icon: 'warning', showCancelButton: true, background: '#1e293b', color: '#fff', confirmButtonColor: '#d97706', confirmButtonText: 'Sí, revertir' });
     if (confirm.isConfirmed) {
-      const cuota = plan.cuotas[idx];
-      cuota.pagado = false; cuota.fechaPago = null; cuota.metodoPago = null; plan.estado = 'activo';
-      plan.cobrado = Number(plan.anticipo || 0) + plan.cuotas.filter(c => c.pagado).reduce((acc, c) => acc + c.monto, 0);
-      plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
-      await api.actualizarPlanPago(plan.id, plan);
-      if (plan.pagoId) {
-        const pagoAsociado = pagos.find(p => p.id === plan.pagoId);
-        if (pagoAsociado) await api.actualizarPago(pagoAsociado.id, { ...pagoAsociado, cobrado: plan.cobrado, saldo: plan.saldo, cuotas: plan.cuotas });
-      }
-      cargarPlanPagos(); cargarPagos();
+      const cuotasActualizadas = plan.cuotas.map((cuota, posicion) => posicion === idx
+        ? { ...cuota, pagado: false, fechaPago: null, metodoPago: null, referencia: '' }
+        : { ...cuota });
+      await api.actualizarPlanPago(plan.id, {
+        ...plan,
+        estado: 'activo',
+        cuotas: cuotasActualizadas
+      });
+      await Promise.all([cargarPlanPagos(), cargarPagos()]);
       Swal.fire({ title: 'Cobro revertido', icon: 'warning', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false });
     }
   };
@@ -1102,11 +1106,7 @@ export default function App() {
     let cont = 1; plan.cuotas.forEach(q => { if (q.tipo !== 'anticipo') q.num = cont++; });
     reajustarCuotas(plan);
     await api.actualizarPlanPago(plan.id, plan);
-    if (plan.pagoId) {
-      const pagoAsociado = pagos.find(p => p.id === plan.pagoId);
-      if (pagoAsociado) await api.actualizarPago(pagoAsociado.id, { ...pagoAsociado, cuotas: plan.cuotas });
-    }
-    cargarPlanPagos(); cargarPagos();
+    await Promise.all([cargarPlanPagos(), cargarPagos()]);
     Swal.fire({ title: 'Cuota añadida', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
   };
 
@@ -1117,11 +1117,7 @@ export default function App() {
       let cont = 1; plan.cuotas.forEach(q => { if (q.tipo !== 'anticipo') q.num = cont++; });
       reajustarCuotas(plan);
       await api.actualizarPlanPago(plan.id, plan);
-      if (plan.pagoId) {
-        const pagoAsociado = pagos.find(p => p.id === plan.pagoId);
-        if (pagoAsociado) await api.actualizarPago(pagoAsociado.id, { ...pagoAsociado, cuotas: plan.cuotas });
-      }
-      cargarPlanPagos(); cargarPagos();
+      await Promise.all([cargarPlanPagos(), cargarPagos()]);
       Swal.fire({ title: 'Cuota eliminada', icon: 'success', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false });
     }
   };

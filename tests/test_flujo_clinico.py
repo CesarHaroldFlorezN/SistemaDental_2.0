@@ -203,14 +203,58 @@ def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
     assert pago_primera_cuota.json()["registro"]["cobrado"] == 300
     assert pago_primera_cuota.json()["registro"]["saldo"] == 600
 
+    cuotas_segunda = [
+        dict(cuota)
+        for cuota in pago_primera_cuota.json()["registro"]["cuotas"]
+    ]
+    cuotas_segunda[1] = {
+        **cuotas_segunda[1],
+        "pagado": True,
+        "fechaPago": "2040-10-12",
+        "metodoPago": "Yape",
+        "referencia": "CUOTA-002",
+    }
+    pago_segunda_cuota = client.put(
+        f"/api/planPagos/{plan_pago['id']}",
+        json={**plan_pago, "cuotas": cuotas_segunda, "estado": "activo"},
+    )
+    assert pago_segunda_cuota.status_code == 200
+    assert pago_segunda_cuota.json()["registro"]["cobrado"] == 600
+    assert pago_segunda_cuota.json()["registro"]["saldo"] == 300
+
+    cuotas_adulteradas = [
+        dict(cuota)
+        for cuota in pago_segunda_cuota.json()["registro"]["cuotas"]
+    ]
+    cuotas_adulteradas[0]["monto"] = 599
+    cuotas_adulteradas[2] = {
+        **cuotas_adulteradas[2],
+        "monto": 1,
+        "pagado": True,
+        "fechaPago": "2040-11-12",
+        "metodoPago": "Efectivo",
+    }
+    pago_con_montos_adulterados = client.put(
+        f"/api/planPagos/{plan_pago['id']}",
+        json={**plan_pago, "cuotas": cuotas_adulteradas},
+    )
+    assert pago_con_montos_adulterados.status_code == 400
+    assert "cronograma" in pago_con_montos_adulterados.json()["detail"]
+
     cuenta = client.get(f"/api/pacientes/{paciente_id}/cuenta")
     assert cuenta.status_code == 200
-    assert any(
-        movimiento["tipo"] == "pago_cuota"
+    movimientos_cuota = [
+        movimiento
         for movimiento in cuenta.json()["movimientos"]
+        if movimiento["tipo"] == "pago_cuota"
+    ]
+    assert any(
+        "cuota 2 · sesión 2" in movimiento["descripcion"]
+        and movimiento["referencia"] == "CUOTA-002"
+        for movimiento in movimientos_cuota
     )
 
-    cuotas_incompletas = cuotas[:2]
+    cuotas_incompletas = cuotas_segunda[:2]
     romper_vinculo = client.put(
         f"/api/planPagos/{plan_pago['id']}",
         json={**plan_pago, "cuotas": cuotas_incompletas},

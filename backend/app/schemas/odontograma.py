@@ -2,7 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 PIEZAS_PERMANENTES = {
     f"{cuadrante}{pieza}"
     for cuadrante in (1, 2, 3, 4)
