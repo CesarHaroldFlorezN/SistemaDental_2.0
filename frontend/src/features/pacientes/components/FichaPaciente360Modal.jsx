@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { api } from '../../../services/api';
-import OdontogramaPanel from './OdontogramaPanel';
+import OdontogramaPanel from './OdontogramaPanelInteractivo';
 
 const moneda = (valor) => `S/. ${Number(valor || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fechaHoy = () => new Date().toISOString().slice(0, 10);
