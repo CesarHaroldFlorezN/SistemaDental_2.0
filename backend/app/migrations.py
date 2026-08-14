@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy.engine import Connection, Engine
 
 from . import models
-from .config import RESPALDAR_AL_INICIAR
+from .config import DB_PATH, RESPALDAR_AL_INICIAR, RESPALDOS_DIR
 from .database import Base, engine
 from .integridad import exigir_integridad_sqlite
 from .respaldos import crear_respaldo_sqlite
@@ -340,6 +340,22 @@ def migracion_006_trazabilidad_importaciones_oficiales(
     )
 
 
+def migracion_007_contrasena_temporal_usuarios(
+    connection: Connection,
+) -> None:
+    """Obliga a reemplazar las claves temporales creadas desde la interfaz."""
+
+    if not _existe_tabla(connection, "usuarios"):
+        return
+
+    columnas = _columnas_tabla(connection, "usuarios")
+    if "debe_cambiar_contrasena" not in columnas:
+        connection.exec_driver_sql(
+            "ALTER TABLE usuarios ADD COLUMN "
+            "debe_cambiar_contrasena BOOLEAN NOT NULL DEFAULT 0"
+        )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -370,6 +386,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         6,
         "trazabilidad_importaciones_oficiales",
         migracion_006_trazabilidad_importaciones_oficiales,
+    ),
+    (
+        7,
+        "contrasena_temporal_usuarios",
+        migracion_007_contrasena_temporal_usuarios,
     ),
 )
 
@@ -451,19 +472,27 @@ def aplicar_migraciones(
         )
 
 
-def inicializar_base_datos() -> None:
+def inicializar_base_datos(
+    motor: Engine = engine,
+    *,
+    ruta_bd=DB_PATH,
+    directorio_respaldos=RESPALDOS_DIR,
+) -> None:
     """Respalda y aplica únicamente migraciones pendientes."""
 
     # El import de models registra todas las tablas en Base.
     _ = models
 
-    exigir_integridad_sqlite()
+    exigir_integridad_sqlite(ruta_bd)
 
-    if RESPALDAR_AL_INICIAR and hay_migraciones_pendientes():
-        crear_respaldo_sqlite()
+    if RESPALDAR_AL_INICIAR and hay_migraciones_pendientes(motor):
+        crear_respaldo_sqlite(
+            ruta_bd=ruta_bd,
+            directorio=directorio_respaldos,
+        )
 
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=motor)
 
-    with engine.begin() as connection:
+    with motor.begin() as connection:
         aplicar_migraciones(connection)
-    exigir_integridad_sqlite()
+    exigir_integridad_sqlite(ruta_bd)

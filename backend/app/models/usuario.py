@@ -37,6 +37,12 @@ class UsuarioDB(Base):
     creado_en = Column(String(50), nullable=False)
     actualizado_en = Column(String(50), nullable=False)
     ultimo_acceso_en = Column(String(50))
+    debe_cambiar_contrasena = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+    )
 
     __table_args__ = (
         CheckConstraint(

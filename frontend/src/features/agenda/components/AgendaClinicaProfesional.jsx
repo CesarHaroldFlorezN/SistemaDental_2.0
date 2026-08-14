@@ -261,10 +261,30 @@ function Toolbar({ label, view, onNavigate, onView }) {
 
 function Evento({ event, editable }) {
   const cita = event.citaData;
+  const duracionMinutos = Math.max(1, Math.round((event.end.getTime() - event.start.getTime()) / 60000));
+  const clasesCursor = editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer';
+
+  if (duracionMinutos <= 20) {
+    return (
+      <div
+        className={`dp-evento-calendario flex h-full min-w-0 items-center gap-1 overflow-hidden px-1 py-0 text-[9px] font-black leading-none text-white ${clasesCursor}`}
+        title={`${cita.hora} - ${horaFin(cita)} · ${cita.nombrePaciente}`}
+      >
+        <span className="shrink-0 tabular-nums tracking-tight">{cita.hora}</span>
+        <span aria-hidden="true" className="shrink-0 opacity-70">·</span>
+        <span className="min-w-0 truncate">{cita.nombrePaciente}</span>
+      </div>
+    );
+  }
+
+  const citaCorta = duracionMinutos <= 30;
   return (
-    <div className={`dp-evento-calendario flex h-full min-w-0 flex-col justify-center overflow-hidden px-2 py-1 leading-tight ${editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}>
-      <div className="truncate text-[10px] font-black tabular-nums tracking-tight text-white">{cita.hora} - {horaFin(cita)}</div>
-      <div className="mt-0.5 truncate text-[12px] font-black text-white">{cita.nombrePaciente}</div>
+    <div
+      className={`dp-evento-calendario flex h-full min-w-0 flex-col justify-center overflow-hidden text-white ${citaCorta ? 'px-1.5 py-0' : 'px-2 py-1'} ${clasesCursor}`}
+      title={`${cita.hora} - ${horaFin(cita)} · ${cita.nombrePaciente}`}
+    >
+      <div className={`truncate font-black tabular-nums tracking-tight ${citaCorta ? 'text-[8px] leading-[9px]' : 'text-[10px] leading-tight'}`}>{cita.hora} - {horaFin(cita)}</div>
+      <div className={`truncate font-black ${citaCorta ? 'text-[10px] leading-[11px]' : 'mt-0.5 text-[12px] leading-tight'}`}>{cita.nombrePaciente}</div>
     </div>
   );
 }

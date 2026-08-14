@@ -27,6 +27,9 @@ class UsuarioSesionResponse(BaseModel):
         serialization_alias="nombreUsuario",
     )
     rol: str
+    entorno_datos: str = Field(serialization_alias="entornoDatos")
+    es_propietario: bool = Field(serialization_alias="esPropietario")
+    debe_cambiar_contrasena: bool = Field(serialization_alias="debeCambiarContrasena")
 
 
 class SesionResponse(BaseModel):

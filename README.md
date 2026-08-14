@@ -140,6 +140,31 @@ Los datos locales se almacenan en:
 data/dentalpro.db
 ```
 
+En Windows, la base aislada de pruebas se almacena en:
+
+```text
+%LOCALAPPDATA%\DentalPro\pruebas\dentalpro-pruebas.db
+```
+
+No deben mantenerse activas las variables antiguas `DENTALPRO_DATA_DIR` o
+`DENTALPRO_DB_PATH` durante el uso normal. El sistema detecta automáticamente
+en cuál de las dos bases existe una cuenta activa y abre únicamente ese
+entorno.
+
+El menú **Usuarios** está disponible para cuentas administradoras:
+
+- el Administrador oficial puede listar y crear cuentas en ambas bases;
+- el Administrador de pruebas solo puede gestionar la base de pruebas;
+- `cesar.admin` y `adminpruebas` son cuentas propietarias protegidas;
+- solo una cuenta propietaria puede crear o modificar otros administradores;
+- los administradores delegados pueden gestionar cuentas de Odontología y
+  Recepción, pero no crear otros administradores;
+- crear, activar, desactivar o restablecer una clave exige confirmar la
+  contraseña del Administrador;
+- una misma cuenta no puede estar activa simultáneamente en ambas bases;
+- para cambiar una cuenta de base, primero se desactiva en el origen y después
+  se crea en el destino con una nueva contraseña temporal.
+
 Los documentos de pacientes se almacenan en:
 
 ```text

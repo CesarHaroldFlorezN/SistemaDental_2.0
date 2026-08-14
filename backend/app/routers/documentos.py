@@ -10,13 +10,13 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
 )
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ..config import DATA_DIR
-from ..database import get_db
+from ..database import directorio_documentos_request, get_db
 from ..models import DocumentoPacienteDB
 from ..services import (
     ahora_iso,
@@ -25,9 +25,6 @@ from ..services import (
 )
 
 router = APIRouter()
-
-DOCUMENTOS_DIR = DATA_DIR / "documentos"
-DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.get(
@@ -56,6 +53,7 @@ def listar_documentos_paciente(
 )
 async def subir_documento_paciente(
     paciente_id: int,
+    request: Request,
     file: UploadFile = File(...),
     descripcion: str = Form(""),
     db: Session = Depends(get_db),
@@ -73,7 +71,7 @@ async def subir_documento_paciente(
         or "documento"
     )
 
-    carpeta = DOCUMENTOS_DIR / str(paciente_id)
+    carpeta = directorio_documentos_request(request) / str(paciente_id)
     carpeta.mkdir(parents=True, exist_ok=True)
 
     marca_tiempo = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")

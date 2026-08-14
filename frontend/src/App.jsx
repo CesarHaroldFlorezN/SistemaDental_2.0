@@ -9,6 +9,7 @@ import Sidebar from './shared/components/Sidebar';
 import ThemeSelector from './shared/components/ThemeSelector';
 import { normalizarTemaGuardado } from './shared/themeConfig';
 import LoginPage from './features/autenticacion/components/LoginPage';
+import CambiarContrasenaObligatoria from './features/autenticacion/components/CambiarContrasenaObligatoria';
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api } from './services/api';
@@ -42,6 +43,10 @@ const AgendaClinicaProfesional = lazy(
     import(
       './features/agenda/components/AgendaClinicaProfesional'
     )
+);
+
+const UsuariosPage = lazy(
+  () => import('./features/usuarios/components/UsuariosPage')
 );
 
 
@@ -237,34 +242,47 @@ export default function App() {
   useEffect(() => {
     let componenteActivo = true;
 
-    if (usuarioActual) {
-      Promise.all([
+    if (usuarioActual && !usuarioActual.debeCambiarContrasena) {
+      const puedeVerFinanzas = ['administrador', 'recepcion'].includes(
+        usuarioActual.rol
+      );
+      const puedeVerClinica = ['administrador', 'odontologo'].includes(
+        usuarioActual.rol
+      );
+
+      Promise.allSettled([
         api.getPacientes(),
         api.getCitas(),
-        api.getPagos(),
-        api.getPlanPagos(),
-        api.getPlanes(),
-        api.getCasosClinicos()
+        puedeVerFinanzas ? api.getPagos() : Promise.resolve([]),
+        puedeVerFinanzas ? api.getPlanPagos() : Promise.resolve([]),
+        puedeVerClinica ? api.getPlanes() : Promise.resolve([]),
+        puedeVerClinica ? api.getCasosClinicos() : Promise.resolve([])
       ])
-        .then(([
-          pacientesCargados,
-          citasCargadas,
-          pagosCargados,
-          planesPagoCargados,
-          planesCargados,
-          casosCargados
-        ]) => {
+        .then((resultados) => {
           if (!componenteActivo) return;
 
-          setPacientes(pacientesCargados || []);
-          setCitas(citasCargadas || []);
-          setPagos(pagosCargados || []);
-          setPlanPagos(planesPagoCargados || []);
-          setPlanes(planesCargados || []);
-          setCasosClinicos(casosCargados || []);
-        })
-        .catch((error) => {
-          console.error('No se pudieron cargar los datos iniciales:', error);
+          const obtenerDatos = (indice) =>
+            resultados[indice].status === 'fulfilled'
+              ? resultados[indice].value || []
+              : [];
+
+          setPacientes(obtenerDatos(0));
+          setCitas(obtenerDatos(1));
+          setPagos(obtenerDatos(2));
+          setPlanPagos(obtenerDatos(3));
+          setPlanes(obtenerDatos(4));
+          setCasosClinicos(obtenerDatos(5));
+
+          const errores = resultados
+            .filter((resultado) => resultado.status === 'rejected')
+            .map((resultado) => resultado.reason);
+
+          if (errores.length > 0) {
+            console.error(
+              'Algunos datos iniciales no pudieron cargarse:',
+              errores
+            );
+          }
         });
     }
 
@@ -324,6 +342,18 @@ export default function App() {
   if (!usuarioActual) {
     return (
       <LoginPage onLogin={handleLogin} />
+    );
+  }
+
+  if (usuarioActual.debeCambiarContrasena) {
+    return (
+      <CambiarContrasenaObligatoria
+        usuario={usuarioActual}
+        onContrasenaCambiada={() => {
+          setUsuarioActual(null);
+          setVistaActiva('dashboard');
+        }}
+      />
     );
   }
   const fMon = (num) => `S/. ${parseFloat(num || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -746,7 +776,7 @@ export default function App() {
             monto: cobroRegistrado,
             metodo: metodoCompleto,
             referencia: '',
-            motivo: 'Amortización registrada al finalizar la atención',
+            motivo: 'Adelanto registrado al finalizar la atención',
             usuario: usuarioActual?.nombre || 'Administrador'
           });
         } else {
@@ -1020,10 +1050,10 @@ export default function App() {
     const saldo = Number(plan.saldo || 0);
     if (saldo <= 0) return;
     const resultado = await Swal.fire({
-      title: 'Amortizar deuda del plan',
-      html: `<div style="text-align:left;display:grid;gap:12px"><div>Saldo actual: <strong>${fMon(saldo)}</strong></div><div style="font-size:12px;color:#cbd5e1">La amortización reduce directamente la deuda y recalcula solo las cuotas pendientes, sin alterar las ya pagadas.</div><input id="dp-monto-adelanto" type="number" min="0.01" max="${saldo}" step="0.01" class="swal2-input" placeholder="Monto a amortizar" style="margin:0;width:100%"><select id="dp-metodo-adelanto" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-adelanto" class="swal2-input" placeholder="Referencia u operación (opcional)" style="margin:0;width:100%"></div>`,
+      title: 'Registrar adelanto',
+      html: `<div style="text-align:left;display:grid;gap:12px"><div>Saldo actual: <strong>${fMon(saldo)}</strong></div><div style="font-size:12px;color:#cbd5e1">El adelanto reduce directamente la deuda y recalcula solo las cuotas pendientes, sin alterar las ya pagadas.</div><input id="dp-monto-adelanto" type="number" min="0.01" max="${saldo}" step="0.01" class="swal2-input" placeholder="Monto del adelanto" style="margin:0;width:100%"><select id="dp-metodo-adelanto" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-adelanto" class="swal2-input" placeholder="Referencia u operación (opcional)" style="margin:0;width:100%"></div>`,
       showCancelButton: true,
-      confirmButtonText: 'Aplicar amortización',
+      confirmButtonText: 'Registrar adelanto',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#f59e0b',
       background: '#1e293b',
@@ -1045,9 +1075,9 @@ export default function App() {
       const respuesta = await api.registrarAdelantoPlanPago(plan.id, resultado.value);
       await Promise.all([cargarPlanPagos(), cargarPagos()]);
       const saldoNuevo = Number(respuesta?.registro?.saldo ?? saldo - resultado.value.monto);
-      Swal.fire({ title: 'Amortización registrada', text: `${fMon(resultado.value.monto)} aplicado. Saldo: ${fMon(saldo)} → ${fMon(saldoNuevo)}.`, icon: 'success', background: '#1e293b', color: '#fff', timer: 2600, showConfirmButton: false });
+      Swal.fire({ title: 'Adelanto registrado', text: `${fMon(resultado.value.monto)} aplicado. Saldo: ${fMon(saldo)} → ${fMon(saldoNuevo)}.`, icon: 'success', background: '#1e293b', color: '#fff', timer: 2600, showConfirmButton: false });
     } catch (error) {
-      Swal.fire({ title: 'No se pudo registrar la amortización', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({ title: 'No se pudo registrar el adelanto', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
@@ -1265,6 +1295,12 @@ export default function App() {
 
       <main className="dp-main min-w-0 flex-1 overflow-y-auto bg-slate-900 p-4 transition-colors duration-200 sm:p-6 xl:p-8">
 
+        {usuarioActual.entornoDatos === 'pruebas' && (
+          <div className="mx-auto mb-4 flex max-w-[1800px] items-center justify-center rounded-xl border border-amber-500 bg-amber-950 px-4 py-2 text-center text-xs font-black uppercase tracking-wide text-amber-100 shadow-lg">
+            Entorno de pruebas activo · Los cambios no afectan la base oficial
+          </div>
+        )}
+
         <div className="dp-theme-toolbar sticky top-0 z-30 mx-auto mb-4 flex max-w-[1800px] items-center justify-end py-1">
           <ThemeSelector tema={tema} onChange={setTema} />
         </div>
@@ -1283,6 +1319,7 @@ export default function App() {
       pacientes={pacientes}
       citas={citasFiltradas}
       pagos={pagos}
+      rolUsuario={usuarioActual.rol}
       onCambiarVista={handleCambiarVista}
       onVerCobrosPendientes={handleVerCobrosPendientes}
       onNuevaCita={handleNuevaCita}
@@ -1578,9 +1615,9 @@ export default function App() {
                           </div>
                         </div>
                         <div className="mb-5 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Pagado / amortizado</div><div className="mt-1 text-lg font-black text-emerald-200">{fMon(pl.cobrado)}</div></div>
-                          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-rose-300">Saldo actual</div><div className="mt-1 text-lg font-black text-rose-200">{fMon(pl.saldo)}</div></div>
-                          <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-cyan-300">Cuotas pendientes</div><div className="mt-1 text-lg font-black text-cyan-100">{cuotasPendientes}</div></div>
+                          <div className="dp-plan-metric dp-plan-metric-paid rounded-xl border p-3"><div className="dp-plan-metric-label text-[10px] font-bold uppercase tracking-wide">Pagado / adelantado</div><div className="dp-plan-metric-value mt-1 text-lg font-black">{fMon(pl.cobrado)}</div></div>
+                          <div className="dp-plan-metric dp-plan-metric-balance rounded-xl border p-3"><div className="dp-plan-metric-label text-[10px] font-bold uppercase tracking-wide">Saldo actual</div><div className="dp-plan-metric-value mt-1 text-lg font-black">{fMon(pl.saldo)}</div></div>
+                          <div className="dp-plan-metric dp-plan-metric-installments rounded-xl border p-3"><div className="dp-plan-metric-label text-[10px] font-bold uppercase tracking-wide">Cuotas pendientes</div><div className="dp-plan-metric-value mt-1 text-lg font-black">{cuotasPendientes}</div></div>
                         </div>
                         <div className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden mb-5">
                           <table className="w-full text-left border-collapse text-xs">
@@ -1606,7 +1643,7 @@ export default function App() {
                           <button onClick={() => { const planClinico = planes.find((item) => Number(item.id) === Number(pl.planId)); setPlanPagoContexto({ ...pl, sesiones: planClinico?.sesiones || [] }); setModalPPAbierto(true); }} className="rounded-xl bg-cyan-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-500">✏️ Editar plan</button>
                           {citaOrigen && <button onClick={() => handleEditarCita(citaOrigen)} className="rounded-xl border border-violet-400/60 bg-violet-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-500">🦷 Editar servicios / deuda</button>}
                           {pl.origen !== 'plan_tratamiento' && <button onClick={() => handleAgregarCuota(pl)} className="px-3 py-1.5 bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"><PlusCircle size={15} /> ＋ Añadir Cuota</button>}
-                          {Number(pl.saldo || 0) > 0 && <button onClick={() => handleRegistrarAdelantoPlan(pl)} className="rounded-xl border border-amber-300 bg-amber-500 px-3.5 py-2 text-xs font-black text-slate-950 shadow-lg shadow-amber-950/30 transition hover:bg-amber-400">💵 Amortizar deuda</button>}
+                          {Number(pl.saldo || 0) > 0 && <button onClick={() => handleRegistrarAdelantoPlan(pl)} className="rounded-xl border border-amber-300 bg-amber-500 px-3.5 py-2 text-xs font-black text-slate-950 shadow-lg shadow-amber-950/30 transition hover:bg-amber-400">💵 Registrar adelanto</button>}
                           <button onClick={() => handleEliminarPlan(pl.id)} className="ml-auto rounded-xl border border-rose-400 bg-rose-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-rose-950/30 transition hover:bg-rose-500">🗑 Eliminar plan</button>
                         </div>
                       </div>
@@ -1615,6 +1652,12 @@ export default function App() {
                 ) : (<div className="text-center py-12 bg-slate-800/60 border border-slate-700/60 rounded-2xl"><p className="text-slate-400 font-medium">No se encontraron planes de pago.</p></div>)}
               </div>
             </div>
+          )}
+
+          {vistaActiva === 'usuarios' && usuarioActual.rol === 'administrador' && (
+            <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-slate-500">Cargando usuarios...</div>}>
+              <UsuariosPage usuarioActual={usuarioActual} />
+            </Suspense>
           )}
 
         </div>
