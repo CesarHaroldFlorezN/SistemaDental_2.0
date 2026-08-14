@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -14,6 +14,159 @@ from .citas import obtener_paciente
 from .comun import ahora_iso, redondear_monto, serializar_modelo
 
 CERO = Decimal("0.00")
+
+
+def _total_cuotas_pagadas(cuotas: list[dict]) -> Decimal:
+    return redondear_monto(
+        sum(
+            (
+                Decimal(str(cuota.get("monto") or 0))
+                for cuota in cuotas
+                if cuota.get("tipo") == "cuota" and cuota.get("pagado")
+            ),
+            start=CERO,
+        )
+    )
+
+
+def _redistribuir_saldo_pendiente(
+    cuotas: list[dict],
+    saldo: Decimal,
+) -> list[dict]:
+    """Reparte un saldo exacto entre cuotas pendientes sin tocar las pagadas."""
+
+    pendientes = [
+        indice
+        for indice, cuota in enumerate(cuotas)
+        if cuota.get("tipo") == "cuota" and not cuota.get("pagado")
+    ]
+    if not pendientes:
+        return cuotas
+
+    centavos = int(redondear_monto(saldo) * 100)
+    base, sobrante = divmod(centavos, len(pendientes))
+    for posicion, indice in enumerate(pendientes):
+        monto = Decimal(base + (1 if posicion < sobrante else 0)) / Decimal(100)
+        cuotas[indice]["monto"] = float(monto)
+        cuotas[indice]["cubiertaPorAdelanto"] = monto <= CERO
+
+    return cuotas
+
+
+def _crear_cuota_pendiente(cuotas: list[dict], saldo: Decimal) -> None:
+    numeros = [
+        int(cuota.get("num") or 0) for cuota in cuotas if cuota.get("tipo") == "cuota"
+    ]
+    fechas = [
+        str(cuota.get("fecha"))
+        for cuota in cuotas
+        if cuota.get("tipo") == "cuota" and cuota.get("fecha")
+    ]
+    fecha_base = datetime.now().astimezone().date()
+    if fechas:
+        try:
+            fecha_base = datetime.fromisoformat(max(fechas)).date()
+        except ValueError:
+            pass
+
+    cuotas.append(
+        {
+            "num": max(numeros, default=0) + 1,
+            "tipo": "cuota",
+            "fecha": (fecha_base + timedelta(days=30)).isoformat(),
+            "monto": float(redondear_monto(saldo)),
+            "pagado": False,
+            "fechaPago": None,
+            "metodoPago": None,
+            "cubiertaPorAdelanto": False,
+        }
+    )
+
+
+def sincronizar_plan_pago_con_pago(
+    db: Session,
+    pago: PagoDB,
+) -> PlanPagoDB | None:
+    """Sincroniza deuda, plan y cuotas dentro de la transacción llamadora.
+
+    Los cobros históricos y las cuotas pagadas son inmutables. Cuando cambia el
+    costo clínico, únicamente se redistribuye el nuevo saldo entre las cuotas
+    pendientes.
+    """
+
+    plan = db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == pago.id).first()
+    if not plan:
+        return None
+
+    cuotas = [dict(cuota) for cuota in (plan.cuotas or [])]
+    total = redondear_monto(pago.total)
+    anticipo = redondear_monto(plan.anticipo)
+    pagado_cuotas = _total_cuotas_pagadas(cuotas)
+
+    # Conserva cobros heredados aunque una versión anterior no los hubiera
+    # desglosado correctamente entre anticipo y cuotas pagadas.
+    cobrado_desglosado = redondear_monto(anticipo + pagado_cuotas)
+    cobrado_registrado = max(
+        cobrado_desglosado,
+        redondear_monto(plan.cobrado),
+        redondear_monto(pago.cobrado),
+    )
+    if cobrado_registrado > cobrado_desglosado:
+        anticipo = redondear_monto(anticipo + cobrado_registrado - cobrado_desglosado)
+    cobrado = redondear_monto(anticipo + pagado_cuotas)
+
+    if total < cobrado:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "El nuevo total no puede ser menor que el monto ya cobrado. "
+                "Primero revierte el cobro correspondiente desde Planes de pago."
+            ),
+        )
+
+    saldo = redondear_monto(total - cobrado)
+    pendientes = [
+        cuota
+        for cuota in cuotas
+        if cuota.get("tipo") == "cuota" and not cuota.get("pagado")
+    ]
+    if saldo > CERO and not pendientes:
+        if plan.planId:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "El plan clínico ya no tiene cuotas pendientes. "
+                    "Agrega o ajusta sus sesiones antes de aumentar la deuda."
+                ),
+            )
+        _crear_cuota_pendiente(cuotas, saldo)
+
+    cuotas = _redistribuir_saldo_pendiente(cuotas, saldo)
+    total_cuotas = redondear_monto(
+        sum(
+            (
+                Decimal(str(cuota.get("monto") or 0))
+                for cuota in cuotas
+                if cuota.get("tipo") == "cuota"
+            ),
+            start=CERO,
+        )
+    )
+
+    plan.concepto = pago.concepto or plan.concepto
+    plan.totalAcordado = total
+    plan.anticipo = anticipo
+    plan.totalCuotas = total_cuotas
+    plan.cobrado = cobrado
+    plan.saldo = saldo
+    plan.cuotas = cuotas
+    plan.estado = "completado" if saldo <= CERO else "activo"
+
+    pago.cobrado = cobrado
+    pago.saldo = saldo
+    pago.cuotas = cuotas
+    pago.tipoPago = "completo" if saldo <= CERO else "cuotas"
+    return plan
 
 
 def _obtener_pago(

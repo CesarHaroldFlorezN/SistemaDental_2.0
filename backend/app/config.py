@@ -40,8 +40,50 @@ DB_PATH = Path(
     )
 ).resolve()
 
+# La base oficial conserva los datos reales de la clínica. La base de pruebas
+# vive en una carpeta independiente y nunca se selecciona mediante la interfaz.
+OFICIAL_DB_PATH = DB_PATH
+
+if os.getenv("DENTALPRO_TEST_DATA_DIR"):
+    TEST_DATA_DIR = Path(os.environ["DENTALPRO_TEST_DATA_DIR"]).resolve()
+elif os.getenv("DENTALPRO_DATA_DIR"):
+    TEST_DATA_DIR = (DATA_DIR / "pruebas").resolve()
+elif os.getenv("LOCALAPPDATA"):
+    TEST_DATA_DIR = (
+        Path(os.environ["LOCALAPPDATA"]) / "DentalPro" / "pruebas"
+    ).resolve()
+else:
+    TEST_DATA_DIR = (DATA_DIR / "pruebas").resolve()
+
+TEST_DB_PATH = Path(
+    os.getenv(
+        "DENTALPRO_TEST_DB_PATH",
+        str(TEST_DATA_DIR / "dentalpro-pruebas.db"),
+    )
+).resolve()
+
+TEST_ADMIN_USERNAME = (
+    os.getenv(
+        "DENTALPRO_TEST_ADMIN_USERNAME",
+        "adminpruebas",
+    )
+    .strip()
+    .lower()
+)
+
+OFFICIAL_OWNER_USERNAME = (
+    os.getenv(
+        "DENTALPRO_OFFICIAL_OWNER_USERNAME",
+        "cesar.admin",
+    )
+    .strip()
+    .lower()
+)
+
 DOCUMENTOS_DIR = DATA_DIR / "documentos"
 RESPALDOS_DIR = DATA_DIR / "respaldos"
+TEST_DOCUMENTOS_DIR = TEST_DATA_DIR / "documentos"
+TEST_RESPALDOS_DIR = TEST_DATA_DIR / "respaldos"
 
 MAX_RESPALDOS = _leer_entero_positivo(
     "DENTALPRO_MAX_RESPALDOS",
@@ -59,8 +101,35 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)
 RESPALDOS_DIR.mkdir(parents=True, exist_ok=True)
+TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
+TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+TEST_DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)
+TEST_RESPALDOS_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
+TEST_DATABASE_URL = f"sqlite:///{TEST_DB_PATH.as_posix()}"
+
+
+def validar_aislamiento_bases() -> None:
+    datos_heredados_apuntan_pruebas = bool(
+        os.getenv("DENTALPRO_DATA_DIR") and DATA_DIR.name.lower() == "pruebas"
+    )
+    base_heredada_apunta_pruebas = bool(
+        os.getenv("DENTALPRO_DB_PATH")
+        and DB_PATH.name.lower() == "dentalpro-pruebas.db"
+    )
+
+    if (
+        DB_PATH == TEST_DB_PATH
+        or datos_heredados_apuntan_pruebas
+        or base_heredada_apunta_pruebas
+    ):
+        raise RuntimeError(
+            "Configuración insegura de bases: las variables antiguas "
+            "DENTALPRO_DATA_DIR o DENTALPRO_DB_PATH apuntan al entorno de "
+            "pruebas. Elimínalas antes de iniciar DentalPro."
+        )
+
 
 APP_NAME = "DentalPro"
 APP_VERSION = "2.0.0"

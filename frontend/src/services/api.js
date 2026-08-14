@@ -74,6 +74,32 @@ export const api = {
       }
     ),
 
+  cambiarContrasena: (data) =>
+    request(
+      `${API_URL}/auth/cambiar-contrasena`,
+      jsonOptions('POST', data)
+    ),
+
+  // ===================================================
+  // USUARIOS (SOLO ADMINISTRADOR)
+  // ===================================================
+  getUsuarios: () => request(`${API_URL}/usuarios`),
+
+  crearUsuario: (data) =>
+    request(`${API_URL}/usuarios`, jsonOptions('POST', data)),
+
+  cambiarEstadoUsuario: (entorno, id, data) =>
+    request(
+      `${API_URL}/usuarios/${entorno}/${id}/estado`,
+      jsonOptions('PATCH', data)
+    ),
+
+  restablecerContrasenaUsuario: (entorno, id, data) =>
+    request(
+      `${API_URL}/usuarios/${entorno}/${id}/restablecer-contrasena`,
+      jsonOptions('POST', data)
+    ),
+
   // ===================================================
   // PACIENTES
   // ===================================================

@@ -20,11 +20,21 @@ from .clinica import (
 )
 from .finanzas import OperacionPagoPayload, TipoPago
 from .odontograma import OdontogramaPayload
+from .usuarios import (
+    CambiarContrasenaPropiaPayload,
+    CambiarEstadoUsuarioPayload,
+    CrearUsuarioPayload,
+    RestablecerContrasenaPayload,
+    UsuarioGestionResponse,
+)
 
 __all__ = [
+    "CambiarContrasenaPropiaPayload",
+    "CambiarEstadoUsuarioPayload",
     "CambioEstadoPayload",
     "CasoClinicoPayload",
     "CitaPagoPayload",
+    "CrearUsuarioPayload",
     "CredencialesPayload",
     "DiagnosticoCasoPayload",
     "EstadoCasoClinico",
@@ -33,10 +43,12 @@ __all__ = [
     "OperacionPagoPayload",
     "PlanTratamientoPayload",
     "ReprogramarCitaPayload",
+    "RestablecerContrasenaPayload",
     "ServicioCitaPayload",
     "SesionResponse",
     "TipoCasoClinico",
     "TipoCita",
     "TipoPago",
+    "UsuarioGestionResponse",
     "UsuarioSesionResponse",
 ]

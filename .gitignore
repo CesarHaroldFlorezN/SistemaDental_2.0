@@ -23,6 +23,8 @@ frontend/dist/
 *.sqlite3
 data/documentos/
 data/*.csv
+data/*.json
+DentalPro_*.json
 
 # Respaldos locales
 respaldos_codigo/

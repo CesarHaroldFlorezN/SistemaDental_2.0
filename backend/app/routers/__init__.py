@@ -6,6 +6,7 @@ from .finanzas import router as finanzas_router
 from .odontograma import router as odontograma_router
 from .pacientes import router as pacientes_router
 from .salud import router as salud_router
+from .usuarios import router as usuarios_router
 
 __all__ = [
     "autenticacion_router",
@@ -16,4 +17,5 @@ __all__ = [
     "odontograma_router",
     "pacientes_router",
     "salud_router",
+    "usuarios_router",
 ]

@@ -7,9 +7,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Database,
   DollarSign,
   FolderKanban,
   LayoutDashboard,
+  UserCog,
   Users
 } from 'lucide-react';
 
@@ -32,6 +34,9 @@ export default function Sidebar({
   onCerrarSesion
 }) {
   const [contraido, setContraido] = useState(() => localStorage.getItem('dp-sidebar-contraido') === '1');
+  const nombreRolActual = usuarioActual?.esPropietario
+    ? 'Administrador propietario'
+    : NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol;
 
   const menuItems = [
     {
@@ -78,6 +83,12 @@ export default function Sidebar({
         'administrador',
         'recepcion'
       ]
+    },
+    {
+      id: 'usuarios',
+      nombre: 'Usuarios',
+      icono: UserCog,
+      roles: ['administrador']
     }
   ].filter((item) =>
     item.roles.includes(usuarioActual?.rol)
@@ -147,7 +158,7 @@ export default function Sidebar({
           }`}
           title={
             contraido
-              ? `${usuarioActual?.nombre} · ${NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol}`
+              ? `${usuarioActual?.nombre} · ${nombreRolActual}`
               : undefined
           }
         >
@@ -162,7 +173,12 @@ export default function Sidebar({
               </p>
 
               <p className="truncate text-[10px] capitalize text-cyan-400">
-                {NOMBRES_ROL[usuarioActual?.rol] || usuarioActual?.rol}
+                {nombreRolActual}
+              </p>
+
+              <p className={`mt-1 flex items-center gap-1 truncate text-[9px] font-black uppercase tracking-wide ${usuarioActual?.entornoDatos === 'pruebas' ? 'text-amber-300' : 'text-emerald-300'}`}>
+                <Database size={10} />
+                {usuarioActual?.entornoDatos === 'pruebas' ? 'Base de pruebas' : 'Base oficial'}
               </p>
             </div>
           )}

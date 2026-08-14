@@ -33,6 +33,7 @@ from ..services import (
     registrar_pago,
     serializar_modelo,
     serializar_plan_detallado,
+    sincronizar_plan_pago_con_pago,
     sincronizar_sesiones_plan,
 )
 
@@ -181,6 +182,38 @@ def actualizar_pago(
     data: dict[str, Any],
     db: Session = Depends(get_db),
 ):
+    pago = db.query(PagoDB).filter(PagoDB.id == item_id).first()
+    if not pago:
+        raise HTTPException(status_code=404, detail="Registro no encontrado.")
+
+    plan_pago = db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == item_id).first()
+    if plan_pago:
+        columnas_validas = {columna.name for columna in PagoDB.__table__.columns}
+        campos_calculados = {"cobrado", "saldo", "cuotas", "tipoPago", "fechaUltPago"}
+        for clave, valor in data.items():
+            if clave in columnas_validas and clave not in campos_calculados | {"id"}:
+                setattr(pago, clave, valor)
+
+        try:
+            sincronizar_plan_pago_con_pago(db, pago)
+            db.commit()
+            db.refresh(pago)
+            db.refresh(plan_pago)
+            return {
+                "message": "Pago y plan de cuotas actualizados correctamente.",
+                "registro": serializar_modelo(pago),
+                "planPago": serializar_modelo(plan_pago),
+            }
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as error:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="No se pudo sincronizar el pago con su plan de cuotas.",
+            ) from error
+
     return _actualizar_registro(
         PagoDB,
         item_id,
@@ -906,6 +939,12 @@ def actualizar_plan_pago(
     registro.totalCuotas = total_programado
     registro.cobrado = nuevo_cobrado
     registro.saldo = saldo
+    if "concepto" in data:
+        registro.concepto = str(data.get("concepto") or "").strip()
+    if "metodoPreferido" in data:
+        registro.metodoPreferido = str(data.get("metodoPreferido") or "").strip()
+    if "fechaCreacion" in data:
+        registro.fechaCreacion = str(data.get("fechaCreacion") or "").strip()
     registro.estado = (
         "completado"
         if saldo <= Decimal("0.00")
@@ -981,11 +1020,38 @@ def eliminar_plan_pago(
     item_id: int,
     db: Session = Depends(get_db),
 ):
-    return _eliminar_registro(
-        PlanPagoDB,
-        item_id,
-        db,
+    registro = db.query(PlanPagoDB).filter(PlanPagoDB.id == item_id).first()
+    if not registro:
+        raise HTTPException(status_code=404, detail="Plan de pagos no encontrado.")
+
+    pago = (
+        db.query(PagoDB).filter(PagoDB.id == registro.pagoId).first()
+        if registro.pagoId
+        else None
     )
+    try:
+        db.delete(registro)
+        if pago:
+            pago.cuotas = []
+            saldo = redondear_monto(pago.saldo)
+            cobrado = redondear_monto(pago.cobrado)
+            pago.tipoPago = (
+                "completo"
+                if saldo <= Decimal("0.00")
+                else ("anticipo" if cobrado > Decimal("0.00") else "contado")
+            )
+        db.commit()
+        return {
+            "message": (
+                "Plan eliminado. La deuda y los cobros registrados se conservaron."
+            )
+        }
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo eliminar el plan de pagos.",
+        ) from error
 
 
 # =====================================================

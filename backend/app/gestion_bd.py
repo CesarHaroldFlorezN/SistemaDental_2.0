@@ -8,6 +8,11 @@ from pathlib import Path
 
 from .auditoria import auditar_datos_sqlite
 from .config import DB_PATH, RESPALDOS_DIR
+from .importacion_oficial import (
+    ErrorImportacionOficial,
+    importar_json_oficial,
+    preparar_json_oficial,
+)
 from .integridad import ErrorIntegridadBaseDatos
 from .respaldos import (
     restaurar_base_sqlite,
@@ -134,6 +139,99 @@ def ejecutar_restauracion(
     return 0
 
 
+def _mostrar_resumen_json(datos) -> None:
+    print(f"JSON oficial: {datos.nombre_archivo}")
+    print(f"Versión: {datos.version}")
+    print(f"Fecha de origen: {datos.fecha_fuente}")
+    print(f"SHA-256: {datos.sha256}")
+    print(
+        "Registros: "
+        + ", ".join(
+            f"{coleccion}={cantidad}" for coleccion, cantidad in datos.conteos.items()
+        )
+    )
+
+    if datos.ajustes:
+        print("Ajustes técnicos previstos:")
+        for ajuste in datos.ajustes:
+            print(f"- {ajuste}")
+
+    if datos.advertencias:
+        print("ADVERTENCIAS DE DATOS:")
+        for advertencia in datos.advertencias:
+            print(f"- {advertencia}")
+
+
+def ejecutar_validacion_json_oficial(
+    archivo: str,
+    resolver_duplicados_ficha: bool,
+) -> int:
+    try:
+        datos = preparar_json_oficial(
+            Path(archivo).expanduser(),
+            resolver_duplicados_ficha=resolver_duplicados_ficha,
+        )
+    except (ErrorImportacionOficial, OSError) as error:
+        print(f"JSON oficial inválido: {error}", file=sys.stderr)
+        return 1
+
+    _mostrar_resumen_json(datos)
+    print("Validación estructural completada sin modificar la base activa.")
+    return 0
+
+
+def ejecutar_importacion_json_oficial(
+    archivo: str,
+    confirmacion: str | None,
+    servidor_detenido: bool,
+    resolver_duplicados_ficha: bool,
+    aceptar_advertencias: bool,
+    ruta_bd: Path = DB_PATH,
+    directorio: Path = RESPALDOS_DIR,
+) -> int:
+    if confirmacion != "REEMPLAZAR":
+        print(
+            "Importación cancelada: falta confirmar REEMPLAZAR.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if not servidor_detenido:
+        print(
+            "Importación cancelada: debes confirmar que el servidor está detenido.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        resultado = importar_json_oficial(
+            Path(archivo).expanduser(),
+            ruta_bd=ruta_bd,
+            directorio_respaldos=directorio,
+            resolver_duplicados_ficha=resolver_duplicados_ficha,
+            aceptar_advertencias=aceptar_advertencias,
+        )
+    except (
+        ErrorImportacionOficial,
+        OSError,
+        RuntimeError,
+        sqlite3.Error,
+    ) as error:
+        print(f"Importación cancelada: {error}", file=sys.stderr)
+        return 1
+
+    _mostrar_resumen_json(resultado.datos)
+    print("Reemplazo oficial completado correctamente.")
+    print(f"Base activa: {ruta_bd}")
+    print(f"Usuarios conservados: {resultado.usuarios_conservados}")
+    print("Las sesiones anteriores fueron revocadas; inicia sesión nuevamente.")
+
+    if resultado.respaldo_previo is not None:
+        print(f"Respaldo previo conservado: {resultado.respaldo_previo}")
+
+    return 0
+
+
 def crear_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Administración segura de la base DentalPro."
@@ -164,6 +262,38 @@ def crear_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
 
+    validar_json = comandos.add_parser(
+        "validar-json-oficial",
+        help="Valida una exportación JSON oficial sin modificar la base.",
+    )
+    validar_json.add_argument("archivo")
+    validar_json.add_argument(
+        "--resolver-duplicados-ficha",
+        action="store_true",
+        help="Diferencia fichas repetidas con un sufijo auditable.",
+    )
+
+    importar_json = comandos.add_parser(
+        "importar-json-oficial",
+        help="Reemplaza los datos clínicos y financieros desde un JSON oficial.",
+    )
+    importar_json.add_argument("archivo")
+    importar_json.add_argument("--confirmar")
+    importar_json.add_argument(
+        "--servidor-detenido",
+        action="store_true",
+    )
+    importar_json.add_argument(
+        "--resolver-duplicados-ficha",
+        action="store_true",
+        help="Diferencia fichas repetidas con un sufijo auditable.",
+    )
+    importar_json.add_argument(
+        "--aceptar-advertencias",
+        action="store_true",
+        help="Acepta fechas o estados financieros heredados que requieren revisión.",
+    )
+
     return parser
 
 
@@ -175,6 +305,21 @@ def main(argumentos: list[str] | None = None) -> int:
 
     if opciones.comando == "auditar":
         return ejecutar_auditoria()
+
+    if opciones.comando == "validar-json-oficial":
+        return ejecutar_validacion_json_oficial(
+            archivo=opciones.archivo,
+            resolver_duplicados_ficha=opciones.resolver_duplicados_ficha,
+        )
+
+    if opciones.comando == "importar-json-oficial":
+        return ejecutar_importacion_json_oficial(
+            archivo=opciones.archivo,
+            confirmacion=opciones.confirmar,
+            servidor_detenido=opciones.servidor_detenido,
+            resolver_duplicados_ficha=opciones.resolver_duplicados_ficha,
+            aceptar_advertencias=opciones.aceptar_advertencias,
+        )
 
     return ejecutar_restauracion(
         archivo=opciones.archivo,

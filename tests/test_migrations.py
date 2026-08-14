@@ -81,6 +81,8 @@ def test_aplicar_migracion_y_registrar_version(
         (3, "usuarios_y_sesiones"),
         (4, "flujo_clinico_financiero"),
         (5, "odontograma_y_detalle_financiero"),
+        (6, "trazabilidad_importaciones_oficiales"),
+        (7, "contrasena_temporal_usuarios"),
     ]
     assert not hay_migraciones_pendientes(motor)
 
@@ -103,7 +105,7 @@ def test_no_repetir_migracion_aplicada(
             "SELECT COUNT(*) FROM schema_migrations"
         ).scalar_one()
 
-    assert cantidad == 5
+    assert cantidad == 7
 
     motor.dispose()
 
@@ -226,6 +228,12 @@ def test_crear_esquema_de_autenticacion(
         claves_foraneas = connection.exec_driver_sql(
             "PRAGMA foreign_key_list(sesiones)"
         ).fetchall()
+        columnas_usuarios = {
+            fila[1]
+            for fila in connection.exec_driver_sql(
+                "PRAGMA table_info(usuarios)"
+            ).fetchall()
+        }
 
     assert "usuarios" in tablas
     assert "sesiones" in tablas
@@ -233,6 +241,7 @@ def test_crear_esquema_de_autenticacion(
     assert "ux_sesiones_token_hash" in indices
     assert "ix_sesiones_usuario_id" in indices
     assert "ix_sesiones_expira_en" in indices
+    assert "debe_cambiar_contrasena" in columnas_usuarios
     assert any(
         fila[2] == "usuarios" and fila[6] == "CASCADE" for fila in claves_foraneas
     )

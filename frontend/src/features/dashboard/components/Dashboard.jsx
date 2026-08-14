@@ -160,6 +160,7 @@ export default function Dashboard({
   pacientes = [],
   citas = [],
   pagos = [],
+  rolUsuario = 'administrador',
   onCambiarVista,
   onVerCobrosPendientes,
   onNuevaCita,
@@ -168,6 +169,9 @@ export default function Dashboard({
 }) {
   const [fechaCalendario, setFechaCalendario] = useState(new Date());
   const hoyStr = obtenerFechaLocal();
+  const puedeVerFinanzas = ['administrador', 'recepcion'].includes(
+    rolUsuario
+  );
 
   const citasHoy = citas.filter(
     (cita) => cita.fecha === hoyStr && cita.estado !== 'cancelada'
@@ -212,7 +216,7 @@ export default function Dashboard({
     <div className="dp-dashboard">
       <EncabezadoDashboard onNuevaCita={onNuevaCita} />
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 ${puedeVerFinanzas ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         <button
           type="button"
           onClick={() => onCambiarVista('pacientes')}
@@ -239,18 +243,20 @@ export default function Dashboard({
           </div>
         </button>
 
-        <button
-          type="button"
-          onClick={abrirCobrosPendientes}
-          className="cursor-pointer rounded-2xl border border-slate-700/80 bg-slate-800/80 p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:border-cyan-500"
-        >
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Cuentas por Cobrar
-          </div>
-          <div className="font-serif text-2xl font-bold text-rose-400">
-            {pacientesConDeuda.length}
-          </div>
-        </button>
+        {puedeVerFinanzas && (
+          <button
+            type="button"
+            onClick={abrirCobrosPendientes}
+            className="cursor-pointer rounded-2xl border border-slate-700/80 bg-slate-800/80 p-5 text-left shadow-lg transition hover:-translate-y-0.5 hover:border-cyan-500"
+          >
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Cuentas por Cobrar
+            </div>
+            <div className="font-serif text-2xl font-bold text-rose-400">
+              {pacientesConDeuda.length}
+            </div>
+          </button>
+        )}
 
         <button
           type="button"

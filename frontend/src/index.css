@@ -82,6 +82,27 @@
   }
 }
 
+/* SweetAlert usa cuadros oscuros en DentalPro. En Windows, los <select> nativos
+   necesitan colores explícitos también en sus opciones para no mostrar blanco
+   sobre blanco. */
+.swal2-popup .swal2-select {
+  color-scheme: dark;
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #64748b !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .25) !important;
+}
+
+.swal2-popup .swal2-select option {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+.swal2-popup .swal2-select:focus {
+  border-color: #22d3ee !important;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .2) !important;
+}
+
 /* =====================================================
    CUATRO PALETAS GLOBALES
    ===================================================== */
@@ -166,6 +187,102 @@ html[data-theme] .dp-main textarea {
 html[data-theme] .dp-main input::placeholder,
 html[data-theme] .dp-main textarea::placeholder {
   color: color-mix(in srgb, var(--dp-muted) 78%, transparent) !important;
+}
+
+/* Gestión de usuarios: superficies y textos semánticos con contraste estable
+   en las cuatro paletas, especialmente dentro del modal de creación. */
+html[data-theme] .dp-user-modal {
+  background: var(--dp-surface) !important;
+  border-color: color-mix(in srgb, var(--dp-primary) 48%, var(--dp-border)) !important;
+  color: var(--dp-text) !important;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .32) !important;
+}
+
+html[data-theme] .dp-user-modal h2,
+html[data-theme] .dp-user-modal label {
+  color: var(--dp-text) !important;
+}
+
+html[data-theme] .dp-user-modal p,
+html[data-theme] .dp-user-modal .text-slate-300,
+html[data-theme] .dp-user-modal .text-slate-400,
+html[data-theme] .dp-user-modal .text-slate-500 {
+  color: var(--dp-muted) !important;
+}
+
+html[data-theme] .dp-user-modal input,
+html[data-theme] .dp-user-modal select,
+html[data-theme] .dp-user-modal [class*="bg-slate-950"] {
+  color-scheme: light;
+  background: var(--dp-surface-soft) !important;
+  color: var(--dp-text) !important;
+  border-color: color-mix(in srgb, var(--dp-primary) 35%, var(--dp-border)) !important;
+}
+
+html[data-theme] .dp-user-modal select option {
+  background: var(--dp-surface) !important;
+  color: var(--dp-text) !important;
+}
+
+html[data-theme] .dp-user-modal input:focus,
+html[data-theme] .dp-user-modal select:focus {
+  border-color: var(--dp-primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dp-primary) 18%, transparent) !important;
+}
+
+html[data-theme] .dp-users .text-amber-100,
+html[data-theme] .dp-users .text-amber-200,
+html[data-theme] .dp-user-modal .text-amber-100,
+html[data-theme] .dp-user-modal .text-amber-200 {
+  color: #92400e !important;
+}
+
+html[data-theme] .dp-users .text-emerald-100,
+html[data-theme] .dp-users .text-emerald-200,
+html[data-theme] .dp-users .text-emerald-300,
+html[data-theme] .dp-user-modal .text-emerald-100,
+html[data-theme] .dp-user-modal .text-emerald-200 {
+  color: #065f46 !important;
+}
+
+html[data-theme] .dp-users .text-rose-200,
+html[data-theme] .dp-user-modal .text-rose-200 {
+  color: #9f1239 !important;
+}
+
+html[data-theme] .dp-user-owner-notice {
+  border-color: #f59e0b !important;
+  background: #fffbeb !important;
+  color: #78350f !important;
+}
+
+html[data-theme] .dp-user-role-card {
+  background: var(--dp-surface) !important;
+  box-shadow: 0 5px 16px var(--dp-shadow);
+}
+
+html[data-theme] .dp-user-role-admin {
+  border-color: #f59e0b !important;
+  background: #fffbeb !important;
+  color: #78350f !important;
+}
+
+html[data-theme] .dp-user-role-clinical {
+  border-color: #0891b2 !important;
+  background: #ecfeff !important;
+  color: #164e63 !important;
+}
+
+html[data-theme] .dp-user-role-reception {
+  border-color: #7c3aed !important;
+  background: #f5f3ff !important;
+  color: #4c1d95 !important;
+}
+
+html[data-theme] .dp-user-role-transfer {
+  border-color: #d97706 !important;
+  background: #fff7ed !important;
+  color: #7c2d12 !important;
 }
 
 html[data-theme] .dp-main button[class*="bg-cyan-"],
@@ -399,8 +516,7 @@ html[data-theme] .dp-dashboard-hero button {
 .rbc-month-row + .rbc-month-row,
 .rbc-time-content,
 .rbc-time-header-content,
-.rbc-timeslot-group,
-.rbc-day-slot .rbc-time-slot {
+.rbc-timeslot-group {
   border-color: var(--dp-border) !important;
 }
 
@@ -410,10 +526,44 @@ html[data-theme] .dp-dashboard-hero button {
   border-left: 1px solid var(--dp-border) !important;
 }
 
-.rbc-timeslot-group,
-.rbc-day-slot .rbc-time-slot {
+.rbc-timeslot-group {
   border-bottom: 1px solid var(--dp-border) !important;
-  border-top: 1px solid var(--dp-border) !important;
+  border-top: 0 !important;
+}
+
+/* Se conserva step=15 para crear, mover y redimensionar citas con precisión,
+   pero visualmente solo se muestra la división de cada hora. */
+.rbc-day-slot .rbc-time-slot {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
+
+/* Indicadores financieros de alto contraste para todas las paletas. */
+.dp-plan-metric {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 5px 14px rgba(15, 23, 42, .18);
+}
+
+.dp-plan-metric-paid {
+  background: linear-gradient(135deg, #064e3b, #047857) !important;
+  border-color: #34d399 !important;
+}
+
+.dp-plan-metric-balance {
+  background: linear-gradient(135deg, #881337, #be123c) !important;
+  border-color: #fb7185 !important;
+}
+
+.dp-plan-metric-installments {
+  background: linear-gradient(135deg, #164e63, #0e7490) !important;
+  border-color: #22d3ee !important;
+}
+
+html[data-theme] .dp-main .dp-plan-metric-label {
+  color: rgba(255, 255, 255, .82) !important;
+}
+
+html[data-theme] .dp-main .dp-plan-metric-value {
+  color: #ffffff !important;
 }
 
 .rbc-date-cell,

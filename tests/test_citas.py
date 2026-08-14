@@ -234,6 +234,138 @@ def test_actualizar_cita_y_pago() -> None:
     assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
 
 
+def test_editar_servicios_sincroniza_plan_y_amortizacion() -> None:
+    paciente_id = crear_paciente("PLAN-SYNC")
+    payload = datos_cita(
+        paciente_id=paciente_id,
+        hora="12:00",
+        hora_fin="13:00",
+    )
+    payload.update(
+        {
+            "fecha": "2035-06-25",
+            "procedimiento": "Tratamiento inicial",
+            "servicios": [{"nombre": "Tratamiento inicial", "costo": 400}],
+            "costo": 400,
+            "tipoPago": "cuotas",
+        }
+    )
+    creada = client.post("/api/operaciones/citas", json=payload)
+    assert creada.status_code == 200
+    cita_id = creada.json()["cita"]["id"]
+    pago_id = creada.json()["pago"]["id"]
+
+    plan = client.post(
+        "/api/planPagos",
+        json={
+            "pacienteId": paciente_id,
+            "pagoId": pago_id,
+            "citaId": cita_id,
+            "concepto": "Tratamiento inicial",
+            "cuotas": [
+                {
+                    "num": 1,
+                    "tipo": "cuota",
+                    "fecha": "2035-07-25",
+                    "monto": 200,
+                    "pagado": False,
+                },
+                {
+                    "num": 2,
+                    "tipo": "cuota",
+                    "fecha": "2035-08-25",
+                    "monto": 200,
+                    "pagado": False,
+                },
+            ],
+        },
+    )
+    assert plan.status_code == 200
+    plan_id = plan.json()["id"]
+
+    payload.update(
+        {
+            "procedimiento": "Tratamiento inicial + Corona",
+            "servicios": [
+                {"nombre": "Tratamiento inicial", "costo": 400},
+                {"nombre": "Corona", "costo": 350},
+            ],
+            "costo": 750,
+        }
+    )
+    actualizada = client.put(f"/api/operaciones/citas/{cita_id}", json=payload)
+    assert actualizada.status_code == 200
+    assert actualizada.json()["cita"]["costo"] == 750
+    assert actualizada.json()["pago"]["total"] == 750
+    assert actualizada.json()["pago"]["saldo"] == 750
+    assert actualizada.json()["planPago"]["totalAcordado"] == 750
+    assert [cuota["monto"] for cuota in actualizada.json()["planPago"]["cuotas"]] == [
+        375,
+        375,
+    ]
+
+    amortizacion = client.post(
+        f"/api/planPagos/{plan_id}/adelantos",
+        json={
+            "monto": 100,
+            "metodo": "Efectivo",
+            "motivo": "Amortización directa",
+            "usuario": "Pruebas",
+        },
+    )
+    assert amortizacion.status_code == 200
+    registro = amortizacion.json()["registro"]
+    assert registro["cobrado"] == 100
+    assert registro["saldo"] == 650
+    assert [cuota["monto"] for cuota in registro["cuotas"]] == [325, 325]
+
+    editado = client.put(
+        f"/api/planPagos/{plan_id}",
+        json={
+            **registro,
+            "concepto": "Tratamiento reprogramado",
+            "metodoPreferido": "Yape",
+            "cuotas": [
+                {
+                    "num": 1,
+                    "tipo": "cuota",
+                    "fecha": "2035-09-25",
+                    "monto": 216.67,
+                    "pagado": False,
+                },
+                {
+                    "num": 2,
+                    "tipo": "cuota",
+                    "fecha": "2035-10-25",
+                    "monto": 216.67,
+                    "pagado": False,
+                },
+                {
+                    "num": 3,
+                    "tipo": "cuota",
+                    "fecha": "2035-11-25",
+                    "monto": 216.66,
+                    "pagado": False,
+                },
+            ],
+        },
+    )
+    assert editado.status_code == 200
+    assert editado.json()["registro"]["concepto"] == "Tratamiento reprogramado"
+    assert editado.json()["registro"]["metodoPreferido"] == "Yape"
+    assert editado.json()["registro"]["saldo"] == 650
+
+    eliminado = client.delete(f"/api/planPagos/{plan_id}")
+    assert eliminado.status_code == 200
+    pago = next(
+        item for item in client.get("/api/pagos").json() if item["id"] == pago_id
+    )
+    assert pago["total"] == 750
+    assert pago["cobrado"] == 100
+    assert pago["saldo"] == 650
+    assert pago["cuotas"] == []
+
+
 def test_cambiar_estados_de_cita() -> None:
     paciente_id = crear_paciente("005")
 

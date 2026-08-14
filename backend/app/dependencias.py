@@ -29,10 +29,20 @@ def obtener_usuario_actual(
     )
 
     try:
-        return obtener_usuario_por_token(
+        usuario = obtener_usuario_por_token(
             db,
             token,
         )
+
+        if usuario.debe_cambiar_contrasena:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=("Debes cambiar tu contraseña temporal antes de continuar."),
+            )
+
+        return usuario
+    except HTTPException:
+        raise
     except SesionInvalidaError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

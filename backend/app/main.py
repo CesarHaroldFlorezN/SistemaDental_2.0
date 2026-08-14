@@ -6,7 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import ALLOWED_ORIGINS, FRONTEND_DIR
+from .config import (
+    ALLOWED_ORIGINS,
+    FRONTEND_DIR,
+    TEST_DB_PATH,
+    TEST_RESPALDOS_DIR,
+    validar_aislamiento_bases,
+)
+from .database import test_engine
 from .dependencias import (
     exigir_personal_clinico,
     obtener_usuario_actual,
@@ -21,13 +28,20 @@ from .routers import (
     odontograma_router,
     pacientes_router,
     salud_router,
+    usuarios_router,
 )
 
 # =====================================================
 # BASE DE DATOS
 # =====================================================
 
+validar_aislamiento_bases()
 inicializar_base_datos()
+inicializar_base_datos(
+    test_engine,
+    ruta_bd=TEST_DB_PATH,
+    directorio_respaldos=TEST_RESPALDOS_DIR,
+)
 
 
 # =====================================================
@@ -53,6 +67,7 @@ app.add_middleware(
 # ROUTERS
 # =====================================================
 app.include_router(autenticacion_router)
+app.include_router(usuarios_router)
 
 app.include_router(
     citas_router,
