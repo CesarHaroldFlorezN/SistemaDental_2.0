@@ -312,6 +312,34 @@ def migracion_005_odontograma_y_detalle_financiero(
     )
 
 
+def migracion_006_trazabilidad_importaciones_oficiales(
+    connection: Connection,
+) -> None:
+    """Registra el origen y los ajustes de cada reemplazo oficial."""
+
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS importacionesOficiales (
+            id INTEGER PRIMARY KEY,
+            versionFuente INTEGER NOT NULL,
+            fechaFuente VARCHAR(50) NOT NULL,
+            nombreArchivo VARCHAR(250) NOT NULL,
+            sha256 VARCHAR(64) NOT NULL,
+            conteos JSON NOT NULL,
+            advertencias JSON NOT NULL,
+            ajustes JSON NOT NULL,
+            importadaEn VARCHAR(50) NOT NULL
+        )
+        """
+    )
+    connection.exec_driver_sql(
+        """
+        CREATE INDEX IF NOT EXISTS ix_importaciones_oficiales_sha256
+        ON importacionesOficiales (sha256)
+        """
+    )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -337,6 +365,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         5,
         "odontograma_y_detalle_financiero",
         migracion_005_odontograma_y_detalle_financiero,
+    ),
+    (
+        6,
+        "trazabilidad_importaciones_oficiales",
+        migracion_006_trazabilidad_importaciones_oficiales,
     ),
 )
 

@@ -148,6 +148,50 @@ data/documentos/
 
 Estos archivos no se suben a GitHub para proteger la información privada de los pacientes.
 
+## Reemplazar la base desde un JSON oficial
+
+Los archivos `DentalPro_*.json` contienen datos privados y tampoco deben subirse a
+GitHub. La sustitución se realiza localmente y siempre con el backend detenido.
+
+Primero valida el archivo sin modificar la base activa:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.gestion_bd validar-json-oficial `
+  "$env:USERPROFILE\Downloads\DentalPro_2026-08-13.json"
+```
+
+Si la validación informa códigos de ficha duplicados, se puede generar una
+identificación única y dejar el ajuste registrado:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.gestion_bd validar-json-oficial `
+  "$env:USERPROFILE\Downloads\DentalPro_2026-08-13.json" `
+  --resolver-duplicados-ficha
+```
+
+Después de revisar las advertencias, el reemplazo completo se ejecuta así:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.app.gestion_bd importar-json-oficial `
+  "$env:USERPROFILE\Downloads\DentalPro_2026-08-13.json" `
+  --resolver-duplicados-ficha `
+  --aceptar-advertencias `
+  --confirmar REEMPLAZAR `
+  --servidor-detenido
+```
+
+El proceso:
+
+- valida estructura, identificadores, referencias y montos antes de escribir;
+- prepara y audita una base SQLite temporal;
+- crea un respaldo automático de `data/dentalpro.db`;
+- reemplaza pacientes, citas, pagos, planes y planes de pago;
+- conserva las cuentas de usuario, pero revoca las sesiones abiertas;
+- registra el origen, SHA-256, conteos, advertencias y ajustes de la importación.
+
+Los archivos de `data/documentos/` no se eliminan automáticamente. Dejan de estar
+vinculados a la base nueva, pero se conservan para evitar una pérdida irreversible.
+
 ## Generar el ejecutable
 
 Primero se debe compilar el frontend:
