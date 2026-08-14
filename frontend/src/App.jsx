@@ -433,7 +433,7 @@ export default function App() {
         cargarCasosClinicos()
       ]);
 
-      if (opciones.abrirPlanPagos && respuesta?.pago) {
+      if (opciones.abrirPlanPagos && respuesta?.pago && !respuesta?.planPago) {
         setPlanPagoContexto({
           pacienteId: respuesta.cita?.pacienteId,
           pagoId: respuesta.pago.id,
@@ -689,6 +689,9 @@ export default function App() {
         costo: Number(servicio.costo || 0),
         origen: servicio.origen || 'realizado'
       }));
+      const planVinculado = pagoActual
+        ? planPagos.find((plan) => Number(plan.pagoId) === Number(pagoActual.id))
+        : null;
 
       await api.actualizarCita(citaId, {
         ...citaActual,
@@ -731,75 +734,38 @@ export default function App() {
 
       let pagoGuardado = pagoActual;
       if (pagoActual) {
-        await api.actualizarPago(pagoActual.id, datosPago);
+        const respuestaPago = await api.actualizarPago(pagoActual.id, datosPago);
+        pagoGuardado = respuestaPago?.registro || pagoActual;
       } else if (!citaActual.planId || total > 0) {
         pagoGuardado = await api.crearPago(datosPago);
       }
 
       if (cobroRegistrado > 0) {
-        await api.crearMovimientoCuenta({
-          pacienteId,
-          citaId,
-          pagoId: pagoGuardado?.id || pagoActual?.id || null,
-          tipo: 'pago',
-          descripcion: `Pago al cierre: ${procedimiento || citaActual.procedimiento || 'Atencion dental'}`,
-          cargo: 0,
-          abono: cobroRegistrado,
-          fecha: obtenerFechaLocal(),
-          metodo: metodoCompleto,
-          referencia: '',
-          motivo: 'Cobro registrado al finalizar la atencion',
-          usuario: 'Administrador',
-          creadoEn: new Date().toISOString()
-        });
-      }
-
-      const planVinculado = pagoActual
-        ? planPagos.find((plan) => Number(plan.pagoId) === Number(pagoActual.id))
-        : null;
-
-      if (accionSaldo === 'agregar_plan' && planVinculado) {
-        const cuotas = Array.isArray(planVinculado.cuotas)
-          ? planVinculado.cuotas.map((cuota) => ({ ...cuota }))
-          : [];
-        const pendientes = cuotas
-          .map((cuota, indice) => ({ cuota, indice }))
-          .filter(({ cuota }) => !cuota.pagado && cuota.tipo !== 'anticipo');
-
-        if (pendientes.length) {
-          const base = Math.floor((nuevoSaldo / pendientes.length) * 100) / 100;
-          let acumulado = 0;
-          pendientes.forEach(({ cuota }, posicion) => {
-            const monto = posicion === pendientes.length - 1
-              ? Number((nuevoSaldo - acumulado).toFixed(2))
-              : Number(base.toFixed(2));
-            cuota.monto = Math.max(0, monto);
-            acumulado += cuota.monto;
+        if (planVinculado) {
+          await api.registrarAdelantoPlanPago(planVinculado.id, {
+            monto: cobroRegistrado,
+            metodo: metodoCompleto,
+            referencia: '',
+            motivo: 'Amortización registrada al finalizar la atención',
+            usuario: usuarioActual?.nombre || 'Administrador'
           });
-        } else if (nuevoSaldo > 0) {
-          const fecha = new Date();
-          fecha.setDate(fecha.getDate() + 30);
-          cuotas.push({
-            num: cuotas.filter((cuota) => cuota.tipo !== 'anticipo').length + 1,
-            tipo: 'cuota',
-            fecha: fecha.toISOString().split('T')[0],
-            monto: nuevoSaldo,
-            pagado: false,
-            fechaPago: null,
-            metodoPago: null
+        } else {
+          await api.crearMovimientoCuenta({
+            pacienteId,
+            citaId,
+            pagoId: pagoGuardado?.id || pagoActual?.id || null,
+            tipo: 'pago',
+            descripcion: `Pago al cierre: ${procedimiento || citaActual.procedimiento || 'Atencion dental'}`,
+            cargo: 0,
+            abono: cobroRegistrado,
+            fecha: obtenerFechaLocal(),
+            metodo: metodoCompleto,
+            referencia: '',
+            motivo: 'Cobro registrado al finalizar la atencion',
+            usuario: 'Administrador',
+            creadoEn: new Date().toISOString()
           });
         }
-
-        await api.actualizarPlanPago(planVinculado.id, {
-          ...planVinculado,
-          concepto: procedimiento || planVinculado.concepto,
-          totalAcordado: total,
-          totalCuotas: cuotas.reduce((suma, cuota) => suma + Number(cuota.monto || 0), 0),
-          cobrado: Math.min(total, nuevoCobrado),
-          saldo: nuevoSaldo,
-          estado: nuevoSaldo <= 0 ? 'completado' : 'activo',
-          cuotas
-        });
       }
 
       setModalCompletarAbierto(false);
@@ -1054,11 +1020,12 @@ export default function App() {
     const saldo = Number(plan.saldo || 0);
     if (saldo <= 0) return;
     const resultado = await Swal.fire({
-      title: 'Registrar adelanto del plan',
-      html: `<div style="text-align:left;display:grid;gap:12px"><div>Saldo actual: <strong>${fMon(saldo)}</strong></div><div style="font-size:12px;color:#94a3b8">El adelanto se registra aparte y recalcula únicamente las cuotas pendientes, sin borrar las ya pagadas.</div><input id="dp-monto-adelanto" type="number" min="0.01" max="${saldo}" step="0.01" class="swal2-input" placeholder="Monto del adelanto" style="margin:0;width:100%"><select id="dp-metodo-adelanto" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-adelanto" class="swal2-input" placeholder="Referencia u operación (opcional)" style="margin:0;width:100%"></div>`,
+      title: 'Amortizar deuda del plan',
+      html: `<div style="text-align:left;display:grid;gap:12px"><div>Saldo actual: <strong>${fMon(saldo)}</strong></div><div style="font-size:12px;color:#cbd5e1">La amortización reduce directamente la deuda y recalcula solo las cuotas pendientes, sin alterar las ya pagadas.</div><input id="dp-monto-adelanto" type="number" min="0.01" max="${saldo}" step="0.01" class="swal2-input" placeholder="Monto a amortizar" style="margin:0;width:100%"><select id="dp-metodo-adelanto" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-ref-adelanto" class="swal2-input" placeholder="Referencia u operación (opcional)" style="margin:0;width:100%"></div>`,
       showCancelButton: true,
-      confirmButtonText: 'Registrar adelanto',
+      confirmButtonText: 'Aplicar amortización',
       cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#f59e0b',
       background: '#1e293b',
       color: '#fff',
       preConfirm: () => {
@@ -1075,11 +1042,12 @@ export default function App() {
     });
     if (!resultado.isConfirmed) return;
     try {
-      await api.registrarAdelantoPlanPago(plan.id, resultado.value);
+      const respuesta = await api.registrarAdelantoPlanPago(plan.id, resultado.value);
       await Promise.all([cargarPlanPagos(), cargarPagos()]);
-      Swal.fire({ title: 'Adelanto registrado', text: 'Las cuotas pendientes fueron recalculadas y el movimiento quedó auditado.', icon: 'success', background: '#1e293b', color: '#fff', timer: 2200, showConfirmButton: false });
+      const saldoNuevo = Number(respuesta?.registro?.saldo ?? saldo - resultado.value.monto);
+      Swal.fire({ title: 'Amortización registrada', text: `${fMon(resultado.value.monto)} aplicado. Saldo: ${fMon(saldo)} → ${fMon(saldoNuevo)}.`, icon: 'success', background: '#1e293b', color: '#fff', timer: 2600, showConfirmButton: false });
     } catch (error) {
-      Swal.fire({ title: 'No se pudo registrar el adelanto', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({ title: 'No se pudo registrar la amortización', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
@@ -1123,19 +1091,27 @@ export default function App() {
   };
 
   const handleEliminarPlan = async (id) => {
-    const confirm = await Swal.fire({ title: '¿Eliminar plan de pago?', icon: 'warning', showCancelButton: true, background: '#1e293b', color: '#fff', confirmButtonColor: '#ef4444', confirmButtonText: 'Sí, eliminar' });
-    if (confirm.isConfirmed) { await api.eliminarPlanPago(id); cargarPlanPagos(); Swal.fire({ title: 'Eliminado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false }); }
+    const confirm = await Swal.fire({ title: '¿Eliminar plan de pago?', text: 'Se quitará el cronograma, pero la deuda y todos los cobros registrados se conservarán.', icon: 'warning', showCancelButton: true, background: '#1e293b', color: '#fff', confirmButtonColor: '#e11d48', confirmButtonText: 'Sí, eliminar plan', cancelButtonText: 'Cancelar' });
+    if (!confirm.isConfirmed) return;
+    try {
+      await api.eliminarPlanPago(id);
+      await Promise.all([cargarPlanPagos(), cargarPagos()]);
+      Swal.fire({ title: 'Plan eliminado', text: 'La deuda y sus cobros se conservaron.', icon: 'success', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
+    } catch (error) {
+      Swal.fire({ title: 'No se pudo eliminar', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
+    }
   };
 
-  const handleGuardarNuevoPP = async (payload) => {
+  const handleGuardarNuevoPP = async (payload, id = null) => {
     try {
-      await api.crearPlanPago(payload);
+      if (id) await api.actualizarPlanPago(id, payload);
+      else await api.crearPlanPago(payload);
       setModalPPAbierto(false);
       setPlanPagoContexto(null);
       await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
-      Swal.fire({ title: 'Plan de pagos vinculado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
+      Swal.fire({ title: id ? 'Plan de pagos actualizado' : 'Plan de pagos vinculado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
     } catch (error) {
-      Swal.fire({ title: 'No se pudo crear', text: error.message || 'No se pudo crear el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({ title: id ? 'No se pudo actualizar' : 'No se pudo crear', text: error.message || 'No se pudo guardar el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
@@ -1575,9 +1551,11 @@ export default function App() {
                   planPagosFiltrados.map((pl) => {
                     const cuotas = pl.cuotas || [];
                     const cuotasPagadas = cuotas.filter(q => q.pagado);
-                    const totalPagado = Number(pl.anticipo || 0) + cuotasPagadas.reduce((acc, q) => acc + (parseFloat(q.monto) || 0), 0);
+                    const totalPagado = Number(pl.cobrado ?? (Number(pl.anticipo || 0) + cuotasPagadas.reduce((acc, q) => acc + (parseFloat(q.monto) || 0), 0)));
                     const totalCuotasNum = parseFloat(pl.totalAcordado || 0);
                     const porcentaje = totalCuotasNum > 0 ? Math.min(100, (totalPagado / totalCuotasNum) * 100).toFixed(1) : 0;
+                    const cuotasPendientes = cuotas.filter(q => q.tipo === 'cuota' && !q.pagado && !q.cubiertaPorAdelanto).length;
+                    const citaOrigen = citas.find((cita) => Number(cita.id) === Number(pl.citaId));
                     return (
                       <div key={pl.id} className={`bg-slate-800/80 border rounded-2xl p-6 shadow-xl transition ${pl.estado === 'activo' ? 'border-cyan-500/40' : 'border-slate-700/60 opacity-85'}`}>
                         <div className="flex justify-between items-center mb-5 border-b border-slate-700/80 pb-4">
@@ -1590,7 +1568,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-xs text-slate-400">Total Acordado</div>
+                            <div className="text-xs text-slate-400">Total de servicios</div>
                             <div className="text-xl font-serif font-bold text-white">{fMon(pl.totalAcordado)}</div>
                           </div>
                         </div>
@@ -1598,6 +1576,11 @@ export default function App() {
                           <div className="w-full bg-slate-900/80 h-3 rounded-full overflow-hidden border border-slate-700">
                             <div className="bg-emerald-500 h-full transition-all duration-500" style={{ width: `${porcentaje}%` }}></div>
                           </div>
+                        </div>
+                        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Pagado / amortizado</div><div className="mt-1 text-lg font-black text-emerald-200">{fMon(pl.cobrado)}</div></div>
+                          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-rose-300">Saldo actual</div><div className="mt-1 text-lg font-black text-rose-200">{fMon(pl.saldo)}</div></div>
+                          <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-cyan-300">Cuotas pendientes</div><div className="mt-1 text-lg font-black text-cyan-100">{cuotasPendientes}</div></div>
                         </div>
                         <div className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden mb-5">
                           <table className="w-full text-left border-collapse text-xs">
@@ -1619,10 +1602,12 @@ export default function App() {
                             </tbody>
                           </table>
                         </div>
-                        <div className="flex gap-2 pt-2">
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          <button onClick={() => { const planClinico = planes.find((item) => Number(item.id) === Number(pl.planId)); setPlanPagoContexto({ ...pl, sesiones: planClinico?.sesiones || [] }); setModalPPAbierto(true); }} className="rounded-xl bg-cyan-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-500">✏️ Editar plan</button>
+                          {citaOrigen && <button onClick={() => handleEditarCita(citaOrigen)} className="rounded-xl border border-violet-400/60 bg-violet-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-500">🦷 Editar servicios / deuda</button>}
                           {pl.origen !== 'plan_tratamiento' && <button onClick={() => handleAgregarCuota(pl)} className="px-3 py-1.5 bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"><PlusCircle size={15} /> ＋ Añadir Cuota</button>}
-                          {Number(pl.saldo || 0) > 0 && <button onClick={() => handleRegistrarAdelantoPlan(pl)} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500 hover:text-slate-950">Registrar adelanto</button>}
-                          <button onClick={() => handleEliminarPlan(pl.id)} className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white text-xs font-semibold rounded-xl border border-rose-500/30 transition cursor-pointer ml-auto">🗑 Eliminar Plan</button>
+                          {Number(pl.saldo || 0) > 0 && <button onClick={() => handleRegistrarAdelantoPlan(pl)} className="rounded-xl border border-amber-300 bg-amber-500 px-3.5 py-2 text-xs font-black text-slate-950 shadow-lg shadow-amber-950/30 transition hover:bg-amber-400">💵 Amortizar deuda</button>}
+                          <button onClick={() => handleEliminarPlan(pl.id)} className="ml-auto rounded-xl border border-rose-400 bg-rose-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-rose-950/30 transition hover:bg-rose-500">🗑 Eliminar plan</button>
                         </div>
                       </div>
                     );

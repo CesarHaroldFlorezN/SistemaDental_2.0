@@ -28,6 +28,7 @@ from ..services import (
     obtener_sesion_para_cita,
     redondear_monto,
     serializar_modelo,
+    sincronizar_plan_pago_con_pago,
     validar_disponibilidad,
     validar_secuencia_sesion,
     vincular_sesion_a_cita,
@@ -296,6 +297,11 @@ def actualizar_cita_con_pago(
         if plan and plan.pagoId
         else pago_cita
     )
+    plan_pago = (
+        db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == pago.id).first()
+        if pago
+        else None
+    )
     detalle_servicios = normalizar_servicios(payload_efectivo)
     datos_pago = calcular_datos_pago(
         payload_efectivo,
@@ -303,7 +309,24 @@ def actualizar_cita_con_pago(
     )
     ahora = ahora_iso()
 
-    if not plan and pago and datos_pago["cobrado"] < redondear_monto(pago.cobrado):
+    cobrado_existente = max(
+        redondear_monto(pago.cobrado) if pago else redondear_monto(0),
+        redondear_monto(plan_pago.cobrado) if plan_pago else redondear_monto(0),
+    )
+    if not plan and pago and datos_pago["total"] < cobrado_existente:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No puedes dejar el total por debajo del monto ya cobrado. "
+                "Primero debes revertir el cobro desde Finanzas."
+            ),
+        )
+    if (
+        not plan
+        and pago
+        and not plan_pago
+        and datos_pago["cobrado"] < redondear_monto(pago.cobrado)
+    ):
         raise HTTPException(
             status_code=400,
             detail=(
@@ -371,14 +394,20 @@ def actualizar_cita_con_pago(
             pago.concepto = detalle_servicios["procedimiento"]
             pago.fecha = payload_efectivo.fecha
             pago.total = datos_pago["total"]
-            pago.cobrado = datos_pago["cobrado"]
-            pago.saldo = datos_pago["saldo"]
-            pago.metodo = datos_pago["metodo"]
-            pago.tipoPago = payload_efectivo.tipoPago
             pago.servicios = detalle_servicios["servicios"]
-            pago.fechaUltPago = (
-                payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
-            )
+            if plan_pago:
+                # El plan es la fuente de verdad de los cobros ya registrados.
+                # El cambio de servicios solo modifica el total y redistribuye
+                # las cuotas pendientes.
+                sincronizar_plan_pago_con_pago(db, pago)
+            else:
+                pago.cobrado = datos_pago["cobrado"]
+                pago.saldo = datos_pago["saldo"]
+                pago.metodo = datos_pago["metodo"]
+                pago.tipoPago = payload_efectivo.tipoPago
+                pago.fechaUltPago = (
+                    payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
+                )
 
         db.commit()
         db.refresh(cita)
@@ -389,6 +418,7 @@ def actualizar_cita_con_pago(
             "message": "Cita y registro financiero actualizados correctamente.",
             "cita": serializar_modelo(cita),
             "pago": serializar_modelo(pago) if pago else None,
+            "planPago": serializar_modelo(plan_pago) if plan_pago else None,
             "casoClinico": serializar_modelo(caso),
             "sesionPlan": serializar_modelo(sesion) if sesion else None,
         }

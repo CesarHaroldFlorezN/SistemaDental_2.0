@@ -4,6 +4,7 @@ import hashlib
 import json
 import sqlite3
 from collections import Counter
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -872,7 +873,10 @@ def _leer_usuarios_actuales(ruta_bd: Path) -> list[dict[str, Any]]:
 
     columnas = [columna.name for columna in UsuarioDB.__table__.columns]
 
-    with sqlite3.connect(str(ruta_bd)) as conexion:
+    # El context manager nativo de sqlite3 confirma/revierte la transacción,
+    # pero no cierra la conexión. En Windows eso mantiene el archivo bloqueado
+    # e impide reemplazarlo durante la importación oficial.
+    with closing(sqlite3.connect(str(ruta_bd))) as conexion:
         existe = conexion.execute(
             """
             SELECT 1
