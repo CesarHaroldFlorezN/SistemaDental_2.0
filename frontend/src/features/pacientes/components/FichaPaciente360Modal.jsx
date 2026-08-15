@@ -100,7 +100,7 @@ export default function FichaPaciente360Modal({
     if (maximo <= 0) return;
     const resultado = await Swal.fire({
       title: tipo === 'anular' ? 'Anular pago registrado' : 'Registrar devolucion',
-      html: `<div style="text-align:left;display:grid;gap:10px"><div>Disponible: <b>${moneda(maximo)}</b></div><input id="dp-op-monto" class="swal2-input" type="number" min="0.01" max="${maximo}" step="0.01" value="${maximo}" style="margin:0;width:100%"><textarea id="dp-op-motivo" class="swal2-textarea" placeholder="Motivo obligatorio" style="margin:0;width:100%"></textarea></div>`,
+      html: `<div style="text-align:left;display:grid;gap:10px"><div>Disponible: <b>${moneda(maximo)}</b></div><input id="dp-op-monto" class="swal2-input" type="number" data-money-input="true" min="0.01" max="${maximo}" step="0.01" value="${maximo}" style="margin:0;width:100%"><textarea id="dp-op-motivo" class="swal2-textarea" placeholder="Motivo obligatorio" style="margin:0;width:100%"></textarea></div>`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: tipo === 'anular' ? 'Anular pago' : 'Registrar devolucion',
@@ -131,7 +131,7 @@ export default function FichaPaciente360Modal({
     if (saldo <= 0) return;
     const resultado = await Swal.fire({
       title: 'Registrar pago',
-      html: `<div style="text-align:left;display:grid;gap:10px"><div>Saldo: <b>${moneda(saldo)}</b></div><input id="dp-pago-monto" class="swal2-input" type="number" min="0.01" max="${saldo}" step="0.01" value="${saldo}" style="margin:0;width:100%"><select id="dp-pago-metodo" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-pago-ref" class="swal2-input" placeholder="Referencia u operacion (opcional)" style="margin:0;width:100%"></div>`,
+      html: `<div style="text-align:left;display:grid;gap:10px"><div>Saldo: <b>${moneda(saldo)}</b></div><input id="dp-pago-monto" class="swal2-input" type="number" data-money-input="true" min="0.01" max="${saldo}" step="0.01" value="${saldo}" style="margin:0;width:100%"><select id="dp-pago-metodo" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-pago-ref" class="swal2-input" placeholder="Referencia u operacion (opcional)" style="margin:0;width:100%"></div>`,
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
