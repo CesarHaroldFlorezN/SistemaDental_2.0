@@ -80,6 +80,7 @@ export const crearAccionesCierreCitas = ({
       ].filter(Boolean).join('\n');
 
       const serviciosLimpios = serviciosRealizados.map((servicio) => ({
+        servicioId: servicio.servicioId || null,
         nombre: servicio.nombre,
         costo: Number(servicio.costo || 0),
         origen: servicio.origen || 'realizado'

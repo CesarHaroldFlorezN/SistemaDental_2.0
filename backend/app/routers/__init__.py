@@ -1,4 +1,5 @@
 from .autenticacion import router as autenticacion_router
+from .catalogo import router as catalogo_router
 from .citas import router as citas_router
 from .clinica import router as clinica_router
 from .documentos import router as documentos_router
@@ -10,6 +11,7 @@ from .usuarios import router as usuarios_router
 
 __all__ = [
     "autenticacion_router",
+    "catalogo_router",
     "citas_router",
     "clinica_router",
     "documentos_router",

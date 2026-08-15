@@ -18,23 +18,10 @@ import {
   UserCheck,
   X
 } from 'lucide-react';
-
-const PROCEDIMIENTOS = [
-  'Consulta de evaluación',
-  'Limpieza dental',
-  'Empaste / Resina',
-  'Endodoncia (canal)',
-  'Extracción simple',
-  'Extracción muela juicio',
-  'Corona dental',
-  'Implante dental',
-  'Blanqueamiento',
-  'Ortodoncia — colocación',
-  'Ortodoncia — control',
-  'Prótesis dental',
-  'Rayos X',
-  'Cirugía oral'
-];
+import {
+  buscarServicioCatalogo,
+  serviciosCatalogoDisponibles
+} from '../../../shared/utils/catalogo';
 
 const DURACIONES_RAPIDAS = [15, 30, 45, 60, 90, 120];
 const ESTADOS_QUE_OCUPAN_HORARIO = new Set([
@@ -83,23 +70,43 @@ const calcularDuracion = (horaInicio, horaFin) => {
   return fin - inicio;
 };
 
-const crearServicio = (nombre = 'Consulta de evaluación', costo = 0) => ({
-  clave: `${Date.now()}-${Math.random()}`,
-  seleccion: PROCEDIMIENTOS.includes(nombre) ? nombre : 'Otro',
-  nombreOtro: PROCEDIMIENTOS.includes(nombre) ? '' : nombre,
-  costo: Number(costo || 0)
-});
+const crearServicioCita = (
+  nombre = 'Consulta de evaluación',
+  costo,
+  catalogo = [],
+  servicioId = null
+) => {
+  const servicioCatalogo = buscarServicioCatalogo(catalogo, {
+    servicioId,
+    nombre
+  });
+  return {
+    clave: `${Date.now()}-${Math.random()}`,
+    servicioId: servicioCatalogo?.id || null,
+    seleccion: servicioCatalogo ? String(servicioCatalogo.id) : 'otro',
+    nombreOtro: servicioCatalogo ? '' : nombre,
+    costo: Number(
+      costo ?? servicioCatalogo?.precio ?? 0
+    )
+  };
+};
 
-const serviciosIniciales = (citaEditar) => {
+const serviciosIniciales = (citaEditar, catalogo) => {
   if (Array.isArray(citaEditar?.servicios) && citaEditar.servicios.length) {
     return citaEditar.servicios.map((servicio) =>
-      crearServicio(servicio.nombre, servicio.costo)
+      crearServicioCita(
+        servicio.nombre,
+        servicio.costo,
+        catalogo,
+        servicio.servicioId
+      )
     );
   }
   return [
-    crearServicio(
+    crearServicioCita(
       citaEditar?.procedimiento || 'Consulta de evaluación',
-      citaEditar?.costo || 0
+      citaEditar?.costo,
+      catalogo
     )
   ];
 };
@@ -116,7 +123,7 @@ const obtenerHoraFinCita = (cita) => {
   return sumarMinutos(cita?.hora || '09:00', Number(cita?.duracionMinutos || 60));
 };
 
-const crearEstadoInicial = (citaEditar, pagoEditar) => {
+const crearEstadoInicial = (citaEditar, pagoEditar, catalogo) => {
   const hora = citaEditar?.hora || '09:00';
   const duracionGuardada = Math.max(5, Number(citaEditar?.duracionMinutos || 60));
   const horaFin = citaEditar?.horaFin || sumarMinutos(hora, duracionGuardada);
@@ -135,7 +142,7 @@ const crearEstadoInicial = (citaEditar, pagoEditar) => {
     horaFin,
     duracionMinutos: duracionReal,
     modoDuracion: DURACIONES_RAPIDAS.includes(duracionReal) ? String(duracionReal) : 'libre',
-    servicios: serviciosIniciales(citaEditar),
+    servicios: serviciosIniciales(citaEditar, catalogo),
     // DENTALPRO_V7_PAGOS: la interfaz separa la decisión de cobro del estado calculado.
     tipoPago: ['completo', 'anticipo'].includes(citaEditar?.tipoPago || pagoEditar?.tipoPago)
       ? 'pago_ahora'
@@ -160,10 +167,11 @@ export default function CitaModal({
   pacientes = [],
   citas = [],
   planes = [],
-  casosClinicos = []
+  casosClinicos = [],
+  serviciosCatalogo = []
 }) {
   const [formData, setFormData] = useState(() =>
-    crearEstadoInicial(citaEditar, pagoEditar)
+    crearEstadoInicial(citaEditar, pagoEditar, serviciosCatalogo)
   );
   const [busquedaPaciente, setBusquedaPaciente] = useState('');
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
@@ -175,9 +183,10 @@ export default function CitaModal({
   useEffect(() => {
     if (!isOpen) return;
     const estado = crearEstadoInicial(
-  citaEditar,
-  pagoEditar
-);
+      citaEditar,
+      pagoEditar,
+      serviciosCatalogo
+    );
     if (
       !citaEditar?.id
       && estado.pacienteId
@@ -192,7 +201,14 @@ export default function CitaModal({
     setIndiceSugerencia(0);
     setErrorFormulario('');
     setGuardando(false);
-  }, [isOpen, citaEditar, pagoEditar, pacientes, citas]);
+  }, [
+    isOpen,
+    citaEditar,
+    pagoEditar,
+    pacientes,
+    citas,
+    serviciosCatalogo
+  ]);
 
   const pacientesFiltrados = useMemo(() => {
     const terminos = normalizar(busquedaPaciente).split(/\s+/).filter(Boolean);
@@ -424,10 +440,48 @@ export default function CitaModal({
     }));
   };
 
-  const agregarServicio = () => {
+  const seleccionarServicio = (clave, seleccion) => {
+    setErrorFormulario('');
     setFormData((prev) => ({
       ...prev,
-      servicios: [...prev.servicios, crearServicio('Limpieza dental', 0)]
+      servicios: prev.servicios.map((servicio) => {
+        if (servicio.clave !== clave) return servicio;
+        if (seleccion === 'otro') {
+          return {
+            ...servicio,
+            servicioId: null,
+            seleccion: 'otro',
+            nombreOtro: ''
+          };
+        }
+        const catalogado = serviciosCatalogo.find(
+          (item) => Number(item.id) === Number(seleccion)
+        );
+        if (!catalogado) return servicio;
+        return {
+          ...servicio,
+          servicioId: catalogado.id,
+          seleccion: String(catalogado.id),
+          nombreOtro: '',
+          costo: Number(catalogado.precio || 0)
+        };
+      })
+    }));
+  };
+
+  const agregarServicio = () => {
+    const primerServicio = serviciosCatalogo.find((servicio) => servicio.activo);
+    setFormData((prev) => ({
+      ...prev,
+      servicios: [
+        ...prev.servicios,
+        crearServicioCita(
+          primerServicio?.nombre || 'Servicio personalizado',
+          undefined,
+          serviciosCatalogo,
+          primerServicio?.id
+        )
+      ]
     }));
   };
 
@@ -446,9 +500,12 @@ export default function CitaModal({
     let montoPagado = Math.max(0, Number(formData.montoPagado) || 0);
 
     const servicios = formData.servicios.map((servicio) => ({
-      nombre: servicio.seleccion === 'Otro'
+      servicioId: servicio.servicioId || null,
+      nombre: servicio.seleccion === 'otro'
         ? servicio.nombreOtro.trim()
-        : servicio.seleccion.trim(),
+        : serviciosCatalogo.find(
+            (item) => Number(item.id) === Number(servicio.servicioId)
+          )?.nombre || servicio.nombreOtro.trim(),
       costo: formData.tipoPago === 'sesion'
         ? 0
         : Math.max(0, Number(servicio.costo) || 0)
@@ -682,11 +739,11 @@ export default function CitaModal({
                 <div key={servicio.clave} className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
                   <div className="grid gap-3 md:grid-cols-[92px_minmax(0,1fr)_150px_42px] md:items-end">
                     <div className="pb-2 text-xs font-black uppercase tracking-wider text-cyan-300">Servicio {indice + 1}</div>
-                    <label className="text-xs font-medium text-slate-400">Procedimiento<select value={servicio.seleccion} onChange={(event) => actualizarServicio(servicio.clave, 'seleccion', event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-cyan-500">{PROCEDIMIENTOS.map((procedimiento) => <option key={procedimiento} value={procedimiento}>{procedimiento}</option>)}<option value="Otro">Otro servicio</option></select></label>
+                    <label className="text-xs font-medium text-slate-400">Procedimiento<select value={servicio.seleccion} onChange={(event) => seleccionarServicio(servicio.clave, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-cyan-500">{serviciosCatalogoDisponibles(serviciosCatalogo, servicio.servicioId).map((catalogado) => <option key={catalogado.id} value={catalogado.id}>{catalogado.nombre} · {catalogado.categoria}</option>)}<option value="otro">Otro servicio</option></select></label>
                     <label className="text-xs font-medium text-slate-400">Costo (S/.)<input type="number" data-money-input="true" min="0" step="0.01" disabled={formData.tipoPago === 'sesion'} value={formData.tipoPago === 'sesion' ? 0 : servicio.costo} onChange={(event) => actualizarServicio(servicio.clave, 'costo', event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-right font-bold text-white outline-none focus:border-cyan-500 disabled:opacity-50" /></label>
                     <button type="button" disabled={formData.servicios.length === 1} onClick={() => quitarServicio(servicio.clave)} title="Eliminar servicio" className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 text-slate-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-30"><Trash2 size={16} /></button>
                   </div>
-                  {servicio.seleccion === 'Otro' && <label className="mt-3 block text-xs font-medium text-slate-400 md:ml-[104px]">Nombre del servicio<input type="text" value={servicio.nombreOtro} onChange={(event) => actualizarServicio(servicio.clave, 'nombreOtro', event.target.value)} placeholder="Escribe el nombre del servicio..." className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-cyan-500" /></label>}
+                  {servicio.seleccion === 'otro' && <label className="mt-3 block text-xs font-medium text-slate-400 md:ml-[104px]">Nombre del servicio<input type="text" value={servicio.nombreOtro} onChange={(event) => actualizarServicio(servicio.clave, 'nombreOtro', event.target.value)} placeholder="Escribe el nombre del servicio..." className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white outline-none focus:border-cyan-500" /></label>}
                 </div>
               ))}
             </div>

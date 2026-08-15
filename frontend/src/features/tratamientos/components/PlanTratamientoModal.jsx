@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 
-const ESPECIALIDADES = [
+const ESPECIALIDADES_BASE = [
   'Endodoncia',
   'Ortodoncia',
   'Rehabilitación',
@@ -35,9 +35,9 @@ const etiquetaPaciente = (paciente) => {
   return `${ficha}${paciente.nombre || 'Paciente'}${dni}`;
 };
 
-const crearEstado = (plan) => {
+const crearEstado = (plan, especialidades) => {
   const tipoGuardado = plan?.tipo || 'Endodoncia';
-  const esEspecialidadConocida = ESPECIALIDADES.includes(tipoGuardado);
+  const esEspecialidadConocida = especialidades.includes(tipoGuardado);
 
   return {
     pacienteId: plan?.pacienteId || '',
@@ -60,9 +60,25 @@ export default function PlanTratamientoModal({
   onSave,
   planEditar,
   pacientes = [],
-  casosClinicos = []
+  casosClinicos = [],
+  serviciosCatalogo = []
 }) {
-  const [formData, setFormData] = useState(() => crearEstado(planEditar));
+  const especialidades = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...ESPECIALIDADES_BASE,
+          ...serviciosCatalogo
+            .filter((servicio) => servicio.activo)
+            .map((servicio) => servicio.categoria)
+            .filter(Boolean)
+        ])
+      ].sort((a, b) => a.localeCompare(b, 'es')),
+    [serviciosCatalogo]
+  );
+  const [formData, setFormData] = useState(() =>
+    crearEstado(planEditar, especialidades)
+  );
   const [busquedaPaciente, setBusquedaPaciente] = useState('');
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
   const [indiceSugerencia, setIndiceSugerencia] = useState(0);
@@ -71,7 +87,7 @@ export default function PlanTratamientoModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    const estado = crearEstado(planEditar);
+    const estado = crearEstado(planEditar, especialidades);
     setFormData(estado);
     setBusquedaPaciente(etiquetaPaciente(
       pacientes.find((paciente) => Number(paciente.id) === Number(estado.pacienteId))
@@ -79,7 +95,7 @@ export default function PlanTratamientoModal({
     setMostrarSugerencias(false);
     setIndiceSugerencia(0);
     setGuardando(false);
-  }, [isOpen, planEditar, pacientes]);
+  }, [isOpen, planEditar, pacientes, especialidades]);
 
   const pacienteSeleccionado = useMemo(
     () => pacientes.find(
@@ -269,7 +285,7 @@ export default function PlanTratamientoModal({
           <div className="grid gap-4 md:grid-cols-2">
             <label className="font-medium text-slate-300">Nombre del plan *<input type="text" name="nombre" required value={formData.nombre} onChange={handleChange} placeholder="Ej.: Endodoncia pieza 26" className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 font-semibold text-white outline-none focus:border-purple-500" /></label>
             <label className="font-medium text-slate-300">Especialidad / tipo
-              <select name="tipo" value={formData.tipo} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-purple-500">{ESPECIALIDADES.map((especialidad) => <option key={especialidad}>{especialidad}</option>)}<option>Otro</option></select>
+              <select name="tipo" value={formData.tipo} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-purple-500">{especialidades.map((especialidad) => <option key={especialidad}>{especialidad}</option>)}<option>Otro</option></select>
               {formData.tipo === 'Otro' && <input type="text" name="tipoPersonalizado" required value={formData.tipoPersonalizado} onChange={handleChange} placeholder="Escribe la especialidad o tipo" className="mt-2 w-full rounded-xl border border-purple-500/40 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-purple-400" />}
             </label>
           </div>

@@ -1,3 +1,4 @@
+from .catalogo import ServicioCatalogoDB
 from .cita import CitaDB
 from .clinica import CasoClinicoDB, SesionPlanDB
 from .documento import DocumentoPacienteDB
@@ -23,6 +24,7 @@ __all__ = [
     "PagoDB",
     "PlanDB",
     "PlanPagoDB",
+    "ServicioCatalogoDB",
     "SesionDB",
     "SesionPlanDB",
     "UsuarioDB",

@@ -25,6 +25,7 @@ TipoCita = Literal[
 
 
 class ServicioCitaPayload(BaseModel):
+    servicioId: int | None = Field(default=None, gt=0)
     nombre: str = Field(min_length=2, max_length=150)
     costo: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
 

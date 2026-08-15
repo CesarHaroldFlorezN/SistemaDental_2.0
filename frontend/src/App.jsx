@@ -13,6 +13,12 @@ import {
   filtrarPlanesPago,
   filtrarPlanesTratamiento
 } from './app/selectores';
+import {
+  puedeAccederVista,
+  resolverRutaApp,
+  rutaDeVista,
+  rutaPaciente
+} from './app/rutas';
 import FinanzasPage from './features/finanzas/components/FinanzasPage';
 import PlanesPagoPage from './features/finanzas/components/PlanesPagoPage';
 import PlanesTratamientoPage from './features/tratamientos/components/PlanesTratamientoPage';
@@ -23,6 +29,7 @@ import LoginPage from './features/autenticacion/components/LoginPage';
 import CambiarContrasenaObligatoria from './features/autenticacion/components/CambiarContrasenaObligatoria';
 
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from './services/api';
 import { formatearMoneda } from './shared/utils/dentalPro';
 
@@ -46,8 +53,14 @@ const AgendaClinicaProfesional = lazy(
 const UsuariosPage = lazy(
   () => import('./features/usuarios/components/UsuariosPage')
 );
+const CatalogoServiciosPage = lazy(
+  () => import('./features/catalogo/components/CatalogoServiciosPage')
+);
 export default function App() {
-  const [vistaActiva, setVistaActiva] = useState('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const rutaActual = resolverRutaApp(location.pathname);
+  const vistaActiva = rutaActual.vista;
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
 
@@ -114,12 +127,14 @@ export default function App() {
     planPagos,
     planes,
     casosClinicos,
+    serviciosCatalogo,
     cargarPacientes,
     cargarCitas,
     cargarPagos,
     cargarPlanPagos,
     cargarPlanes,
     cargarCasosClinicos,
+    cargarServiciosCatalogo,
     limpiarDatos
   } = useDentalProData(usuarioActual);
 
@@ -130,6 +145,31 @@ export default function App() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [modalFichaAbierto, setModalFichaAbierto] = useState(false);
+
+  useEffect(() => {
+    if (
+      !usuarioActual ||
+      usuarioActual.debeCambiarContrasena ||
+      puedeAccederVista(vistaActiva, usuarioActual.rol)
+    ) {
+      return;
+    }
+    navigate('/', { replace: true });
+  }, [navigate, usuarioActual, vistaActiva]);
+
+  useEffect(() => {
+    if (!rutaActual.pacienteId) {
+      setModalFichaAbierto(false);
+      return;
+    }
+    if (!pacientes.length) return;
+    const paciente = pacientes.find(
+      (item) => Number(item.id) === Number(rutaActual.pacienteId)
+    );
+    if (!paciente) return;
+    setPacienteSeleccionado(paciente);
+    setModalFichaAbierto(true);
+  }, [pacientes, rutaActual.pacienteId]);
 
   // ==========================================
   // ESTADOS DE CITAS & MODALES CLÍNICOS
@@ -152,13 +192,13 @@ export default function App() {
     if (vista === 'finanzas') {
       setFiltroFinanzas('todos');
     }
-    setVistaActiva(vista);
+    navigate(rutaDeVista(vista));
   };
 
   const handleVerCobrosPendientes = () => {
     setBusquedaFinanzas('');
     setFiltroFinanzas('pendientes');
-    setVistaActiva('finanzas');
+    navigate(rutaDeVista('finanzas'));
   };
 
   const [busquedaPP, setBusquedaPP] = useState('');
@@ -188,7 +228,7 @@ export default function App() {
       await api.cerrarSesion();
 
       setUsuarioActual(null);
-      setVistaActiva('dashboard');
+      navigate('/');
       limpiarDatos();
     } catch (error) {
       Swal.fire({
@@ -226,7 +266,7 @@ export default function App() {
         usuario={usuarioActual}
         onContrasenaCambiada={() => {
           setUsuarioActual(null);
-          setVistaActiva('dashboard');
+          navigate('/');
         }}
       />
     );
@@ -250,6 +290,11 @@ export default function App() {
     setModalFichaAbierto,
     setModalAbierto
   });
+
+  const handleVerFichaConRuta = (paciente) => {
+    handleVerFicha(paciente);
+    navigate(rutaPaciente(paciente.id));
+  };
 
   const {
     handleNuevaCita,
@@ -276,7 +321,7 @@ export default function App() {
     cargarPlanes,
     cargarCasosClinicos,
     fMon,
-    setVistaActiva,
+    setVistaActiva: (vista) => navigate(rutaDeVista(vista)),
     setBusquedaPP,
     setCitaSeleccionada,
     setModalCitaAbierto,
@@ -411,7 +456,7 @@ export default function App() {
       onExportar={() => api.exportarPacientes()}
       onImportar={handleImportarCSV}
       onNuevo={handleNuevoPaciente}
-      onVerFicha={handleVerFicha}
+      onVerFicha={handleVerFichaConRuta}
       onEditar={handleEditarPaciente}
       onEliminar={handleEliminar}
     />
@@ -438,7 +483,7 @@ export default function App() {
       onCompletarCita={handleAbrirCompletar}
       onCancelarCita={handleAbrirCancelar}
       onCobrar={handleCobrarSaldo}
-      onVerFicha={handleVerFicha}
+      onVerFicha={handleVerFichaConRuta}
       onEliminarCita={handleEliminarCita}
       onReprogramarCita={handleReprogramarCita}
       onVerCuotas={handleVerCuotasDesdeAgenda}
@@ -549,6 +594,15 @@ export default function App() {
             </Suspense>
           )}
 
+          {vistaActiva === 'catalogo' && usuarioActual.rol === 'administrador' && (
+            <Suspense fallback={<div className="flex min-h-64 items-center justify-center text-slate-500">Cargando catálogo…</div>}>
+              <CatalogoServiciosPage
+                servicios={serviciosCatalogo}
+                onRecargar={cargarServiciosCatalogo}
+              />
+            </Suspense>
+          )}
+
         </div>
       </main>
 
@@ -574,6 +628,7 @@ export default function App() {
           pagos,
           planes,
           casosClinicos,
+          serviciosCatalogo,
           planesPago: planPagos
         }}
         cargas={{
@@ -595,7 +650,12 @@ export default function App() {
           guardarCompletado: handleGuardarCompletado,
           cerrarCancelar: () => setModalCancelarAbierto(false),
           guardarCancelacion: handleGuardarCancelacion,
-          cerrarFicha: () => setModalFichaAbierto(false),
+          cerrarFicha: () => {
+            setModalFichaAbierto(false);
+            if (rutaActual.pacienteId) {
+              navigate(rutaDeVista('pacientes'), { replace: true });
+            }
+          },
           crearPlanDesdeFicha: (paciente, caso = null) => {
             setPlanSeleccionado({
               pacienteId: paciente?.id || null,
@@ -605,7 +665,7 @@ export default function App() {
           },
           verPlanPagosDesdeFicha: (paciente) => {
             setBusquedaPP(paciente?.nombre || '');
-            setVistaActiva('planpagos');
+            navigate(rutaDeVista('planpagos'));
             setModalFichaAbierto(false);
           },
           nuevaCitaDesdeFicha: (paciente, datosIniciales = {}) => {

@@ -83,6 +83,7 @@ def test_aplicar_migracion_y_registrar_version(
         (5, "odontograma_y_detalle_financiero"),
         (6, "trazabilidad_importaciones_oficiales"),
         (7, "contrasena_temporal_usuarios"),
+        (8, "catalogo_servicios_canonico"),
     ]
     assert not hay_migraciones_pendientes(motor)
 
@@ -105,7 +106,52 @@ def test_no_repetir_migracion_aplicada(
             "SELECT COUNT(*) FROM schema_migrations"
         ).scalar_one()
 
-    assert cantidad == 7
+    assert cantidad == 8
+
+    motor.dispose()
+
+
+def test_catalogo_migra_variantes_historicas(
+    tmp_path: Path,
+) -> None:
+    motor = crear_motor_temporal(tmp_path)
+    crear_esquema_antiguo(motor)
+
+    with motor.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE citas ADD COLUMN procedimiento VARCHAR(200)"
+        )
+        connection.exec_driver_sql("ALTER TABLE citas ADD COLUMN servicios JSON")
+        connection.exec_driver_sql(
+            """
+            INSERT INTO citas (id, fecha, procedimiento, servicios)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                1,
+                "2036-02-01",
+                "Ortodoncia - colocacion",
+                '[{"nombre":"Ortodoncia - colocacion","costo":300}]',
+            ),
+        )
+        aplicar_migraciones(connection)
+
+        servicio = connection.exec_driver_sql(
+            """
+            SELECT id, nombre
+            FROM serviciosCatalogo
+            WHERE codigo = 'ortodoncia-colocacion'
+            """
+        ).fetchone()
+        cita = connection.exec_driver_sql(
+            "SELECT procedimiento, servicios FROM citas WHERE id = 1"
+        ).fetchone()
+
+    assert servicio is not None
+    assert servicio[1] == "Ortodoncia — colocación"
+    assert cita[0] == "Ortodoncia — colocación"
+    assert f'"servicioId":{servicio[0]}' in cita[1]
+    assert '"nombre":"Ortodoncia — colocación"' in cita[1]
 
     motor.dispose()
 

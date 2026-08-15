@@ -13,43 +13,34 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-
-const CATALOGO = [
-  'Consulta de evaluacion',
-  'Profilaxis / Limpieza dental',
-  'Empaste / Resina',
-  'Endodoncia',
-  'Extraccion simple',
-  'Extraccion de muela del juicio',
-  'Corona dental',
-  'Implante dental',
-  'Blanqueamiento',
-  'Ortodoncia - colocacion',
-  'Ortodoncia - control',
-  'Protesis dental',
-  'Radiografia dental',
-  'Cirugia oral',
-  'Otro servicio'
-];
+import {
+  buscarServicioCatalogo,
+  normalizarTextoCatalogo,
+  serviciosCatalogoDisponibles
+} from '../../../shared/utils/catalogo';
 
 const METODOS = ['Efectivo', 'Yape', 'Plin', 'Transferencia', 'Tarjeta'];
 const crearClave = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const moneda = (valor) => `S/. ${Number(valor || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const serviciosIniciales = (cita) => {
+const serviciosIniciales = (cita, catalogo) => {
   const base = Array.isArray(cita?.servicios) && cita.servicios.length
     ? cita.servicios
-    : [{ nombre: cita?.procedimiento || 'Consulta de evaluacion', costo: cita?.costo || 0 }];
-  return base.map((servicio) => ({
-    clave: crearClave(),
-    nombre: servicio?.nombre || 'Servicio dental',
-    costo: Math.max(0, Number(servicio?.costo || 0)),
-    realizado: true,
-    origen: servicio?.origen || 'programado'
-  }));
+    : [{ nombre: cita?.procedimiento || 'Consulta de evaluación', costo: cita?.costo || 0 }];
+  return base.map((servicio) => {
+    const catalogado = buscarServicioCatalogo(catalogo, servicio);
+    return {
+      clave: crearClave(),
+      servicioId: catalogado?.id || null,
+      nombre: catalogado?.nombre || servicio?.nombre || 'Servicio dental',
+      costo: Math.max(0, Number(servicio?.costo || 0)),
+      realizado: true,
+      origen: servicio?.origen || 'programado'
+    };
+  });
 };
 
-function SelectorServicio({ value, onChange }) {
+function SelectorServicio({ servicioId, value, catalogo, onChange }) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState(value || '');
   const contenedor = useRef(null);
@@ -63,7 +54,12 @@ function SelectorServicio({ value, onChange }) {
     return () => document.removeEventListener('mousedown', cerrar);
   }, []);
 
-  const resultados = CATALOGO.filter((item) => item.toLowerCase().includes(texto.toLowerCase())).slice(0, 12);
+  const termino = normalizarTextoCatalogo(texto);
+  const resultados = serviciosCatalogoDisponibles(catalogo, servicioId)
+    .filter((item) =>
+      normalizarTextoCatalogo(`${item.nombre} ${item.categoria}`).includes(termino)
+    )
+    .slice(0, 12);
 
   return (
     <div ref={contenedor} className="relative">
@@ -71,7 +67,11 @@ function SelectorServicio({ value, onChange }) {
       <input
         value={texto}
         onFocus={() => setAbierto(true)}
-        onChange={(event) => { setTexto(event.target.value); onChange(event.target.value); setAbierto(true); }}
+        onChange={(event) => {
+          setTexto(event.target.value);
+          onChange({ servicioId: null, nombre: event.target.value });
+          setAbierto(true);
+        }}
         className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-9 text-white outline-none focus:border-cyan-500"
         placeholder="Buscar o escribir servicio..."
       />
@@ -79,8 +79,8 @@ function SelectorServicio({ value, onChange }) {
       {abierto && (
         <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-60 overflow-y-auto rounded-xl border border-slate-600 bg-slate-900 p-1.5 shadow-2xl">
           {resultados.length ? resultados.map((item) => (
-            <button key={item} type="button" onClick={() => { const valor = item === 'Otro servicio' ? '' : item; setTexto(valor); onChange(valor); setAbierto(false); }} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-cyan-600/20 hover:text-white">
-              <span>{item}</span>{value === item && <Check size={15} className="text-emerald-400" />}
+            <button key={item.id} type="button" onClick={() => { setTexto(item.nombre); onChange({ servicioId: item.id, nombre: item.nombre, precio: item.precio }); setAbierto(false); }} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-cyan-600/20 hover:text-white">
+              <span><strong>{item.nombre}</strong><small className="ml-2 text-slate-500">{item.categoria}</small></span>{Number(servicioId) === Number(item.id) && <Check size={15} className="text-emerald-400" />}
             </button>
           )) : <div className="px-3 py-4 text-center text-xs text-slate-500">Usa el texto escrito como servicio personalizado.</div>}
         </div>
@@ -89,7 +89,14 @@ function SelectorServicio({ value, onChange }) {
   );
 }
 
-export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pago }) {
+export default function CompletarCitaModalV8({
+  isOpen,
+  onClose,
+  onSave,
+  cita,
+  pago,
+  serviciosCatalogo = []
+}) {
   const [servicios, setServicios] = useState([]);
   const [mostrarAjuste, setMostrarAjuste] = useState(false);
   const [ajusteTipo, setAjusteTipo] = useState('descuento_autorizado');
@@ -105,7 +112,7 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
 
   useEffect(() => {
     if (!isOpen || !cita) return;
-    const iniciales = serviciosIniciales(cita);
+    const iniciales = serviciosIniciales(cita, serviciosCatalogo);
     const subtotalInicial = iniciales.reduce((suma, item) => suma + item.costo, 0);
     const pagado = Math.max(0, Number(pago?.cobrado || 0));
     const saldo = Math.max(0, subtotalInicial - pagado);
@@ -121,7 +128,7 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
     setNotasFin(cita?.notasFin || '');
     setError('');
     setGuardando(false);
-  }, [isOpen, cita, pago]);
+  }, [isOpen, cita, pago, serviciosCatalogo]);
 
   const realizados = useMemo(() => servicios.filter((item) => item.realizado && item.nombre.trim()), [servicios]);
   const noRealizados = useMemo(() => servicios.filter((item) => !item.realizado && item.nombre.trim()), [servicios]);
@@ -144,7 +151,7 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
   if (!isOpen || !cita) return null;
 
   const actualizarServicio = (clave, cambios) => setServicios((actuales) => actuales.map((item) => item.clave === clave ? { ...item, ...cambios } : item));
-  const agregarServicio = () => setServicios((actuales) => [...actuales, { clave: crearClave(), nombre: '', costo: 0, realizado: true, origen: 'adicional' }]);
+  const agregarServicio = () => setServicios((actuales) => [...actuales, { clave: crearClave(), servicioId: null, nombre: '', costo: 0, realizado: true, origen: 'adicional' }]);
   const eliminarServicio = (clave) => setServicios((actuales) => actuales.length > 1 ? actuales.filter((item) => item.clave !== clave) : actuales);
 
   const enviar = async (event) => {
@@ -163,8 +170,8 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
       citaId: cita.id,
       pacienteId: cita.pacienteId,
       citaBaseId: cita.citaBaseId || null,
-      serviciosRealizados: realizados.map((item) => ({ nombre: item.nombre.trim(), costo: Number(item.costo || 0), origen: item.origen })),
-      serviciosNoRealizados: noRealizados.map((item) => ({ nombre: item.nombre.trim(), costo: Number(item.costo || 0), origen: item.origen })),
+      serviciosRealizados: realizados.map((item) => ({ servicioId: item.servicioId || null, nombre: item.nombre.trim(), costo: Number(item.costo || 0), origen: item.origen })),
+      serviciosNoRealizados: noRealizados.map((item) => ({ servicioId: item.servicioId || null, nombre: item.nombre.trim(), costo: Number(item.costo || 0), origen: item.origen })),
       procedimiento: realizados.map((item) => item.nombre.trim()).join(' + '),
       subtotal,
       ajuste: { tipo: mostrarAjuste ? ajusteTipo : 'ninguno', monto: ajusteAplicado, motivo: mostrarAjuste ? ajusteMotivo.trim() : '' },
@@ -206,7 +213,7 @@ export default function CompletarCitaModalV8({ isOpen, onClose, onSave, cita, pa
                   <article key={item.clave} className={`rounded-xl border p-3.5 ${item.realizado ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60 opacity-70'}`}>
                     <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)_145px_42px] md:items-end">
                       <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-300"><input type="checkbox" checked={item.realizado} onChange={(e) => actualizarServicio(item.clave, { realizado: e.target.checked })} className="accent-emerald-500" />Realizado</label>
-                      <label className="text-xs font-semibold text-slate-400">Servicio {indice + 1}<div className="mt-1.5"><SelectorServicio value={item.nombre} onChange={(nombre) => actualizarServicio(item.clave, { nombre })} /></div></label>
+                      <label className="text-xs font-semibold text-slate-400">Servicio {indice + 1}<div className="mt-1.5"><SelectorServicio servicioId={item.servicioId} value={item.nombre} catalogo={serviciosCatalogo} onChange={(seleccion) => actualizarServicio(item.clave, { servicioId: seleccion.servicioId, nombre: seleccion.nombre, ...(seleccion.precio !== undefined ? { costo: Number(seleccion.precio || 0) } : {}) })} /></div></label>
                       <label className="text-xs font-semibold text-slate-400">Precio (S/.)<input type="number" data-money-input="true" min="0" step="0.01" value={item.costo} onChange={(e) => actualizarServicio(item.clave, { costo: Math.max(0, Number(e.target.value || 0)) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-right font-black text-white outline-none focus:border-cyan-500" /></label>
                       <button type="button" disabled={servicios.length <= 1} onClick={() => eliminarServicio(item.clave)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 text-slate-500 hover:border-rose-500/40 hover:text-rose-300 disabled:opacity-30"><Trash2 size={16} /></button>
                     </div>

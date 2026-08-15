@@ -39,13 +39,13 @@ export default function PacientesPage({
           <button
             type="button"
             onClick={onExportar}
-            className="flex cursor-pointer items-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-white shadow-md transition hover:bg-slate-600"
+            className="dp-patient-csv-action dp-patient-csv-export flex cursor-pointer items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-black shadow-md transition"
           >
             <Download size={18} />
             <span className="hidden sm:inline">Exportar CSV</span>
           </button>
 
-          <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-white shadow-md transition hover:bg-slate-600">
+          <label className="dp-patient-csv-action dp-patient-csv-import flex cursor-pointer items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-black shadow-md transition">
             <Upload size={18} />
             <span className="hidden sm:inline">Importar CSV</span>
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..models import CitaDB, PacienteDB, PlanDB, SesionPlanDB
 from ..schemas import CitaPagoPayload
+from .catalogo import resolver_servicio_guardado
 from .comun import redondear_monto
 
 CERO = Decimal("0.00")
@@ -280,12 +281,17 @@ def validar_secuencia_sesion(
 
 
 def normalizar_servicios(
+    db: Session,
     payload: CitaPagoPayload,
 ) -> dict[str, Any]:
     servicios = []
 
     for servicio in payload.servicios:
-        nombre = servicio.nombre.strip()
+        servicio_id, nombre = resolver_servicio_guardado(
+            db,
+            servicio_id=servicio.servicioId,
+            nombre=servicio.nombre,
+        )
 
         if not nombre:
             continue
@@ -297,6 +303,7 @@ def normalizar_servicios(
         # con costo_total.
         servicios.append(
             {
+                "servicioId": servicio_id,
                 "nombre": nombre,
                 "costo": float(redondear_monto(servicio.costo)),
             }
@@ -305,6 +312,7 @@ def normalizar_servicios(
     if not servicios:
         servicios = [
             {
+                "servicioId": None,
                 "nombre": payload.procedimiento.strip(),
                 "costo": float(redondear_monto(payload.costo)),
             }

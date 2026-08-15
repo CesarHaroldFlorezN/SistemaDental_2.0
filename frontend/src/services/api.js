@@ -101,6 +101,20 @@ export const api = {
     ),
 
   // ===================================================
+  // CATÁLOGO DE SERVICIOS Y PRECIOS
+  // ===================================================
+  getServiciosCatalogo: (incluirInactivos = false) =>
+    request(
+      `${API_URL}/servicios${incluirInactivos ? '?incluirInactivos=true' : ''}`
+    ),
+
+  crearServicioCatalogo: (data) =>
+    request(`${API_URL}/servicios`, jsonOptions('POST', data)),
+
+  actualizarServicioCatalogo: (id, data) =>
+    request(`${API_URL}/servicios/${id}`, jsonOptions('PUT', data)),
+
+  // ===================================================
   // PACIENTES
   // ===================================================
   getPacientes: () => request(`${API_URL}/pacientes`),

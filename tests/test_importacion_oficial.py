@@ -15,7 +15,12 @@ from backend.app.importacion_oficial import (
     preparar_json_oficial,
 )
 from backend.app.migrations import aplicar_migraciones
-from backend.app.models import PacienteDB, SesionDB, UsuarioDB
+from backend.app.models import (
+    PacienteDB,
+    ServicioCatalogoDB,
+    SesionDB,
+    UsuarioDB,
+)
 
 
 def datos_json_oficial() -> dict:
@@ -131,6 +136,25 @@ def crear_base_actual(ruta: Path) -> None:
                 codigo_ficha="FICHA-ANTERIOR",
             )
         )
+        consulta = (
+            db.query(ServicioCatalogoDB)
+            .filter(ServicioCatalogoDB.codigo == "consulta-evaluacion")
+            .one()
+        )
+        consulta.precio = 125
+        db.add(
+            ServicioCatalogoDB(
+                id=100,
+                codigo="sellante-personalizado",
+                nombre="Sellante personalizado",
+                claveNormalizada="sellante personalizado",
+                categoria="Prevención",
+                precio=95,
+                activo=True,
+                creadoEn="2026-08-14T10:00:00-05:00",
+                actualizadoEn="2026-08-14T10:00:00-05:00",
+            )
+        )
         db.commit()
 
     motor.dispose()
@@ -157,6 +181,7 @@ def test_reemplazar_datos_y_conservar_usuarios(
     )
 
     assert resultado.usuarios_conservados == 1
+    assert resultado.servicios_catalogo_conservados == 15
     assert resultado.respaldo_previo is not None
     assert resultado.respaldo_previo.is_file()
     assert contar(ruta_bd, "pacientes") == 1
@@ -174,9 +199,26 @@ def test_reemplazar_datos_y_conservar_usuarios(
         usuario = conexion.execute(
             "SELECT nombre_usuario, contrasena_hash FROM usuarios"
         ).fetchone()
+        cita_importada = conexion.execute(
+            "SELECT procedimiento, servicios FROM citas WHERE id = 20"
+        ).fetchone()
+        catalogo = conexion.execute(
+            """
+            SELECT codigo, precio
+            FROM serviciosCatalogo
+            WHERE codigo IN ('consulta-evaluacion', 'sellante-personalizado')
+            ORDER BY codigo
+            """
+        ).fetchall()
 
     assert paciente == (10, "Paciente oficial", "1990-05-12")
     assert usuario == ("admin", "hash-conservado")
+    assert cita_importada[0] == "Consulta de evaluación"
+    assert '"servicioId"' in cita_importada[1]
+    assert catalogo == [
+        ("consulta-evaluacion", 125),
+        ("sellante-personalizado", 95),
+    ]
 
 
 def test_rechazar_ficha_duplicada_sin_modificar_la_base(

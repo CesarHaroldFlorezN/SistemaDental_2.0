@@ -10,6 +10,7 @@ import {
   Database,
   DollarSign,
   FolderKanban,
+  ListTree,
   LayoutDashboard,
   UserCog,
   Users
@@ -83,6 +84,12 @@ export default function Sidebar({
         'administrador',
         'recepcion'
       ]
+    },
+    {
+      id: 'catalogo',
+      nombre: 'Tratamientos y precios',
+      icono: ListTree,
+      roles: ['administrador']
     },
     {
       id: 'usuarios',

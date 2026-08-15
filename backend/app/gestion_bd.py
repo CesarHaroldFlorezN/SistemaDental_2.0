@@ -224,6 +224,10 @@ def ejecutar_importacion_json_oficial(
     print("Reemplazo oficial completado correctamente.")
     print(f"Base activa: {ruta_bd}")
     print(f"Usuarios conservados: {resultado.usuarios_conservados}")
+    print(
+        "Servicios del catálogo conservados: "
+        f"{resultado.servicios_catalogo_conservados}"
+    )
     print("Las sesiones anteriores fueron revocadas; inicia sesión nuevamente.")
 
     if resultado.respaldo_previo is not None:
