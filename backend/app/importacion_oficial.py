@@ -25,9 +25,11 @@ from .models import (
     PagoDB,
     PlanDB,
     PlanPagoDB,
+    ServicioCatalogoDB,
     UsuarioDB,
 )
 from .respaldos import restaurar_base_sqlite
+from .services.catalogo import buscar_servicio_catalogo_por_nombre
 
 VERSION_JSON_SOPORTADA = 1
 LIMITE_JSON_BYTES = 50 * 1024 * 1024
@@ -74,6 +76,7 @@ class ResultadoImportacionOficial:
     datos: DatosImportacionOficial
     respaldo_previo: Path | None
     usuarios_conservados: int
+    servicios_catalogo_conservados: int
 
 
 def _texto(
@@ -917,10 +920,49 @@ def _leer_usuarios_actuales(ruta_bd: Path) -> list[dict[str, Any]]:
     return usuarios
 
 
+def _leer_catalogo_actual(ruta_bd: Path) -> list[dict[str, Any]]:
+    if not ruta_bd.is_file() or ruta_bd.stat().st_size == 0:
+        return []
+
+    columnas = [columna.name for columna in ServicioCatalogoDB.__table__.columns]
+    with closing(sqlite3.connect(str(ruta_bd))) as conexion:
+        existe = conexion.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'serviciosCatalogo'
+            """
+        ).fetchone()
+        if not existe:
+            return []
+
+        disponibles = {
+            fila[1]
+            for fila in conexion.execute(
+                "PRAGMA table_info(serviciosCatalogo)"
+            ).fetchall()
+        }
+        faltantes = sorted(set(columnas) - disponibles)
+        if faltantes:
+            raise ErrorImportacionOficial(
+                f"La tabla del catálogo actual está incompleta: {faltantes}."
+            )
+
+        consulta = (
+            "SELECT "
+            + ", ".join(f'"{columna}"' for columna in columnas)
+            + " FROM serviciosCatalogo"
+        )
+        filas = conexion.execute(consulta).fetchall()
+
+    return [dict(zip(columnas, fila, strict=True)) for fila in filas]
+
+
 def _crear_base_preparada(
     ruta_temporal: Path,
     datos: DatosImportacionOficial,
     usuarios: list[dict[str, Any]],
+    catalogo: list[dict[str, Any]],
 ) -> None:
     ruta_temporal.unlink(missing_ok=True)
     motor = _crear_motor_sqlite(ruta_temporal)
@@ -937,12 +979,55 @@ def _crear_base_preparada(
             autoflush=False,
         )
         with SesionTemporal() as db:
+            if catalogo:
+                db.query(ServicioCatalogoDB).delete()
+                db.add_all(ServicioCatalogoDB(**servicio) for servicio in catalogo)
             db.add_all(UsuarioDB(**usuario) for usuario in usuarios)
             db.add_all(PacienteDB(**fila) for fila in datos.pacientes)
             db.add_all(PlanDB(**fila) for fila in datos.planes)
             db.add_all(CitaDB(**fila) for fila in datos.citas)
             db.add_all(PagoDB(**fila) for fila in datos.pagos)
             db.add_all(PlanPagoDB(**fila) for fila in datos.planes_pago)
+            db.flush()
+
+            citas_por_id = {cita.id: cita for cita in db.query(CitaDB).all()}
+            for cita in citas_por_id.values():
+                if cita.servicios:
+                    continue
+                servicio = buscar_servicio_catalogo_por_nombre(
+                    db,
+                    cita.procedimiento or "",
+                )
+                if not servicio:
+                    continue
+                cita.procedimiento = servicio.nombre
+                cita.servicios = [
+                    {
+                        "servicioId": servicio.id,
+                        "nombre": servicio.nombre,
+                        "costo": float(cita.costo or 0),
+                    }
+                ]
+
+            for pago in db.query(PagoDB).all():
+                cita = citas_por_id.get(pago.citaId)
+                if cita and cita.servicios:
+                    pago.servicios = cita.servicios
+                    pago.concepto = cita.procedimiento
+                    continue
+                servicio = buscar_servicio_catalogo_por_nombre(
+                    db,
+                    pago.concepto or "",
+                )
+                if servicio:
+                    pago.concepto = servicio.nombre
+                    pago.servicios = [
+                        {
+                            "servicioId": servicio.id,
+                            "nombre": servicio.nombre,
+                            "costo": float(pago.total or 0),
+                        }
+                    ]
             db.add(
                 ImportacionOficialDB(
                     versionFuente=datos.version,
@@ -996,6 +1081,7 @@ def importar_json_oficial(
         raise ErrorImportacionOficial(
             "La base actual no contiene usuarios que puedan conservarse."
         )
+    catalogo = _leer_catalogo_actual(ruta_bd)
     ruta_temporal = ruta_bd.with_name(f".{ruta_bd.name}.importacion-oficial")
 
     try:
@@ -1003,6 +1089,7 @@ def importar_json_oficial(
             ruta_temporal,
             datos,
             usuarios,
+            catalogo,
         )
         respaldo = restaurar_base_sqlite(
             ruta_respaldo=ruta_temporal,
@@ -1016,4 +1103,5 @@ def importar_json_oficial(
         datos=datos,
         respaldo_previo=respaldo,
         usuarios_conservados=len(usuarios),
+        servicios_catalogo_conservados=len(catalogo),
     )

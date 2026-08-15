@@ -37,7 +37,7 @@ export default function PlanesTratamientoPage({
   formatearMoneda
 }) {
   return (
-    <div>
+    <div className="dp-treatment-plans">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-purple-400">
@@ -182,23 +182,23 @@ export default function PlanesTratamientoPage({
                       const estadoPago = estadoPagoSesion(sesion, cuota);
                       const claseSesion =
                         sesion.estado === 'completada'
-                          ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100'
+                          ? 'dp-treatment-session-completed'
                           : sesion.estado === 'agendada'
-                            ? 'border-cyan-400/60 bg-cyan-500/15 text-cyan-100'
-                            : 'border-amber-400/60 bg-amber-500/15 text-amber-100';
+                            ? 'dp-treatment-session-scheduled'
+                            : 'dp-treatment-session-pending';
                       const clasePago =
                         estadoPago === 'pagada'
-                          ? 'border-emerald-300/60 bg-emerald-600 text-white'
+                          ? 'dp-treatment-payment-paid'
                           : estadoPago === 'cubierta_por_adelanto'
-                            ? 'border-violet-300/60 bg-violet-600 text-white'
+                            ? 'dp-treatment-payment-advance'
                             : estadoPago === 'pendiente'
-                              ? 'border-amber-300/60 bg-amber-600 text-white'
-                              : 'border-slate-400/50 bg-slate-700 text-slate-100';
+                              ? 'dp-treatment-payment-pending'
+                              : 'dp-treatment-payment-unplanned';
                       return (
                         <div
                           key={sesion.id}
                           title={`${sesion.titulo} · ${sesion.fechaProgramada || 'sin fecha'}`}
-                          className={`flex min-w-[150px] flex-col rounded-xl border p-3 text-left shadow-sm ${claseSesion}`}
+                          className={`dp-treatment-session flex min-w-[150px] flex-col rounded-xl border-2 p-3 text-left shadow-sm ${claseSesion}`}
                         >
                           <span className="flex items-center justify-between gap-2">
                             <span className="text-sm font-black">
@@ -216,11 +216,11 @@ export default function PlanesTratamientoPage({
                           <span className="mt-3 border-t border-current/20 pt-2 text-[10px] font-bold uppercase opacity-80">
                             Monto vinculado
                           </span>
-                          <span className="mt-0.5 text-base font-black text-white">
+                          <span className="dp-treatment-session-amount mt-0.5 text-base font-black">
                             {cuota ? formatearMoneda(cuota.monto) : '—'}
                           </span>
                           <span
-                            className={`mt-2 rounded-lg border px-2 py-1 text-center text-[10px] font-black ${clasePago}`}
+                            className={`dp-treatment-payment-state mt-2 rounded-lg border px-2 py-1 text-center text-[10px] font-black ${clasePago}`}
                           >
                             {ETIQUETAS_PAGO[estadoPago]}
                           </span>
@@ -314,17 +314,11 @@ export default function PlanesTratamientoPage({
 }
 
 function Metrica({ titulo, valor, detalle, variante = 'base' }) {
-  const clases = {
-    base: 'border-slate-500/50 bg-slate-700/60 text-slate-200',
-    pagado: 'border-emerald-400/50 bg-emerald-500/15 text-emerald-100',
-    saldo: 'border-rose-400/50 bg-rose-500/15 text-rose-100',
-    pendiente: 'border-amber-400/60 bg-amber-500/15 text-amber-100'
-  };
   return (
-    <div className={`rounded-xl border p-3 ${clases[variante]}`}>
-      <div className="text-[10px] font-bold uppercase">{titulo}</div>
-      <div className="mt-1 text-lg font-black">{valor}</div>
-      {detalle && <div className="mt-1 text-[10px] font-semibold">{detalle}</div>}
+    <div className={`dp-treatment-metric dp-treatment-metric-${variante} rounded-xl border-2 p-3`}>
+      <div className="dp-treatment-metric-label text-[10px] font-bold uppercase">{titulo}</div>
+      <div className="dp-treatment-metric-value mt-1 text-lg font-black">{valor}</div>
+      {detalle && <div className="dp-treatment-metric-detail mt-1 text-[10px] font-semibold">{detalle}</div>}
     </div>
   );
 }

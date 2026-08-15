@@ -184,6 +184,35 @@ html[data-theme] .dp-main textarea {
   border-color: var(--dp-border) !important;
 }
 
+html[data-theme] .dp-main select option {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Acciones CSV: el tema claro ya no convierte su texto en oscuro sobre un
+   botón oscuro. Ambas acciones conservan identidad y contraste alto. */
+.dp-patient-csv-action {
+  color: #ffffff !important;
+}
+
+.dp-patient-csv-export {
+  border-color: #1d4ed8 !important;
+  background: #1e40af !important;
+}
+
+.dp-patient-csv-export:hover {
+  background: #1e3a8a !important;
+}
+
+.dp-patient-csv-import {
+  border-color: #047857 !important;
+  background: #065f46 !important;
+}
+
+.dp-patient-csv-import:hover {
+  background: #064e3b !important;
+}
+
 html[data-theme] .dp-main input::placeholder,
 html[data-theme] .dp-main textarea::placeholder {
   color: color-mix(in srgb, var(--dp-muted) 78%, transparent) !important;
@@ -311,6 +340,38 @@ html[data-theme] .dp-main button.bg-cyan-600:hover {
 html[data-theme] .dp-main .text-cyan-300,
 html[data-theme] .dp-main .text-cyan-400 {
   color: var(--dp-primary) !important;
+}
+
+html[data-theme] .dp-main .text-emerald-100,
+html[data-theme] .dp-main .text-emerald-200,
+html[data-theme] .dp-main .text-emerald-300,
+html[data-theme] .dp-main .text-emerald-400 {
+  color: #065f46 !important;
+}
+
+html[data-theme] .dp-main .text-rose-100,
+html[data-theme] .dp-main .text-rose-200,
+html[data-theme] .dp-main .text-rose-300,
+html[data-theme] .dp-main .text-rose-400 {
+  color: #9f1239 !important;
+}
+
+html[data-theme] .dp-main .text-amber-100,
+html[data-theme] .dp-main .text-amber-200,
+html[data-theme] .dp-main .text-amber-300,
+html[data-theme] .dp-main .text-amber-400 {
+  color: #92400e !important;
+}
+
+html[data-theme] .dp-main .text-violet-100,
+html[data-theme] .dp-main .text-violet-200,
+html[data-theme] .dp-main .text-violet-300,
+html[data-theme] .dp-main .text-violet-400,
+html[data-theme] .dp-main .text-purple-100,
+html[data-theme] .dp-main .text-purple-200,
+html[data-theme] .dp-main .text-purple-300,
+html[data-theme] .dp-main .text-purple-400 {
+  color: #5b21b6 !important;
 }
 
 html[data-theme] .dp-main [class*="border-cyan-500"] {
@@ -564,6 +625,129 @@ html[data-theme] .dp-main .dp-plan-metric-label {
 
 html[data-theme] .dp-main .dp-plan-metric-value {
   color: #ffffff !important;
+}
+
+/* Planes de tratamiento: tarjetas financieras, sesiones y números de cuota
+   usan superficies sólidas para mantener contraste en las cuatro paletas. */
+.dp-treatment-metric,
+.dp-treatment-session {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .2);
+}
+
+.dp-treatment-metric-base {
+  border-color: #475569 !important;
+  background: linear-gradient(135deg, #1e293b, #334155) !important;
+}
+
+.dp-treatment-metric-pagado {
+  border-color: #10b981 !important;
+  background: linear-gradient(135deg, #064e3b, #047857) !important;
+}
+
+.dp-treatment-metric-saldo {
+  border-color: #fb7185 !important;
+  background: linear-gradient(135deg, #881337, #be123c) !important;
+}
+
+.dp-treatment-metric-pendiente {
+  border-color: #fbbf24 !important;
+  background: linear-gradient(135deg, #78350f, #b45309) !important;
+}
+
+html[data-theme] .dp-main .dp-treatment-metric-label,
+html[data-theme] .dp-main .dp-treatment-metric-detail {
+  color: rgba(255, 255, 255, .88) !important;
+}
+
+html[data-theme] .dp-main .dp-treatment-metric-value,
+html[data-theme] .dp-main .dp-treatment-session-amount {
+  color: #ffffff !important;
+}
+
+.dp-treatment-session-completed {
+  border-color: #059669 !important;
+  background: linear-gradient(145deg, #065f46, #047857) !important;
+  color: #ffffff !important;
+}
+
+.dp-treatment-session-scheduled {
+  border-color: #0891b2 !important;
+  background: linear-gradient(145deg, #155e75, #0e7490) !important;
+  color: #ffffff !important;
+}
+
+.dp-treatment-session-pending {
+  border-color: #d97706 !important;
+  background: linear-gradient(145deg, #78350f, #b45309) !important;
+  color: #ffffff !important;
+}
+
+.dp-treatment-payment-state {
+  color: #ffffff !important;
+}
+
+.dp-treatment-payment-paid {
+  border-color: #6ee7b7 !important;
+  background: #065f46 !important;
+}
+
+.dp-treatment-payment-advance {
+  border-color: #c4b5fd !important;
+  background: #5b21b6 !important;
+}
+
+.dp-treatment-payment-pending {
+  border-color: #fde68a !important;
+  background: #92400e !important;
+}
+
+.dp-treatment-payment-unplanned {
+  border-color: #cbd5e1 !important;
+  background: #334155 !important;
+}
+
+html[data-theme] .dp-main .dp-treatment-debt-card {
+  border-color: #7c3aed !important;
+  background: #f5f3ff !important;
+  color: #1e1b4b !important;
+}
+
+html[data-theme] .dp-main .dp-treatment-debt-card .text-violet-200,
+html[data-theme] .dp-main .dp-treatment-debt-card .text-violet-300 {
+  color: #5b21b6 !important;
+}
+
+html[data-theme] .dp-main .dp-installment-number-treatment {
+  border-color: #4c1d95 !important;
+  background: #6d28d9 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme] .dp-main .dp-treatment-installment-session {
+  color: #4c1d95 !important;
+}
+
+html[data-theme] .dp-main .dp-treatment-installment-state {
+  color: #334155 !important;
+}
+
+/* Resúmenes del catálogo con contraste medible y estable. */
+.dp-catalog-summary-total {
+  border-color: #0369a1;
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
+.dp-catalog-summary-activo {
+  border-color: #047857;
+  background: #d1fae5;
+  color: #064e3b;
+}
+
+.dp-catalog-summary-pendiente {
+  border-color: #b45309;
+  background: #fef3c7;
+  color: #78350f;
 }
 
 .rbc-date-cell,

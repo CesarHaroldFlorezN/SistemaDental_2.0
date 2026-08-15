@@ -20,6 +20,7 @@ export default function useDentalProData(usuarioActual) {
   const [planPagos, setPlanPagos] = useState([]);
   const [planes, setPlanes] = useState([]);
   const [casosClinicos, setCasosClinicos] = useState([]);
+  const [serviciosCatalogo, setServiciosCatalogo] = useState([]);
 
   const cargarPacientes = crearCargador(api.getPacientes, setPacientes);
   const cargarCitas = crearCargador(api.getCitas, setCitas);
@@ -30,6 +31,10 @@ export default function useDentalProData(usuarioActual) {
     api.getCasosClinicos,
     setCasosClinicos
   );
+  const cargarServiciosCatalogo = crearCargador(
+    () => api.getServiciosCatalogo(usuarioActual?.rol === 'administrador'),
+    setServiciosCatalogo
+  );
 
   const limpiarDatos = () => {
     setPacientes([]);
@@ -38,6 +43,7 @@ export default function useDentalProData(usuarioActual) {
     setPlanPagos([]);
     setPlanes([]);
     setCasosClinicos([]);
+    setServiciosCatalogo([]);
   };
 
   useEffect(() => {
@@ -57,7 +63,8 @@ export default function useDentalProData(usuarioActual) {
         puedeVerFinanzas ? api.getPagos() : Promise.resolve([]),
         puedeVerFinanzas ? api.getPlanPagos() : Promise.resolve([]),
         puedeVerClinica ? api.getPlanes() : Promise.resolve([]),
-        puedeVerClinica ? api.getCasosClinicos() : Promise.resolve([])
+        puedeVerClinica ? api.getCasosClinicos() : Promise.resolve([]),
+        api.getServiciosCatalogo(usuarioActual.rol === 'administrador')
       ]).then((resultados) => {
         if (!componenteActivo) return;
 
@@ -72,6 +79,7 @@ export default function useDentalProData(usuarioActual) {
         setPlanPagos(obtenerDatos(3));
         setPlanes(obtenerDatos(4));
         setCasosClinicos(obtenerDatos(5));
+        setServiciosCatalogo(obtenerDatos(6));
 
         const errores = resultados
           .filter((resultado) => resultado.status === 'rejected')
@@ -94,12 +102,14 @@ export default function useDentalProData(usuarioActual) {
     planPagos,
     planes,
     casosClinicos,
+    serviciosCatalogo,
     cargarPacientes,
     cargarCitas,
     cargarPagos,
     cargarPlanPagos,
     cargarPlanes,
     cargarCasosClinicos,
+    cargarServiciosCatalogo,
     limpiarDatos
   };
 }

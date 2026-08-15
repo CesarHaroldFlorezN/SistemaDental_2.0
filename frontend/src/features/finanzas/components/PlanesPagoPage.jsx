@@ -93,7 +93,7 @@ export default function PlanesPagoPage({
                 key={plan.id}
                 className={`rounded-2xl border p-6 shadow-xl transition ${
                   esTratamiento
-                    ? 'border-violet-400/60 bg-violet-950/25 shadow-violet-950/25'
+                    ? 'dp-treatment-debt-card border-violet-400/60 bg-violet-950/25 shadow-violet-950/25'
                     : 'border-cyan-500/40 bg-slate-800/80'
                 } ${plan.estado !== 'activo' ? 'opacity-85' : ''}`}
               >
@@ -175,9 +175,9 @@ export default function PlanesPagoPage({
                         <tr key={indice} className="transition hover:bg-slate-800/40">
                           <td className="p-3 font-bold">
                             <span
-                              className={`rounded px-2 py-0.5 text-[10px] ${
+                              className={`dp-installment-number rounded border px-2 py-1 text-xs font-black ${
                                 esTratamiento
-                                  ? 'bg-violet-500/20 text-violet-200'
+                                  ? 'dp-installment-number-treatment border-violet-700 bg-violet-700 text-white'
                                   : 'bg-cyan-500/15 text-cyan-400'
                               }`}
                             >
@@ -188,11 +188,11 @@ export default function PlanesPagoPage({
                           </td>
                           {esTratamiento && (
                             <td className="p-3">
-                              <div className="font-bold text-violet-300">
+                              <div className="dp-treatment-installment-session font-black text-violet-300">
                                 Sesión {cuota.sesionNum || cuota.num} ·{' '}
                                 {obtenerEstadoSesion(plan, cuota, planesTratamiento)}
                               </div>
-                              <div className="mt-0.5 text-[10px] text-slate-500">
+                              <div className="dp-treatment-installment-state mt-0.5 text-[11px] font-bold text-slate-500">
                                 {cuota.pagado
                                   ? 'Cuota pagada'
                                   : cuota.cubiertaPorAdelanto

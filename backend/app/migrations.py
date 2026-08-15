@@ -1,9 +1,15 @@
+import json
 from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy.engine import Connection, Engine
 
 from . import models
+from .catalogo_inicial import (
+    CODIGO_POR_ALIAS,
+    SERVICIOS_INICIALES,
+    normalizar_clave_servicio,
+)
 from .config import DB_PATH, RESPALDAR_AL_INICIAR, RESPALDOS_DIR
 from .database import Base, engine
 from .integridad import exigir_integridad_sqlite
@@ -356,6 +362,151 @@ def migracion_007_contrasena_temporal_usuarios(
         )
 
 
+def _normalizar_detalle_servicios_historico(
+    connection: Connection,
+) -> None:
+    filas_catalogo = connection.exec_driver_sql(
+        "SELECT id, codigo, nombre FROM serviciosCatalogo"
+    ).fetchall()
+    catalogo_por_codigo = {
+        fila[1]: {"id": fila[0], "nombre": fila[2]} for fila in filas_catalogo
+    }
+    catalogo_por_id = {fila[0]: fila[2] for fila in filas_catalogo}
+
+    for tabla, campo_resumen in (("citas", "procedimiento"), ("pagos", "concepto")):
+        if not _existe_tabla(connection, tabla):
+            continue
+        columnas = _columnas_tabla(connection, tabla)
+        if "servicios" not in columnas:
+            continue
+
+        filas = connection.exec_driver_sql(
+            f"SELECT id, servicios FROM {tabla} WHERE servicios IS NOT NULL"
+        ).fetchall()
+        for registro_id, valor_json in filas:
+            try:
+                servicios = (
+                    json.loads(valor_json)
+                    if isinstance(valor_json, str)
+                    else valor_json
+                )
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(servicios, list):
+                continue
+
+            cambio = False
+            nombres: list[str] = []
+            for servicio in servicios:
+                if not isinstance(servicio, dict):
+                    continue
+                servicio_id = servicio.get("servicioId")
+                nombre_catalogo = catalogo_por_id.get(servicio_id)
+                if nombre_catalogo is None:
+                    codigo = CODIGO_POR_ALIAS.get(
+                        normalizar_clave_servicio(servicio.get("nombre", ""))
+                    )
+                    catalogo = catalogo_por_codigo.get(codigo)
+                    if catalogo:
+                        servicio_id = catalogo["id"]
+                        nombre_catalogo = catalogo["nombre"]
+
+                if nombre_catalogo:
+                    if servicio.get("servicioId") != servicio_id:
+                        servicio["servicioId"] = servicio_id
+                        cambio = True
+                    if servicio.get("nombre") != nombre_catalogo:
+                        servicio["nombre"] = nombre_catalogo
+                        cambio = True
+
+                nombre = str(servicio.get("nombre") or "").strip()
+                if nombre:
+                    nombres.append(nombre)
+
+            if not cambio:
+                continue
+
+            resumen = " + ".join(nombres)[:200]
+            if campo_resumen in columnas and resumen:
+                connection.exec_driver_sql(
+                    f"UPDATE {tabla} SET servicios = ?, {campo_resumen} = ? WHERE id = ?",
+                    (
+                        json.dumps(
+                            servicios, ensure_ascii=False, separators=(",", ":")
+                        ),
+                        resumen,
+                        registro_id,
+                    ),
+                )
+            else:
+                connection.exec_driver_sql(
+                    f"UPDATE {tabla} SET servicios = ? WHERE id = ?",
+                    (
+                        json.dumps(
+                            servicios, ensure_ascii=False, separators=(",", ":")
+                        ),
+                        registro_id,
+                    ),
+                )
+
+
+def migracion_008_catalogo_servicios(
+    connection: Connection,
+) -> None:
+    """Crea un catálogo canónico y vincula variantes históricas conocidas."""
+
+    connection.exec_driver_sql(
+        """
+        CREATE TABLE IF NOT EXISTS serviciosCatalogo (
+            id INTEGER PRIMARY KEY,
+            codigo VARCHAR(80) NOT NULL UNIQUE,
+            nombre VARCHAR(150) NOT NULL,
+            claveNormalizada VARCHAR(180) NOT NULL UNIQUE,
+            categoria VARCHAR(100) NOT NULL,
+            precio NUMERIC(10, 2) NOT NULL DEFAULT 0,
+            activo BOOLEAN NOT NULL DEFAULT 1,
+            creadoEn VARCHAR(50) NOT NULL,
+            actualizadoEn VARCHAR(50) NOT NULL
+        )
+        """
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_catalogo_categoria "
+        "ON serviciosCatalogo (categoria)"
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_catalogo_activo ON serviciosCatalogo (activo)"
+    )
+
+    ahora = datetime.now().astimezone().isoformat(timespec="seconds")
+    for codigo, nombre, categoria in SERVICIOS_INICIALES:
+        connection.exec_driver_sql(
+            """
+            INSERT OR IGNORE INTO serviciosCatalogo (
+                codigo,
+                nombre,
+                claveNormalizada,
+                categoria,
+                precio,
+                activo,
+                creadoEn,
+                actualizadoEn
+            )
+            VALUES (?, ?, ?, ?, 0, 1, ?, ?)
+            """,
+            (
+                codigo,
+                nombre,
+                normalizar_clave_servicio(nombre),
+                categoria,
+                ahora,
+                ahora,
+            ),
+        )
+
+    _normalizar_detalle_servicios_historico(connection)
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -391,6 +542,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         7,
         "contrasena_temporal_usuarios",
         migracion_007_contrasena_temporal_usuarios,
+    ),
+    (
+        8,
+        "catalogo_servicios_canonico",
+        migracion_008_catalogo_servicios,
     ),
 )
 

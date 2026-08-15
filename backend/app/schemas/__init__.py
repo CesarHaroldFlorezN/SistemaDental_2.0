@@ -3,6 +3,7 @@ from .autenticacion import (
     SesionResponse,
     UsuarioSesionResponse,
 )
+from .catalogo import ServicioCatalogoPayload, ServicioCatalogoResponse
 from .cita import (
     CambioEstadoPayload,
     CitaPagoPayload,
@@ -44,6 +45,8 @@ __all__ = [
     "PlanTratamientoPayload",
     "ReprogramarCitaPayload",
     "RestablecerContrasenaPayload",
+    "ServicioCatalogoPayload",
+    "ServicioCatalogoResponse",
     "ServicioCitaPayload",
     "SesionResponse",
     "TipoCasoClinico",

@@ -211,7 +211,8 @@ El proceso:
 - prepara y audita una base SQLite temporal;
 - crea un respaldo automático de `data/dentalpro.db`;
 - reemplaza pacientes, citas, pagos, planes y planes de pago;
-- conserva las cuentas de usuario, pero revoca las sesiones abiertas;
+- conserva las cuentas de usuario y el catálogo de servicios/precios, pero
+  revoca las sesiones abiertas;
 - registra el origen, SHA-256, conteos, advertencias y ajustes de la importación.
 
 Los archivos de `data/documentos/` no se eliminan automáticamente. Dejan de estar
@@ -254,12 +255,53 @@ de interfaz. La implementación se reparte por responsabilidad:
 - `frontend/src/app/components/AppModals.jsx`: composición central de modales;
 - `frontend/src/features/`: pantallas y componentes visuales de cada módulo;
 - `frontend/src/shared/utils/`: funciones comunes de fecha, texto y moneda.
+- `frontend/src/app/rutas.js`: rutas navegables, enlaces directos y permisos por
+  módulo;
+- `frontend/src/features/catalogo/`: administración de tratamientos y precios.
 
 Esta separación permite modificar una pantalla o flujo concreto sin mezclarlo
 con la autenticación ni con los demás módulos.
 
-## Estado de la reorganización
+## Catálogo de tratamientos y precios
 
-La nueva estructura está creada, pero la migración del backend continúa progresivamente. Actualmente `backend/app/main.py` reutiliza temporalmente la aplicación existente en el `main.py` principal.
+Cada base (oficial y pruebas) tiene su propio catálogo en
+`serviciosCatalogo`. Los servicios guardan un identificador estable además del
+nombre mostrado, por lo que variantes como `Ortodoncia - colocacion` y
+`Ortodoncia — colocación` dejan de crear grupos distintos en reportes futuros.
 
-No se debe eliminar el `main.py` principal hasta terminar de migrar y probar todas las rutas.
+El Administrador puede abrir **Tratamientos y precios** para crear, editar,
+activar o desactivar servicios. Desactivar no elimina el historial. El precio
+del catálogo es una referencia y puede ajustarse en una atención concreta sin
+alterar registros anteriores.
+
+La migración 8 crea y carga este catálogo automáticamente al iniciar el sistema.
+Antes de aplicar una migración pendiente, DentalPro conserva el respaldo SQLite
+previsto por el sistema.
+
+## Navegación y enlaces directos
+
+La interfaz usa React Router y conserva una URL por sección:
+
+- `/pacientes`
+- `/agenda`
+- `/planes-tratamiento`
+- `/finanzas`
+- `/planes-pago`
+- `/catalogo-servicios`
+- `/usuarios`
+
+Las fichas se pueden abrir directamente con `/pacientes/{id}`. Los botones
+Atrás y Adelante del navegador mantienen la navegación y los permisos de cada
+rol siguen aplicándose antes de mostrar una sección.
+
+## Pruebas del frontend
+
+Vitest y Testing Library verifican utilidades, rutas y comportamientos de
+pantalla. Para ejecutar todas las pruebas del frontend:
+
+```powershell
+cd frontend
+npm test
+```
+
+El flujo automático de GitHub ejecuta pruebas, lint y compilación del frontend.

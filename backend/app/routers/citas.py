@@ -27,6 +27,7 @@ from ..services import (
     obtener_plan_clinico,
     obtener_sesion_para_cita,
     redondear_monto,
+    resolver_servicio_guardado,
     serializar_modelo,
     sincronizar_plan_pago_con_pago,
     validar_disponibilidad,
@@ -103,6 +104,31 @@ def actualizar_cita_directa(
     data["horaFin"] = hora_fin_resuelta
     data["duracionMinutos"] = duracion_resuelta
 
+    if isinstance(data.get("servicios"), list):
+        servicios_normalizados = []
+        for servicio in data["servicios"]:
+            if not isinstance(servicio, dict):
+                continue
+            servicio_id, nombre = resolver_servicio_guardado(
+                db,
+                servicio_id=servicio.get("servicioId"),
+                nombre=str(servicio.get("nombre") or ""),
+            )
+            if not nombre:
+                continue
+            servicios_normalizados.append(
+                {
+                    **servicio,
+                    "servicioId": servicio_id,
+                    "nombre": nombre,
+                }
+            )
+        data["servicios"] = servicios_normalizados
+        if servicios_normalizados:
+            data["procedimiento"] = " + ".join(
+                servicio["nombre"] for servicio in servicios_normalizados
+            )[:200]
+
     columnas_validas = {columna.name for columna in CitaDB.__table__.columns}
 
     for clave, valor in data.items():
@@ -155,7 +181,7 @@ def crear_cita_con_pago(
         payload_efectivo.estado,
     )
 
-    detalle_servicios = normalizar_servicios(payload_efectivo)
+    detalle_servicios = normalizar_servicios(db, payload_efectivo)
     datos_pago = calcular_datos_pago(
         payload_efectivo,
         detalle_servicios["costo_total"],
@@ -302,7 +328,7 @@ def actualizar_cita_con_pago(
         if pago
         else None
     )
-    detalle_servicios = normalizar_servicios(payload_efectivo)
+    detalle_servicios = normalizar_servicios(db, payload_efectivo)
     datos_pago = calcular_datos_pago(
         payload_efectivo,
         detalle_servicios["costo_total"],

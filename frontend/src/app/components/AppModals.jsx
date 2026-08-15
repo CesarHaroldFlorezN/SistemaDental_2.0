@@ -27,7 +27,15 @@ export default function AppModals({
     planPagoContexto,
     planSeleccionado
   } = modales;
-  const { pacientes, citas, pagos, planes, casosClinicos, planesPago } = datos;
+  const {
+    pacientes,
+    citas,
+    pagos,
+    planes,
+    casosClinicos,
+    planesPago,
+    serviciosCatalogo
+  } = datos;
 
   return (
     <>
@@ -60,6 +68,7 @@ export default function AppModals({
         citas={citas}
         planes={planes}
         casosClinicos={casosClinicos}
+        serviciosCatalogo={serviciosCatalogo}
       />
       <CompletarCitaModal
         key={citaParaAccion ? `comp-${citaParaAccion.id}` : 'comp-modal'}
@@ -68,6 +77,7 @@ export default function AppModals({
         onSave={acciones.guardarCompletado}
         cita={citaParaAccion}
         pago={pagoParaAccion}
+        serviciosCatalogo={serviciosCatalogo}
       />
       <CancelarCitaModal
         key={citaParaAccion ? `canc-${citaParaAccion.id}` : 'canc-modal'}
@@ -122,6 +132,7 @@ export default function AppModals({
         planEditar={planSeleccionado}
         pacientes={pacientes}
         casosClinicos={casosClinicos}
+        serviciosCatalogo={serviciosCatalogo}
       />
     </>
   );

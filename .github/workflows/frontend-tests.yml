@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   frontend:
-    name: Lint y build
+    name: Tests, lint y build
     runs-on: ubuntu-latest
 
     defaults:
@@ -41,6 +41,9 @@ jobs:
 
       - name: Validar codigo
         run: npm run lint
+
+      - name: Ejecutar pruebas de comportamiento
+        run: npm test
 
       - name: Compilar frontend
         run: npm run build

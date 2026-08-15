@@ -21,6 +21,7 @@ from .dependencias import (
 from .migrations import inicializar_base_datos
 from .routers import (
     autenticacion_router,
+    catalogo_router,
     citas_router,
     clinica_router,
     documentos_router,
@@ -68,6 +69,11 @@ app.add_middleware(
 # =====================================================
 app.include_router(autenticacion_router)
 app.include_router(usuarios_router)
+
+app.include_router(
+    catalogo_router,
+    dependencies=[Depends(obtener_usuario_actual)],
+)
 
 app.include_router(
     citas_router,
