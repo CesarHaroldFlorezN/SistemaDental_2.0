@@ -14,7 +14,7 @@ from ..models import (
     SesionPlanDB,
 )
 from ..schemas import CitaPagoPayload
-from .comun import ahora_iso, serializar_modelo
+from .comun import ahora_iso, redondear_monto, serializar_modelo
 
 TIPO_CASO_POR_CITA = {
     "diagnostico_inicial": "diagnostico",
@@ -291,21 +291,89 @@ def serializar_plan_detallado(
     plan: PlanDB,
 ) -> dict[str, Any]:
     resultado = serializar_modelo(plan)
-    sesiones = (
-        db.query(SesionPlanDB)
-        .filter(SesionPlanDB.planId == plan.id)
-        .order_by(SesionPlanDB.numero)
-        .all()
-    )
-    resultado["sesiones"] = [serializar_modelo(sesion) for sesion in sesiones]
 
     pago = None
     if plan.pagoId:
         pago = db.query(PagoDB).filter(PagoDB.id == plan.pagoId).first()
     if not pago:
         pago = db.query(PagoDB).filter(PagoDB.planId == plan.id).first()
-    resultado["pago"] = serializar_modelo(pago) if pago else None
 
     plan_pago = db.query(PlanPagoDB).filter(PlanPagoDB.planId == plan.id).first()
+    cuotas = [dict(cuota) for cuota in (plan_pago.cuotas or [])] if plan_pago else []
+    cuotas_por_sesion = {
+        int(cuota.get("sesionPlanId")): cuota
+        for cuota in cuotas
+        if cuota.get("tipo") == "cuota" and cuota.get("sesionPlanId")
+    }
+    cuotas_por_numero = {
+        int(cuota.get("sesionNum") or cuota.get("num")): cuota
+        for cuota in cuotas
+        if cuota.get("tipo") == "cuota" and (cuota.get("sesionNum") or cuota.get("num"))
+    }
+
+    sesiones = (
+        db.query(SesionPlanDB)
+        .filter(SesionPlanDB.planId == plan.id)
+        .order_by(SesionPlanDB.numero)
+        .all()
+    )
+    sesiones_serializadas = []
+    for sesion in sesiones:
+        datos_sesion = serializar_modelo(sesion)
+        cuota = cuotas_por_sesion.get(int(sesion.id)) or cuotas_por_numero.get(
+            int(sesion.numero)
+        )
+        if cuota:
+            if cuota.get("pagado"):
+                estado_pago = "pagada"
+            elif cuota.get("cubiertaPorAdelanto"):
+                estado_pago = "cubierta_por_adelanto"
+            else:
+                estado_pago = "pendiente"
+            datos_sesion["cuotaFinanciera"] = cuota
+            datos_sesion["estadoPago"] = estado_pago
+            datos_sesion["montoCuota"] = redondear_monto(cuota.get("monto"))
+        else:
+            datos_sesion["cuotaFinanciera"] = None
+            datos_sesion["estadoPago"] = "sin_cronograma"
+            datos_sesion["montoCuota"] = None
+        sesiones_serializadas.append(datos_sesion)
+
+    resultado["sesiones"] = sesiones_serializadas
+    resultado["pago"] = serializar_modelo(pago) if pago else None
     resultado["planPago"] = serializar_modelo(plan_pago) if plan_pago else None
+    resultado["resumenFinanciero"] = {
+        "tieneCronograma": bool(plan_pago),
+        "total": redondear_monto(
+            plan_pago.totalAcordado
+            if plan_pago
+            else (pago.total if pago else plan.costo)
+        ),
+        "cobrado": redondear_monto(
+            plan_pago.cobrado if plan_pago else (pago.cobrado if pago else 0)
+        ),
+        "adelantado": redondear_monto(plan_pago.anticipo if plan_pago else 0),
+        "saldo": redondear_monto(
+            plan_pago.saldo if plan_pago else (pago.saldo if pago else plan.costo)
+        ),
+        "cuotasPagadas": sum(
+            1
+            for cuota in cuotas
+            if cuota.get("tipo") == "cuota" and cuota.get("pagado")
+        ),
+        "cuotasCubiertasPorAdelanto": sum(
+            1
+            for cuota in cuotas
+            if cuota.get("tipo") == "cuota"
+            and not cuota.get("pagado")
+            and cuota.get("cubiertaPorAdelanto")
+        ),
+        "cuotasPendientes": sum(
+            1
+            for cuota in cuotas
+            if cuota.get("tipo") == "cuota"
+            and not cuota.get("pagado")
+            and not cuota.get("cubiertaPorAdelanto")
+        ),
+    }
     return resultado

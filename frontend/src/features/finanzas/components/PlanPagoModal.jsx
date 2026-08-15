@@ -246,7 +246,7 @@ export default function PlanPagoModal({
 
           <div className="grid gap-4 md:grid-cols-4">
             <label className="font-medium text-slate-300">Monto total (S/.)
-              <input type="number" min="0.01" step="0.01" name="totalAcordado" required readOnly={Boolean(formData.pagoId)} value={formData.totalAcordado} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-right text-lg font-black text-cyan-300 outline-none read-only:opacity-70" />
+              <input type="number" data-money-input="true" min="0.01" step="0.01" name="totalAcordado" required readOnly={Boolean(formData.pagoId)} value={formData.totalAcordado} onChange={handleChange} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-right text-lg font-black text-cyan-300 outline-none read-only:opacity-70" />
             </label>
             <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3"><div className="text-xs text-slate-500">Ya pagado</div><div className="mt-1 text-lg font-bold text-emerald-400">S/. {yaPagado.toFixed(2)}</div><div className="text-[11px] text-slate-500">Solo lectura; proviene de cobros registrados.</div></div>
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3"><div className="text-xs text-rose-300">A financiar</div><div className="mt-1 text-lg font-black text-rose-300">S/. {saldoFinanciar.toFixed(2)}</div></div>

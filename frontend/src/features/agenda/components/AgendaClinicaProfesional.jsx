@@ -16,6 +16,7 @@ import {
   GripVertical,
   LayoutDashboard,
   LayoutList,
+  Layers,
   Lock,
   Phone,
   PlayCircle,
@@ -261,6 +262,9 @@ function Toolbar({ label, view, onNavigate, onView }) {
 
 function Evento({ event, editable }) {
   const cita = event.citaData;
+  const esSesionPlan = Boolean(
+    cita.planId || cita.sesionPlanId || cita.tipoCita === 'sesion_tratamiento'
+  );
   const duracionMinutos = Math.max(1, Math.round((event.end.getTime() - event.start.getTime()) / 60000));
   const clasesCursor = editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer';
 
@@ -268,8 +272,9 @@ function Evento({ event, editable }) {
     return (
       <div
         className={`dp-evento-calendario flex h-full min-w-0 items-center gap-1 overflow-hidden px-1 py-0 text-[9px] font-black leading-none text-white ${clasesCursor}`}
-        title={`${cita.hora} - ${horaFin(cita)} · ${cita.nombrePaciente}`}
+        title={`${cita.hora} - ${horaFin(cita)} · ${cita.nombrePaciente}${esSesionPlan ? ' · Sesión de plan de tratamiento' : ''}`}
       >
+        {esSesionPlan && <Layers size={10} className="shrink-0 text-violet-200" aria-label="Plan de tratamiento" />}
         <span className="shrink-0 tabular-nums tracking-tight">{cita.hora}</span>
         <span aria-hidden="true" className="shrink-0 opacity-70">·</span>
         <span className="min-w-0 truncate">{cita.nombrePaciente}</span>
@@ -281,9 +286,9 @@ function Evento({ event, editable }) {
   return (
     <div
       className={`dp-evento-calendario flex h-full min-w-0 flex-col justify-center overflow-hidden text-white ${citaCorta ? 'px-1.5 py-0' : 'px-2 py-1'} ${clasesCursor}`}
-      title={`${cita.hora} - ${horaFin(cita)} · ${cita.nombrePaciente}`}
+      title={`${cita.hora} - ${horaFin(cita)} · ${cita.nombrePaciente}${esSesionPlan ? ' · Sesión de plan de tratamiento' : ''}`}
     >
-      <div className={`truncate font-black tabular-nums tracking-tight ${citaCorta ? 'text-[8px] leading-[9px]' : 'text-[10px] leading-tight'}`}>{cita.hora} - {horaFin(cita)}</div>
+      <div className={`flex items-center gap-1 truncate font-black tabular-nums tracking-tight ${citaCorta ? 'text-[8px] leading-[9px]' : 'text-[10px] leading-tight'}`}>{esSesionPlan && <Layers size={citaCorta ? 9 : 11} className="shrink-0 text-violet-200" aria-label="Plan de tratamiento" />}<span className="truncate">{cita.hora} - {horaFin(cita)}{esSesionPlan && !citaCorta ? ' · PLAN' : ''}</span></div>
       <div className={`truncate font-black ${citaCorta ? 'text-[10px] leading-[11px]' : 'mt-0.5 text-[12px] leading-tight'}`}>{cita.nombrePaciente}</div>
     </div>
   );
@@ -300,6 +305,10 @@ function LeyendaEstados() {
           <span>{ESTADOS[estado].texto}</span>
         </div>
       ))}
+      <div className="flex items-center gap-1.5 text-[11px] font-bold text-violet-300">
+        <Layers size={13} />
+        <span>Sesión de plan</span>
+      </div>
     </div>
   );
 }
@@ -325,6 +334,7 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd }
         <div className="min-w-0 flex-1">
           <button type="button" onClick={() => onDetalle(cita)} className="w-full truncate text-left font-black text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
           <div className="mt-1 truncate text-xs text-cyan-100">{servicios(cita).map((s) => s.nombre).join(' + ')}</div>
+          {(cita.planId || cita.sesionPlanId) && <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-500/15 px-2 py-0.5 text-[9px] font-black uppercase text-violet-200"><Layers size={10} />Plan de tratamiento · sesión {cita.sesionNum || '—'}</div>}
           <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
             <span style={{ color: ESTADOS[estado]?.color }}>{ESTADOS[estado]?.texto}</span>
             <span className={saldo > 0 ? 'text-rose-300' : 'text-emerald-300'}>{saldo > 0 ? `Debe ${moneda(saldo)}` : 'Pagado'}</span>
@@ -409,6 +419,7 @@ function DetalleRapido({ cita, onClose, callbacks }) {
           </div>
           {cita.notas && <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-300"><span className="font-black text-slate-500">Nota de la cita: </span>{cita.notas}</div>}
           {cita.notasFin && <div className="mt-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-cyan-100"><span className="font-black text-cyan-400">Cierre clínico: </span>{cita.notasFin}</div>}
+          {(cita.planId || cita.sesionPlanId) && <div className="mt-3 flex items-center gap-2 rounded-xl border border-violet-400/40 bg-violet-500/15 p-3 text-xs font-bold text-violet-100"><Layers size={16} />Sesión {cita.sesionNum || '—'} vinculada a un plan de tratamiento</div>}
         </div>
 
         <div className="mt-4"><PagoResumen cita={cita} callbacks={callbacks} /></div>
@@ -419,6 +430,7 @@ function DetalleRapido({ cita, onClose, callbacks }) {
           <button type="button" onClick={() => { callbacks.onVerFicha?.(cita.paciente); onClose?.(); }} className={`inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-xs font-black text-slate-200 hover:border-cyan-500/50 hover:text-white ${finalizada ? 'col-span-2' : ''}`}><FileText size={15} />{finalizada ? 'Ver cierre, cuenta y pagos' : 'Ver ficha completa'}</button>
           {['pendiente', 'confirmada', 'en_espera'].includes(cita.estado) && <button type="button" onClick={() => callbacks.onCambiarEstado?.(cita, 'no_asistio')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2.5 text-xs font-black text-orange-300"><UserRoundX size={15} />No asistió</button>}
           {ACTIVAS.has(cita.estado) && <button type="button" onClick={() => callbacks.onCancelar?.(cita)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs font-black text-rose-300"><XCircle size={15} />Cancelar cita</button>}
+          {cita.estado === 'cancelada' && <button type="button" onClick={() => { callbacks.onNuevaCita?.({ fecha: cita.fecha, hora: cita.hora, horaFin: horaFin(cita), duracionMinutos: cita.duracionMinutos || 60 }); onClose?.(); }} className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-600 px-3 py-2.5 text-xs font-black text-white hover:bg-emerald-500"><Plus size={15} />Crear nueva cita en este horario libre</button>}
           {puedeEliminar && callbacks.onEliminar && <button type="button" onClick={() => callbacks.onEliminar(cita.id, cita.nombrePaciente)} className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs font-black text-rose-300 hover:bg-rose-500/20"><Trash2 size={15} />Eliminar definitivamente</button>}
         </div>
 
@@ -519,7 +531,8 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
     onCobrar,
     onVerCuotas,
     onVerFicha,
-    onEliminar: onEliminarCita
+    onEliminar: onEliminarCita,
+    onNuevaCita
   };
 
   const arrastre = {
@@ -560,14 +573,21 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
   const propiedadesEvento = (event) => {
     if (event.esResumen) return { style: { background: 'transparent', border: 0, padding: 0, color: 'inherit' } };
     const info = ESTADOS[estadoVisual(event.citaData.estado)] || ESTADOS.pendiente;
+    const esSesionPlan = Boolean(
+      event.citaData.planId
+      || event.citaData.sesionPlanId
+      || event.citaData.tipoCita === 'sesion_tratamiento'
+    );
+    const colorPlan = '#7c3aed';
     return {
-      className: 'dp-tarjeta-calendario',
+      className: `dp-tarjeta-calendario${esSesionPlan ? ' dp-cita-plan' : ''}`,
       style: {
         '--dp-event-color': info.color,
+        '--dp-plan-color': esSesionPlan ? colorPlan : info.color,
         backgroundColor: `${info.color}4D`,
         color: '#ffffff',
         border: `1px solid ${info.color}D9`,
-        borderLeft: `5px solid ${info.color}`,
+        borderLeft: `5px solid ${esSesionPlan ? colorPlan : info.color}`,
         borderRadius: 10,
         padding: 0,
         boxShadow: edicionHorarios

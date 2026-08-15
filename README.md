@@ -240,6 +240,24 @@ El resultado se encontrará dentro de:
 dist/SistemaDental/
 ```
 
+## Arquitectura del frontend
+
+`frontend/src/App.jsx` funciona como coordinador de sesión, navegación y estado
+de interfaz. La implementación se reparte por responsabilidad:
+
+- `frontend/src/app/hooks/useDentalProData.js`: carga y limpieza de los datos de
+  la sesión activa;
+- `frontend/src/app/actions/`: operaciones de pacientes, citas, cierres
+  clínico-financieros, planes de pago y planes de tratamiento;
+- `frontend/src/app/selectores.js`: búsquedas, enriquecimiento y cálculos
+  derivados sin efectos secundarios;
+- `frontend/src/app/components/AppModals.jsx`: composición central de modales;
+- `frontend/src/features/`: pantallas y componentes visuales de cada módulo;
+- `frontend/src/shared/utils/`: funciones comunes de fecha, texto y moneda.
+
+Esta separación permite modificar una pantalla o flujo concreto sin mezclarlo
+con la autenticación ni con los demás módulos.
+
 ## Estado de la reorganización
 
 La nueva estructura está creada, pero la migración del backend continúa progresivamente. Actualmente `backend/app/main.py` reutiliza temporalmente la aplicación existente en el `main.py` principal.

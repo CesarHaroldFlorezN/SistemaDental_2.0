@@ -203,6 +203,19 @@ def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
     assert pago_primera_cuota.json()["registro"]["cobrado"] == 300
     assert pago_primera_cuota.json()["registro"]["saldo"] == 600
 
+    planes_actualizados = client.get("/api/planes")
+    assert planes_actualizados.status_code == 200
+    plan_actualizado = next(
+        item for item in planes_actualizados.json() if item["id"] == plan["id"]
+    )
+    assert plan_actualizado["sesiones"][0]["estadoPago"] == "pagada"
+    assert plan_actualizado["sesiones"][0]["montoCuota"] == 300
+    assert plan_actualizado["sesiones"][1]["estadoPago"] == "pendiente"
+    assert plan_actualizado["resumenFinanciero"]["cobrado"] == 300
+    assert plan_actualizado["resumenFinanciero"]["saldo"] == 600
+    assert plan_actualizado["resumenFinanciero"]["cuotasPagadas"] == 1
+    assert plan_actualizado["resumenFinanciero"]["cuotasPendientes"] == 2
+
     cuotas_segunda = [
         dict(cuota) for cuota in pago_primera_cuota.json()["registro"]["cuotas"]
     ]
@@ -319,6 +332,23 @@ def test_adelanto_del_plan_recalcula_cuotas_y_deja_movimiento() -> None:
     assert registro["cobrado"] == 60
     assert registro["saldo"] == 840
     assert [cuota["monto"] for cuota in registro["cuotas"]] == [280, 280, 280]
+
+    planes_actualizados = client.get("/api/planes")
+    assert planes_actualizados.status_code == 200
+    plan_actualizado = next(
+        item for item in planes_actualizados.json() if item["id"] == plan["id"]
+    )
+    assert [sesion["montoCuota"] for sesion in plan_actualizado["sesiones"]] == [
+        280,
+        280,
+        280,
+    ]
+    assert all(
+        sesion["estadoPago"] == "pendiente" for sesion in plan_actualizado["sesiones"]
+    )
+    assert plan_actualizado["resumenFinanciero"]["adelantado"] == 60
+    assert plan_actualizado["resumenFinanciero"]["saldo"] == 840
+    assert plan_actualizado["resumenFinanciero"]["cuotasPendientes"] == 3
 
     cuenta = client.get(f"/api/pacientes/{paciente_id}/cuenta")
     assert cuenta.status_code == 200

@@ -8,7 +8,7 @@ import {
   startOfWeek as startOfWeekDateFns
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
 const inicioSemanaLunes = (fecha) => startOfWeekDateFns(fecha, {
   locale: es,
@@ -83,13 +83,17 @@ const crearResumenMensual = (citas = []) => {
         en_atencion: 0,
         completada: 0,
         no_asistio: 0,
-        cancelada: 0
+        cancelada: 0,
+        planTratamiento: 0
       });
     }
 
     const estado = estadoVisualCalendario(cita.estado);
     if (porFecha.get(cita.fecha)[estado] !== undefined) {
       porFecha.get(cita.fecha)[estado] += 1;
+    }
+    if (cita.planId || cita.sesionPlanId || cita.tipoCita === 'sesion_tratamiento') {
+      porFecha.get(cita.fecha).planTratamiento += 1;
     }
   });
 
@@ -192,6 +196,12 @@ function ResumenDia({ event }) {
 
   return (
     <div className="space-y-1 py-0.5">
+      {event.conteos.planTratamiento > 0 && (
+        <div className="dp-month-status flex items-center gap-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-bold text-violet-300">
+          <Layers size={10} />
+          <span className="truncate">{event.conteos.planTratamiento} {event.conteos.planTratamiento === 1 ? 'sesión de plan' : 'sesiones de plan'}</span>
+        </div>
+      )}
       {orden
         .filter((estado) => event.conteos[estado])
         .map((estado) => {
