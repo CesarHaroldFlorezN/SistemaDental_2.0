@@ -1,9 +1,9 @@
 import csv
 import io
-from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -18,33 +18,50 @@ from ..models import (
     PlanDB,
     PlanPagoDB,
 )
-from ..services import limpiar_valor_csv, serializar_modelo
+from ..schemas import PacienteActualizarPayload, PacienteCrearPayload
+from ..services import ahora_iso, limpiar_valor_csv, serializar_modelo
 
 router = APIRouter()
 
 
 @router.get("/api/pacientes", tags=["Pacientes"])
 def listar_pacientes(
+    response: Response,
+    limite: int = Query(default=100, ge=1, le=250, alias="limit"),
+    offset: int = Query(default=0, ge=0),
+    busqueda: str = Query(default="", max_length=100, alias="q"),
     db: Session = Depends(get_db),
 ):
-    pacientes = db.query(PacienteDB).all()
+    consulta = db.query(PacienteDB)
+    termino = busqueda.strip()
+    if termino:
+        patron = f"%{termino}%"
+        consulta = consulta.filter(
+            or_(
+                PacienteDB.nombre.ilike(patron),
+                PacienteDB.cedula.ilike(patron),
+                PacienteDB.codigo_ficha.ilike(patron),
+                PacienteDB.telefono.ilike(patron),
+                PacienteDB.correo.ilike(patron),
+            )
+        )
+
+    total = consulta.count()
+    pacientes = consulta.order_by(PacienteDB.id).offset(offset).limit(limite).all()
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limite)
+    response.headers["X-Offset"] = str(offset)
     return [serializar_modelo(paciente) for paciente in pacientes]
 
 
 @router.post("/api/pacientes", tags=["Pacientes"])
 def crear_paciente(
-    data: dict[str, Any],
+    payload: PacienteCrearPayload,
     db: Session = Depends(get_db),
 ):
-    nombre = str(data.get("nombre", "") or "").strip()
-    cedula_nueva = str(data.get("cedula", "") or "").strip()
-    ficha_nueva = str(data.get("codigo_ficha", "") or "").strip()
-
-    if not nombre:
-        raise HTTPException(
-            status_code=400,
-            detail="El nombre del paciente es obligatorio.",
-        )
+    data = payload.model_dump()
+    cedula_nueva = data["cedula"]
+    ficha_nueva = data["codigo_ficha"]
 
     if (
         cedula_nueva
@@ -64,15 +81,7 @@ def crear_paciente(
             detail=f"El código de ficha '{ficha_nueva}' ya existe.",
         )
 
-    columnas_validas = {columna.name for columna in PacienteDB.__table__.columns}
-
-    datos_filtrados = {
-        clave: valor
-        for clave, valor in data.items()
-        if clave in columnas_validas and clave != "id"
-    }
-
-    nuevo_paciente = PacienteDB(**datos_filtrados)
+    nuevo_paciente = PacienteDB(**data, fechaReg=ahora_iso())
 
     try:
         db.add(nuevo_paciente)
@@ -93,7 +102,7 @@ def crear_paciente(
 )
 def actualizar_paciente(
     paciente_id: int,
-    data: dict[str, Any],
+    payload: PacienteActualizarPayload,
     db: Session = Depends(get_db),
 ):
     paciente = db.query(PacienteDB).filter(PacienteDB.id == paciente_id).first()
@@ -104,6 +113,7 @@ def actualizar_paciente(
             detail="Paciente no encontrado.",
         )
 
+    data = payload.model_dump(exclude_unset=True)
     cedula_nueva = str(data.get("cedula", paciente.cedula) or "").strip()
 
     ficha_nueva = str(
@@ -142,11 +152,8 @@ def actualizar_paciente(
             detail=(f"La ficha '{ficha_nueva}' ya pertenece a otro paciente."),
         )
 
-    columnas_validas = {columna.name for columna in PacienteDB.__table__.columns}
-
     for clave, valor in data.items():
-        if clave in columnas_validas and clave != "id":
-            setattr(paciente, clave, valor)
+        setattr(paciente, clave, valor)
 
     try:
         db.commit()

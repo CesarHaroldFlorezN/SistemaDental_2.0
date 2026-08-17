@@ -128,6 +128,7 @@ export default function App() {
     planes,
     casosClinicos,
     serviciosCatalogo,
+    movimientosCuenta,
     cargarPacientes,
     cargarCitas,
     cargarPagos,
@@ -135,8 +136,16 @@ export default function App() {
     cargarPlanes,
     cargarCasosClinicos,
     cargarServiciosCatalogo,
+    cargarMovimientosCuenta,
+    actualizarCitaLocal,
     limpiarDatos
   } = useDentalProData(usuarioActual);
+
+  useEffect(() => {
+    if (vistaActiva === 'finanzas') {
+      void cargarMovimientosCuenta();
+    }
+  }, [vistaActiva, cargarMovimientosCuenta]);
 
   // ==========================================
   // ESTADOS DE PACIENTES
@@ -320,6 +329,8 @@ export default function App() {
     cargarPlanPagos,
     cargarPlanes,
     cargarCasosClinicos,
+    cargarMovimientosCuenta,
+    actualizarCitaLocal,
     fMon,
     setVistaActiva: (vista) => navigate(rutaDeVista(vista)),
     setBusquedaPP,
@@ -346,6 +357,7 @@ export default function App() {
     cargarPlanPagos,
     cargarPagos,
     cargarPlanes,
+    cargarMovimientosCuenta,
     fMon,
     setModalPPAbierto,
     setPlanPagoContexto
@@ -359,6 +371,7 @@ export default function App() {
   } = crearAccionesPlanesTratamiento({
     cargarPlanes,
     cargarPagos,
+    cargarPlanPagos,
     cargarCasosClinicos,
     setPlanSeleccionado,
     setModalPlanAbierto,
@@ -387,7 +400,7 @@ export default function App() {
     pacientes,
     busquedaPlan
   );
-  const resumenFinanzas = calcularResumenFinanzas(pagos);
+  const resumenFinanzas = calcularResumenFinanzas(pagos, movimientosCuenta);
 
   return (
     <div className="dp-app-shell flex min-h-screen bg-slate-900 font-sans text-slate-100">
@@ -501,6 +514,8 @@ export default function App() {
               busqueda={busquedaFinanzas}
               filtro={filtroFinanzas}
               resumen={resumenFinanzas}
+              movimientos={movimientosCuenta}
+              pacientes={pacientes}
               onCambiarBusqueda={setBusquedaFinanzas}
               onCambiarFiltro={setFiltroFinanzas}
               onCobrar={handleCobrarSaldo}
@@ -636,7 +651,8 @@ export default function App() {
           pagos: cargarPagos,
           planesPago: cargarPlanPagos,
           planes: cargarPlanes,
-          casosClinicos: cargarCasosClinicos
+          casosClinicos: cargarCasosClinicos,
+          movimientos: cargarMovimientosCuenta
         }}
         acciones={{
           cerrarPaciente: () => setModalAbierto(false),

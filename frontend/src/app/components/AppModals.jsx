@@ -102,7 +102,8 @@ export default function AppModals({
             cargas.pagos(),
             cargas.planesPago(),
             cargas.planes(),
-            cargas.casosClinicos()
+            cargas.casosClinicos(),
+            cargas.movimientos()
           ])
         }
         onCrearPlan={acciones.crearPlanDesdeFicha}

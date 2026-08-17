@@ -507,6 +507,103 @@ def migracion_008_catalogo_servicios(
     _normalizar_detalle_servicios_historico(connection)
 
 
+def migracion_009_fechas_horas_citas_tipadas(
+    connection: Connection,
+) -> None:
+    """Declara fecha y horas como DATE/TIME sin cambiar su formato JSON."""
+
+    if not _existe_tabla(connection, "citas"):
+        return
+
+    informacion = connection.exec_driver_sql("PRAGMA table_info(citas)").fetchall()
+    tipos = {fila[1]: str(fila[2] or "").upper() for fila in informacion}
+    if (
+        tipos.get("fecha") == "DATE"
+        and tipos.get("hora") == "TIME"
+        and tipos.get("horaFin") == "TIME"
+    ):
+        return
+
+    validaciones = (
+        ("fecha", 10, "date"),
+        ("hora", 5, "time"),
+        ("horaFin", 5, "time"),
+    )
+    columnas = {fila[1] for fila in informacion}
+    for columna, longitud, funcion in validaciones:
+        if columna not in columnas:
+            continue
+        invalidas = connection.exec_driver_sql(
+            f"""
+            SELECT id, {columna}
+            FROM citas
+            WHERE TRIM(COALESCE({columna}, '')) <> ''
+              AND (
+                  LENGTH({columna}) <> ?
+                  OR {funcion}({columna}) IS NULL
+              )
+            LIMIT 5
+            """,
+            (longitud,),
+        ).fetchall()
+        if invalidas:
+            raise RuntimeError(
+                f"No se puede tipar citas.{columna}; hay valores inválidos: {invalidas}"
+            )
+
+    indices = [
+        fila[0]
+        for fila in connection.exec_driver_sql(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'index'
+              AND tbl_name = 'citas'
+              AND sql IS NOT NULL
+            """
+        ).fetchall()
+    ]
+
+    definiciones = []
+    nombres_columnas = []
+    for _, nombre, tipo, no_nulo, predeterminado, primaria in informacion:
+        tipo_nuevo = {"fecha": "DATE", "hora": "TIME", "horaFin": "TIME"}.get(
+            nombre,
+            tipo or "TEXT",
+        )
+        partes = [f'"{nombre}"', tipo_nuevo]
+        if primaria:
+            partes.append("PRIMARY KEY")
+        if no_nulo:
+            partes.append("NOT NULL")
+        if predeterminado is not None:
+            partes.extend(("DEFAULT", str(predeterminado)))
+        definiciones.append(" ".join(partes))
+        nombres_columnas.append(f'"{nombre}"')
+
+    for nombre, tipo in (("fecha", "DATE"), ("hora", "TIME"), ("horaFin", "TIME")):
+        if nombre not in columnas:
+            definiciones.append(f'"{nombre}" {tipo}')
+
+    connection.exec_driver_sql("DROP TABLE IF EXISTS citas_tipadas_nueva")
+    connection.exec_driver_sql(
+        f"CREATE TABLE citas_tipadas_nueva ({', '.join(definiciones)})"
+    )
+    columnas_sql = ", ".join(nombres_columnas)
+    connection.exec_driver_sql(
+        f"INSERT INTO citas_tipadas_nueva ({columnas_sql}) "
+        f"SELECT {columnas_sql} FROM citas"
+    )
+    connection.exec_driver_sql("DROP TABLE citas")
+    connection.exec_driver_sql("ALTER TABLE citas_tipadas_nueva RENAME TO citas")
+    for sentencia in indices:
+        connection.exec_driver_sql(sentencia)
+    for columna in ("fecha", "hora", "horaFin"):
+        connection.exec_driver_sql(
+            f"CREATE INDEX IF NOT EXISTS ix_citas_{columna} ON citas ({columna})"
+        )
+
+
 MIGRACIONES: tuple[NombreMigracion, ...] = (
     (
         1,
@@ -547,6 +644,11 @@ MIGRACIONES: tuple[NombreMigracion, ...] = (
         8,
         "catalogo_servicios_canonico",
         migracion_008_catalogo_servicios,
+    ),
+    (
+        9,
+        "fechas_horas_citas_tipadas",
+        migracion_009_fechas_horas_citas_tipadas,
     ),
 )
 

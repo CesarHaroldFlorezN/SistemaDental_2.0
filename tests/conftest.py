@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import tempfile
@@ -18,6 +19,7 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
         engine.dispose()
         test_engine.dispose()
+        logging.shutdown()
     finally:
         shutil.rmtree(TEST_DATA_DIR, ignore_errors=True)
 

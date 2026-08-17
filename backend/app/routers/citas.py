@@ -174,9 +174,9 @@ def crear_cita_con_pago(
 
     hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
-        payload_efectivo.fecha,
-        payload_efectivo.hora,
-        payload_efectivo.horaFin,
+        payload_efectivo.fecha_iso,
+        payload_efectivo.hora_iso,
+        payload_efectivo.hora_fin_iso,
         payload_efectivo.duracionMinutos,
         payload_efectivo.estado,
     )
@@ -197,8 +197,8 @@ def crear_cita_con_pago(
         tipoCita=payload_efectivo.tipoCita,
         motivoConsulta=payload_efectivo.motivoConsulta.strip(),
         piezaDental=payload_efectivo.piezaDental.strip(),
-        fecha=payload_efectivo.fecha,
-        hora=payload_efectivo.hora,
+        fecha=payload_efectivo.fecha_iso,
+        hora=payload_efectivo.hora_iso,
         horaFin=hora_fin_resuelta,
         duracionMinutos=duracion_resuelta,
         procedimiento=detalle_servicios["procedimiento"],
@@ -230,7 +230,7 @@ def crear_cita_con_pago(
                 planId=None,
                 citaId=nueva_cita.id,
                 concepto=detalle_servicios["procedimiento"],
-                fecha=payload_efectivo.fecha,
+                fecha=payload_efectivo.fecha_iso,
                 total=datos_pago["total"],
                 cobrado=datos_pago["cobrado"],
                 saldo=datos_pago["saldo"],
@@ -240,7 +240,7 @@ def crear_cita_con_pago(
                 cuotas=[],
                 creadoEn=ahora,
                 fechaUltPago=(
-                    payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
+                    payload_efectivo.fecha_iso if datos_pago["cobrado"] > 0 else None
                 ),
                 nota=("Cargo generado automáticamente desde la cita"),
                 devuelto=0,
@@ -309,9 +309,9 @@ def actualizar_cita_con_pago(
 
     hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
-        payload_efectivo.fecha,
-        payload_efectivo.hora,
-        payload_efectivo.horaFin,
+        payload_efectivo.fecha_iso,
+        payload_efectivo.hora_iso,
+        payload_efectivo.hora_fin_iso,
         payload_efectivo.duracionMinutos,
         payload_efectivo.estado,
         cita_excluida_id=cita_id,
@@ -372,8 +372,8 @@ def actualizar_cita_con_pago(
     cita.tipoCita = payload_efectivo.tipoCita
     cita.motivoConsulta = payload_efectivo.motivoConsulta.strip()
     cita.piezaDental = payload_efectivo.piezaDental.strip()
-    cita.fecha = payload_efectivo.fecha
-    cita.hora = payload_efectivo.hora
+    cita.fecha = payload_efectivo.fecha_iso
+    cita.hora = payload_efectivo.hora_iso
     cita.horaFin = hora_fin_resuelta
     cita.duracionMinutos = duracion_resuelta
     cita.procedimiento = detalle_servicios["procedimiento"]
@@ -418,7 +418,7 @@ def actualizar_cita_con_pago(
             pago.casoClinicoId = caso.id
             pago.planId = None
             pago.concepto = detalle_servicios["procedimiento"]
-            pago.fecha = payload_efectivo.fecha
+            pago.fecha = payload_efectivo.fecha_iso
             pago.total = datos_pago["total"]
             pago.servicios = detalle_servicios["servicios"]
             if plan_pago:
@@ -432,7 +432,7 @@ def actualizar_cita_con_pago(
                 pago.metodo = datos_pago["metodo"]
                 pago.tipoPago = payload_efectivo.tipoPago
                 pago.fechaUltPago = (
-                    payload_efectivo.fecha if datos_pago["cobrado"] > 0 else None
+                    payload_efectivo.fecha_iso if datos_pago["cobrado"] > 0 else None
                 )
 
         db.commit()
@@ -477,9 +477,9 @@ def reprogramar_cita(
 
     hora_fin_resuelta, duracion_resuelta = validar_disponibilidad(
         db,
-        payload.fecha,
-        payload.hora,
-        payload.horaFin,
+        payload.fecha_iso,
+        payload.hora_iso,
+        payload.hora_fin_iso,
         payload.duracionMinutos,
         cita.estado,
         cita_excluida_id=cita.id,
@@ -490,8 +490,8 @@ def reprogramar_cita(
     hora_fin_anterior = cita.horaFin or minutos_a_hora(
         convertir_hora_a_minutos(cita.hora or "00:00") + int(cita.duracionMinutos or 60)
     )
-    cita.fecha = payload.fecha
-    cita.hora = payload.hora
+    cita.fecha = payload.fecha_iso
+    cita.hora = payload.hora_iso
     cita.horaFin = hora_fin_resuelta
     cita.duracionMinutos = duracion_resuelta
     actualizar_sesion_desde_cita(db, cita)
@@ -502,7 +502,7 @@ def reprogramar_cita(
         return {
             "message": (
                 f"Cita reprogramada de {fecha_anterior} {hora_anterior} → {hora_fin_anterior} "
-                f"a {payload.fecha} {payload.hora} → {hora_fin_resuelta}."
+                f"a {payload.fecha_iso} {payload.hora_iso} → {hora_fin_resuelta}."
             ),
             "cita": serializar_modelo(cita),
         }

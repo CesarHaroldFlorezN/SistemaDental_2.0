@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import (
@@ -18,6 +21,7 @@ from .dependencias import (
     exigir_personal_clinico,
     obtener_usuario_actual,
 )
+from .logging_config import configurar_logging
 from .migrations import inicializar_base_datos
 from .routers import (
     autenticacion_router,
@@ -36,13 +40,19 @@ from .routers import (
 # BASE DE DATOS
 # =====================================================
 
-validar_aislamiento_bases()
-inicializar_base_datos()
-inicializar_base_datos(
-    test_engine,
-    ruta_bd=TEST_DB_PATH,
-    directorio_respaldos=TEST_RESPALDOS_DIR,
-)
+logger = configurar_logging()
+
+try:
+    validar_aislamiento_bases()
+    inicializar_base_datos()
+    inicializar_base_datos(
+        test_engine,
+        ruta_bd=TEST_DB_PATH,
+        directorio_respaldos=TEST_RESPALDOS_DIR,
+    )
+except Exception:
+    logger.exception("DentalPro no pudo inicializar sus bases de datos.")
+    raise
 
 
 # =====================================================
@@ -61,7 +71,56 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count", "X-Limit", "X-Offset"],
 )
+
+
+@app.exception_handler(HTTPException)
+async def registrar_error_controlado(
+    request: Request,
+    error: HTTPException,
+) -> JSONResponse:
+    causa = error.__cause__
+    if causa is not None and (error.status_code == 400 or error.status_code >= 500):
+        codigo = uuid4().hex[:10].upper()
+        logger.error(
+            "Error controlado %s | %s %s | %s",
+            codigo,
+            request.method,
+            request.url.path,
+            error.detail,
+            exc_info=(type(causa), causa, causa.__traceback__),
+        )
+        detalle = f"{error.detail} Código de diagnóstico: {codigo}."
+    else:
+        detalle = error.detail
+
+    return JSONResponse(
+        status_code=error.status_code,
+        content={"detail": jsonable_encoder(detalle)},
+        headers=error.headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def registrar_error_no_controlado(
+    request: Request,
+    error: Exception,
+) -> JSONResponse:
+    codigo = uuid4().hex[:10].upper()
+    logger.error(
+        "Error no controlado %s | %s %s",
+        codigo,
+        request.method,
+        request.url.path,
+        exc_info=(type(error), error, error.__traceback__),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (f"Ocurrió un error interno. Código de diagnóstico: {codigo}.")
+        },
+    )
 
 
 # =====================================================

@@ -48,6 +48,50 @@ const jsonOptions = (method, data) => ({
   body: JSON.stringify(data)
 });
 
+const getPacientesPagina = async ({ offset = 0, limit = 250, q = '' } = {}) => {
+  const parametros = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit)
+  });
+  if (q.trim()) parametros.set('q', q.trim());
+
+  try {
+    const response = await fetch(`${API_URL}/pacientes?${parametros}`, {
+      credentials: 'include'
+    });
+    const items = await handleResponse(response);
+    return {
+      items,
+      total: Number(response.headers.get('X-Total-Count') || items.length),
+      offset,
+      limit
+    };
+  } catch (error) {
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+      throw new Error(
+        'No se pudo conectar con el servidor. Verifica que DentalPro esté ejecutándose.',
+        { cause: error }
+      );
+    }
+    throw error;
+  }
+};
+
+const getTodosPacientes = async () => {
+  const limit = 250;
+  let offset = 0;
+  const pacientes = [];
+
+  while (true) {
+    const pagina = await getPacientesPagina({ offset, limit });
+    pacientes.push(...pagina.items);
+    offset += pagina.items.length;
+    if (!pagina.items.length || offset >= pagina.total) break;
+  }
+
+  return pacientes;
+};
+
 export const api = {
 
 
@@ -117,7 +161,9 @@ export const api = {
   // ===================================================
   // PACIENTES
   // ===================================================
-  getPacientes: () => request(`${API_URL}/pacientes`),
+  getPacientes: getTodosPacientes,
+
+  getPacientesPagina,
 
   crearPaciente: (data) =>
     request(`${API_URL}/pacientes`, jsonOptions('POST', data)),
@@ -211,6 +257,8 @@ export const api = {
 
   getCuentaPaciente: (pacienteId) =>
     request(`${API_URL}/pacientes/${pacienteId}/cuenta`),
+
+  getMovimientosCuenta: () => request(`${API_URL}/movimientosCuenta`),
 
   crearMovimientoCuenta: (data) =>
     request(`${API_URL}/movimientosCuenta`, jsonOptions('POST', data)),

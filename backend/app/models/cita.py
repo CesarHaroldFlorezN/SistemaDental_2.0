@@ -1,6 +1,7 @@
 from sqlalchemy import JSON, Column, Integer, Numeric, String, Text
 
 from ..database import Base
+from .tipos import FechaISO, HoraISO
 
 
 class CitaDB(Base):
@@ -15,9 +16,9 @@ class CitaDB(Base):
     tipoCita = Column(String(50), default="procedimiento")
     motivoConsulta = Column(Text)
     piezaDental = Column(String(30))
-    fecha = Column(String(50), index=True)
-    hora = Column(String(50), index=True)
-    horaFin = Column(String(50), index=True)
+    fecha = Column(FechaISO(), index=True)
+    hora = Column(HoraISO(), index=True)
+    horaFin = Column(HoraISO(), index=True)
     duracionMinutos = Column(Integer)
     procedimiento = Column(String(200))
     servicios = Column(JSON)

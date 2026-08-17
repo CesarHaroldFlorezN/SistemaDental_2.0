@@ -65,7 +65,7 @@ export default function PacienteModal({ isOpen, onClose, onSave, pacienteEditar 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
+    <div className="dp-modal-dark fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
       <div className="bg-slate-800 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Cabecera */}
@@ -162,7 +162,7 @@ export default function PacienteModal({ isOpen, onClose, onSave, pacienteEditar 
                 name="fechaNacimiento"
                 value={formData.fechaNacimiento}
                 onChange={handleChange}
-                className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-cyan-500 outline-none transition text-xs"
+                className="dp-date-input w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-cyan-500 outline-none transition text-xs"
               />
             </div>
           </div>

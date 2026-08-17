@@ -1,10 +1,13 @@
 import {
   AlertTriangle,
+  BarChart3,
   CreditCard,
   DollarSign,
   Search,
   TrendingUp
 } from 'lucide-react';
+import { useState } from 'react';
+import ReporteCaja from './ReporteCaja';
 
 const ETIQUETAS_TIPO_PAGO = {
   contado: 'Contado',
@@ -27,11 +30,14 @@ export default function FinanzasPage({
   busqueda,
   filtro,
   resumen,
+  movimientos = [],
+  pacientes = [],
   onCambiarBusqueda,
   onCambiarFiltro,
   onCobrar,
   formatearMoneda
 }) {
+  const [reporteVisible, setReporteVisible] = useState(false);
   const pendientes = pagos.filter(
     (pago) => Number.parseFloat(pago.saldo || 0) > 0
   ).length;
@@ -53,19 +59,19 @@ export default function FinanzasPage({
         </span>
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          {
-            etiqueta: 'Total Cobrado',
-            monto: resumen.totalCobrado,
-            Icono: DollarSign,
-            clase: 'text-emerald-400'
-          },
           {
             etiqueta: 'Ingresos del Mes',
             monto: resumen.ingresosMes,
             Icono: TrendingUp,
             clase: 'text-cyan-400'
+          },
+          {
+            etiqueta: 'Total Cobrado',
+            monto: resumen.totalCobrado,
+            Icono: DollarSign,
+            clase: 'text-emerald-400'
           },
           {
             etiqueta: 'Financiado Activo',
@@ -88,12 +94,39 @@ export default function FinanzasPage({
               <span>{etiqueta}</span>
               <Icono size={18} className={clase} />
             </div>
-            <div className={`font-serif text-2xl font-bold ${clase}`}>
+            <div className={`font-serif text-2xl font-black ${clase}`}>
               {formatearMoneda(monto)}
             </div>
           </div>
         ))}
       </div>
+
+      <div className="mb-8 flex flex-col gap-3 rounded-2xl border-2 border-cyan-700/30 bg-cyan-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-black text-slate-950">Reporte detallado de caja</h2>
+          <p className="mt-0.5 text-xs font-semibold text-slate-600">
+            Consulta ingresos, egresos y el resultado neto de cualquier período.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setReporteVisible((visible) => !visible)}
+          aria-expanded={reporteVisible}
+          className="dp-cash-report-toggle inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition"
+        >
+          <BarChart3 size={18} />
+          {reporteVisible ? 'Ocultar reporte' : 'Ver ingresos y egresos'}
+        </button>
+      </div>
+
+      {reporteVisible && (
+        <ReporteCaja
+          pagos={pagos}
+          movimientos={movimientos}
+          pacientes={pacientes}
+          formatearMoneda={formatearMoneda}
+        />
+      )}
 
       <div className="mb-6 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
         <div className="relative">

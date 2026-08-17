@@ -22,6 +22,7 @@ import {
   buscarServicioCatalogo,
   serviciosCatalogoDisponibles
 } from '../../../shared/utils/catalogo';
+import AgendaMiniPreview from './AgendaMiniPreview';
 
 const DURACIONES_RAPIDAS = [15, 30, 45, 60, 90, 120];
 const ESTADOS_QUE_OCUPAN_HORARIO = new Set([
@@ -588,8 +589,8 @@ export default function CitaModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[95vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-800 shadow-2xl">
+    <div className="dp-modal-dark fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[95vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-800 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-700 px-6 py-4">
           <div>
             <h2 className="flex items-center gap-2 text-xl font-bold text-cyan-400">
@@ -600,6 +601,7 @@ export default function CitaModal({
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-700 hover:text-white"><X size={20} /></button>
         </div>
 
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,.75fr)]">
         <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto p-6 text-sm">
           {errorFormulario && <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-red-300">{errorFormulario}</div>}
 
@@ -704,7 +706,7 @@ export default function CitaModal({
           <section className="rounded-2xl border border-slate-700 bg-slate-900/40 p-4">
             <div className="mb-3 flex items-center gap-2"><Clock size={17} className="text-cyan-400" /><div><h3 className="font-bold text-white">Fecha y rango de atención</h3><p className="text-xs text-slate-500">El sistema bloqueará automáticamente los horarios que se crucen.</p></div></div>
             <div className="grid gap-4 md:grid-cols-[1.15fr_1fr_auto_1fr] md:items-end">
-              <label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Calendar size={15} className="text-cyan-400" />Fecha</span><input type="date" name="fecha" required value={formData.fecha} onChange={handleChange} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label>
+              <label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Calendar size={15} className="text-cyan-400" />Fecha</span><input type="date" name="fecha" required value={formData.fecha} onChange={handleChange} className="dp-date-input w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-cyan-500" /></label>
               <label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Clock size={15} className="text-cyan-400" />Inicio</span><input type="time" required value={formData.hora} onChange={(event) => cambiarHoraInicio(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 font-bold text-cyan-300 outline-none focus:border-cyan-500" /></label>
               <div className="hidden pb-3 text-cyan-400 md:block"><ArrowRight size={22} /></div>
               <label className="font-medium text-slate-300"><span className="mb-1.5 flex items-center gap-1.5"><Clock size={15} className="text-cyan-400" />Fin</span><input type="time" required value={formData.horaFin} onChange={(event) => cambiarHoraFin(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 font-bold text-cyan-300 outline-none focus:border-cyan-500" /></label>
@@ -836,6 +838,15 @@ export default function CitaModal({
 
           <div className="flex justify-end gap-3 border-t border-slate-700 pt-4"><button type="button" onClick={onClose} className="rounded-xl bg-slate-700 px-5 py-2.5 font-medium text-slate-200 hover:bg-slate-600">Cancelar</button><button type="submit" disabled={guardando || Boolean(conflictoHorario) || duracionActual < 5} className="flex items-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 font-semibold text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"><Save size={18} />{guardando ? 'Guardando...' : citaEditar?.id ? 'Guardar cambios' : 'Programar atención'}</button></div>
         </form>
+        <AgendaMiniPreview
+          citas={citas}
+          pacientes={pacientes}
+          fecha={formData.fecha}
+          hora={formData.hora}
+          horaFin={formData.horaFin}
+          citaEditarId={citaEditar?.id}
+        />
+        </div>
       </div>
     </div>
   );

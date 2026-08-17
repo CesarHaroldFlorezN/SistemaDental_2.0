@@ -131,6 +131,9 @@ export default function PlanTratamientoModal({
       && !['resuelto', 'cerrado'].includes(caso.estado)
   );
   const cantidadSesiones = Math.max(1, Number.parseInt(formData.nSesiones, 10) || 1);
+  const sesionesOriginales = Math.max(1, Number(planEditar?.nSesiones || 1));
+  const sesionesAgregadas = Math.max(0, cantidadSesiones - sesionesOriginales);
+  const tieneCronograma = Boolean(planEditar?.planPago);
 
   const seleccionarPaciente = (paciente) => {
     setFormData((prev) => ({
@@ -300,6 +303,18 @@ export default function PlanTratamientoModal({
             <div className="mb-3 text-xs font-bold uppercase tracking-wider text-purple-300">Vista previa de sesiones</div>
             <div className="flex flex-wrap gap-2">{Array.from({ length: Math.min(cantidadSesiones, 20) }, (_, indice) => <span key={indice} className="flex h-9 min-w-9 items-center justify-center rounded-full border border-purple-400 bg-purple-100 px-2 text-xs font-black text-purple-950 shadow-sm">{indice + 1}</span>)}{cantidadSesiones > 20 && <span className="self-center text-xs text-slate-300">+ {cantidadSesiones - 20} más</span>}</div>
             <p className="mt-3 text-xs text-slate-400">Estas sesiones aparecerán inmediatamente como pendientes. Al agendarlas, el sistema seleccionará el siguiente número disponible y evitará superar el total.</p>
+            {esEdicion && sesionesAgregadas > 0 && (
+              <div className="mt-3 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100">
+                Se agregarán {sesionesAgregadas} sesión(es). {tieneCronograma
+                  ? `El plan de pagos pasará de ${sesionesOriginales} a ${cantidadSesiones} cuotas; las pagadas no cambiarán y el saldo se repartirá entre las pendientes.`
+                  : 'Quedarán disponibles para agendar inmediatamente.'}
+              </div>
+            )}
+            {esEdicion && tieneCronograma && cantidadSesiones < sesionesOriginales && (
+              <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100">
+                No se pueden reducir sesiones mientras existan cuotas vinculadas. Conserva al menos {sesionesOriginales}.
+              </div>
+            )}
           </div>
 
           <label className="block font-medium text-slate-300">Descripción, diagnóstico u objetivos<textarea name="descripcion" rows="3" value={formData.descripcion} onChange={handleChange} placeholder="Fases, objetivos clínicos e indicaciones..." className="mt-1.5 w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-white outline-none focus:border-purple-500" /></label>
@@ -314,7 +329,7 @@ export default function PlanTratamientoModal({
 
           <div className="flex justify-end gap-3 border-t border-slate-700 pt-4">
             <button type="button" onClick={onClose} className="rounded-xl bg-slate-700 px-5 py-2.5 font-medium text-slate-200 hover:bg-slate-600">Cancelar</button>
-            <button type="submit" disabled={guardando} className="flex items-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 font-semibold text-white hover:bg-purple-500 disabled:opacity-50"><Save size={18} />{guardando ? 'Guardando...' : esEdicion ? 'Guardar cambios' : 'Crear plan y sesiones'}</button>
+            <button type="submit" disabled={guardando || (esEdicion && tieneCronograma && cantidadSesiones < sesionesOriginales)} className="flex items-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 font-semibold text-white hover:bg-purple-500 disabled:opacity-50"><Save size={18} />{guardando ? 'Guardando...' : esEdicion ? 'Guardar cambios' : 'Crear plan y sesiones'}</button>
           </div>
         </form>
       </div>

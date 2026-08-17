@@ -43,3 +43,6 @@ htmlcov/
 
 # Paquetes Python generados
 *.egg-info/
+
+# Registros locales de diagnóstico
+data/logs/
