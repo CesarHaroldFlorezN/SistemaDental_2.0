@@ -273,6 +273,40 @@ def test_diagnostico_plan_sesiones_y_cuotas_quedan_vinculados() -> None:
     assert romper_vinculo.status_code == 400
     assert "cuota por sesión" in romper_vinculo.json()["detail"]
 
+    ampliar_plan = client.put(
+        f"/api/planes/{plan['id']}",
+        json={"nSesiones": 4},
+    )
+    assert ampliar_plan.status_code == 200
+    plan_ampliado = ampliar_plan.json()["registro"]
+    assert plan_ampliado["nSesiones"] == 4
+    assert [sesion["numero"] for sesion in plan_ampliado["sesiones"]] == [
+        1,
+        2,
+        3,
+        4,
+    ]
+
+    cronograma_ampliado = plan_ampliado["planPago"]["cuotas"]
+    assert len(cronograma_ampliado) == 4
+    assert [cuota["sesionNum"] for cuota in cronograma_ampliado] == [1, 2, 3, 4]
+    assert [cuota["pagado"] for cuota in cronograma_ampliado] == [
+        True,
+        True,
+        False,
+        False,
+    ]
+    assert [cuota["monto"] for cuota in cronograma_ampliado] == [300, 300, 150, 150]
+    assert plan_ampliado["resumenFinanciero"]["cobrado"] == 600
+    assert plan_ampliado["resumenFinanciero"]["saldo"] == 300
+
+    reducir_plan_vinculado = client.put(
+        f"/api/planes/{plan['id']}",
+        json={"nSesiones": 3},
+    )
+    assert reducir_plan_vinculado.status_code == 409
+    assert "reducir sesiones" in reducir_plan_vinculado.json()["detail"]
+
 
 def test_adelanto_del_plan_recalcula_cuotas_y_deja_movimiento() -> None:
     paciente_id = crear_paciente()

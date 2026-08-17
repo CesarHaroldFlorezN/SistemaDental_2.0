@@ -1,5 +1,5 @@
 // DENTALPRO_V8_2_VISUAL_CALENDARIO
-import { Component, Suspense, lazy, useMemo, useState } from 'react';
+import { Component, Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   CalendarCheck2,
@@ -318,13 +318,13 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd }
   const saldo = Number(pago?.saldo ?? cita.costo ?? 0);
   const estado = estadoVisual(cita.estado);
   return (
-    <article draggable={ACTIVAS.has(cita.estado)} onDragStart={(e) => ACTIVAS.has(cita.estado) && onDragStart(e, cita)} onDragEnd={onDragEnd} className={`rounded-2xl border bg-slate-900/80 p-3.5 shadow-lg ${ESTADOS[estado]?.clase || 'border-slate-600'}`}>
+    <article style={{ '--dp-reception-state': ESTADOS[estado]?.color || '#64748b' }} draggable={ACTIVAS.has(cita.estado)} onDragStart={(e) => ACTIVAS.has(cita.estado) && onDragStart(e, cita)} onDragEnd={onDragEnd} className={`dp-reception-card rounded-2xl border bg-slate-900/80 p-3.5 shadow-lg ${ESTADOS[estado]?.clase || 'border-slate-600'}`}>
       <div className="grid grid-cols-[42px_minmax(0,1fr)_32px] items-center gap-2">
         <div className="rounded-lg border border-slate-600 bg-slate-800 px-1 py-1 text-center">
           <div className="text-[6px] font-black uppercase tracking-wider text-slate-500">Ficha</div>
           <div className="truncate text-xs font-black text-white">{cita.codigoFicha || '—'}</div>
         </div>
-        <div className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-2 py-2 text-xs font-black text-cyan-200">
+        <div className="dp-reception-time flex items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-black">
           <span>{cita.hora || '—'}</span><ArrowRight size={14} /><span>{horaFin(cita)}</span>
         </div>
         <button type="button" onClick={() => onDetalle(cita)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:text-cyan-300"><Eye size={15} /></button>
@@ -333,11 +333,11 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd }
         <GripVertical size={15} className="mt-1 shrink-0 cursor-grab text-slate-600" />
         <div className="min-w-0 flex-1">
           <button type="button" onClick={() => onDetalle(cita)} className="w-full truncate text-left font-black text-white hover:text-cyan-300">{cita.nombrePaciente}</button>
-          <div className="mt-1 truncate text-xs text-cyan-100">{servicios(cita).map((s) => s.nombre).join(' + ')}</div>
-          {(cita.planId || cita.sesionPlanId) && <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-500/15 px-2 py-0.5 text-[9px] font-black uppercase text-violet-200"><Layers size={10} />Plan de tratamiento · sesión {cita.sesionNum || '—'}</div>}
+          <div className="dp-reception-service mt-1 truncate text-xs">{servicios(cita).map((s) => s.nombre).join(' + ')}</div>
+          {(cita.planId || cita.sesionPlanId) && <div className="dp-reception-plan mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase"><Layers size={10} />Plan de tratamiento · sesión {cita.sesionNum || '—'}</div>}
           <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
-            <span style={{ color: ESTADOS[estado]?.color }}>{ESTADOS[estado]?.texto}</span>
-            <span className={saldo > 0 ? 'text-rose-300' : 'text-emerald-300'}>{saldo > 0 ? `Debe ${moneda(saldo)}` : 'Pagado'}</span>
+            <span className="dp-reception-status" style={{ '--dp-reception-status': ESTADOS[estado]?.color }}>{ESTADOS[estado]?.texto}</span>
+            <span className={saldo > 0 ? 'dp-reception-debt' : 'dp-reception-paid'}>{saldo > 0 ? `Debe ${moneda(saldo)}` : 'Pagado'}</span>
           </div>
         </div>
       </div>
@@ -359,10 +359,10 @@ function TarjetaRecepcion({ cita, callbacks, onDetalle, onDragStart, onDragEnd }
 function Columna({ titulo, estado, citas, callbacks, onDetalle, arrastre }) {
   const activa = arrastre.sobre === estado;
   return (
-    <section onDragOver={(e) => e.preventDefault()} onDragEnter={() => arrastre.setSobre(estado)} onDrop={() => arrastre.soltar(estado)} className={`rounded-2xl border p-3 ${activa ? 'border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-500/20' : 'border-slate-700 bg-slate-800/60'}`}>
-      <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-black text-white">{titulo}</h3><span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-300">{citas.length}</span></div>
+    <section onDragOver={(e) => e.preventDefault()} onDragEnter={() => arrastre.setSobre(estado)} onDrop={() => arrastre.soltar(estado)} className={`dp-reception-column rounded-2xl border p-3 ${activa ? 'border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-500/20' : 'border-slate-700 bg-slate-800/60'}`}>
+      <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-black text-white">{titulo}</h3><span className="dp-reception-count rounded-full px-2.5 py-1 text-xs font-bold">{citas.length}</span></div>
       <div className="space-y-3">
-        {citas.length ? citas.map((cita) => <TarjetaRecepcion key={cita.id} cita={cita} callbacks={callbacks} onDetalle={onDetalle} onDragStart={arrastre.iniciar} onDragEnd={arrastre.terminar} />) : <div className="rounded-xl border border-dashed border-slate-700 py-8 text-center text-xs text-slate-600">Sin pacientes</div>}
+        {citas.length ? citas.map((cita) => <TarjetaRecepcion key={cita.id} cita={cita} callbacks={callbacks} onDetalle={onDetalle} onDragStart={arrastre.iniciar} onDragEnd={arrastre.terminar} />) : <div className="dp-reception-empty rounded-xl border border-dashed py-8 text-center text-xs font-semibold">Sin pacientes</div>}
       </div>
     </section>
   );
@@ -472,6 +472,28 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
     };
   }), [citas, pacientes, pagos]);
 
+  useEffect(() => {
+    if (!detalle?.id) return;
+    const citaActualizada = enriquecidas.find(
+      (cita) => Number(cita.id) === Number(detalle.id)
+    );
+    if (!citaActualizada) return;
+    setDetalle((actual) =>
+      actual && Number(actual.id) === Number(citaActualizada.id)
+        ? { ...actual, ...citaActualizada }
+        : actual
+    );
+  }, [enriquecidas, detalle?.id]);
+
+  const cambiarEstadoVisible = (cita, nuevoEstado) => {
+    setDetalle((actual) =>
+      actual && Number(actual.id) === Number(cita.id)
+        ? { ...actual, estado: nuevoEstado }
+        : actual
+    );
+    return onCambiarEstado?.(cita, nuevoEstado);
+  };
+
   const hoy = fechaLocal();
   const manana = fechaLocal(sumarDias(new Date(), 1));
   const finSemana = fechaLocal(sumarDias(new Date(), 7));
@@ -525,7 +547,7 @@ export default function AgendaClinicaProfesional({  citas = [], pacientes = [], 
 
   const callbacks = {
     onEditar: onEditarCita,
-    onCambiarEstado,
+    onCambiarEstado: cambiarEstadoVisible,
     onCompletar: onCompletarCita,
     onCancelar: onCancelarCita,
     onCobrar,

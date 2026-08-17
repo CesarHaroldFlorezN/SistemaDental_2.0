@@ -7,6 +7,7 @@ export const crearAccionesPlanesPago = ({
   cargarPlanPagos,
   cargarPagos,
   cargarPlanes,
+  cargarMovimientosCuenta,
   fMon,
   setModalPPAbierto,
   setPlanPagoContexto
@@ -54,7 +55,7 @@ export const crearAccionesPlanesPago = ({
     } : { ...item });
     try {
       await api.actualizarPlanPago(plan.id, { ...plan, cuotas: cuotasActualizadas });
-      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
       Swal.fire({ title: `Cuota ${cuota.num} pagada`, text: plan.origen === 'plan_tratamiento' ? `Quedó vinculada a la sesión ${cuota.sesionNum || cuota.num}.` : undefined, icon: 'success', background: '#1e293b', color: '#fff', timer: 1700, showConfirmButton: false });
     } catch (error) {
       Swal.fire({ title: 'No se pudo pagar la cuota', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
@@ -88,7 +89,7 @@ export const crearAccionesPlanesPago = ({
     if (!resultado.isConfirmed) return;
     try {
       const respuesta = await api.registrarAdelantoPlanPago(plan.id, resultado.value);
-      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
       const saldoNuevo = Number(respuesta?.registro?.saldo ?? saldo - resultado.value.monto);
       Swal.fire({ title: 'Adelanto registrado', text: `${fMon(resultado.value.monto)} aplicado. Saldo: ${fMon(saldo)} → ${fMon(saldoNuevo)}.`, icon: 'success', background: '#1e293b', color: '#fff', timer: 2600, showConfirmButton: false });
     } catch (error) {
@@ -107,7 +108,7 @@ export const crearAccionesPlanesPago = ({
         estado: 'activo',
         cuotas: cuotasActualizadas
       });
-      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
       Swal.fire({ title: 'Cobro revertido', icon: 'warning', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false });
     }
   };
@@ -119,7 +120,7 @@ export const crearAccionesPlanesPago = ({
     let cont = 1; plan.cuotas.forEach(q => { if (q.tipo !== 'anticipo') q.num = cont++; });
     reajustarCuotas(plan);
     await api.actualizarPlanPago(plan.id, plan);
-    await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+    await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
     Swal.fire({ title: 'Cuota añadida', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
   };
 
@@ -130,7 +131,7 @@ export const crearAccionesPlanesPago = ({
       let cont = 1; plan.cuotas.forEach(q => { if (q.tipo !== 'anticipo') q.num = cont++; });
       reajustarCuotas(plan);
       await api.actualizarPlanPago(plan.id, plan);
-      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
       Swal.fire({ title: 'Cuota eliminada', icon: 'success', background: '#1e293b', color: '#fff', timer: 1200, showConfirmButton: false });
     }
   };
@@ -140,7 +141,7 @@ export const crearAccionesPlanesPago = ({
     if (!confirm.isConfirmed) return;
     try {
       await api.eliminarPlanPago(id);
-      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
       Swal.fire({ title: 'Plan eliminado', text: 'La deuda y sus cobros se conservaron.', icon: 'success', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
     } catch (error) {
       Swal.fire({ title: 'No se pudo eliminar', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
@@ -153,7 +154,7 @@ export const crearAccionesPlanesPago = ({
       else await api.crearPlanPago(payload);
       setModalPPAbierto(false);
       setPlanPagoContexto(null);
-      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes()]);
+      await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
       Swal.fire({ title: id ? 'Plan de pagos actualizado' : 'Plan de pagos vinculado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
     } catch (error) {
       Swal.fire({ title: id ? 'No se pudo actualizar' : 'No se pudo crear', text: error.message || 'No se pudo guardar el plan de pago.', icon: 'error', background: '#1e293b', color: '#fff' });

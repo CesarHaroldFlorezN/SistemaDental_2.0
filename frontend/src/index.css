@@ -103,6 +103,97 @@
   box-shadow: 0 0 0 3px rgba(34, 211, 238, .2) !important;
 }
 
+/* Se mantiene el selector nativo completo para que toda el área del icono sea
+   clicable. Solo se aclara su color; no se altera el alto ni el ancho del
+   campo, por lo que coincide con teléfono, correo y los demás controles. */
+html[data-theme] input[type="date"]::-webkit-calendar-picker-indicator,
+html[data-theme] input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(77%) sepia(71%) saturate(1194%) hue-rotate(139deg)
+    brightness(102%) contrast(101%);
+  opacity: 1;
+}
+
+.dp-date-input {
+  color-scheme: dark;
+}
+
+.dp-reception-card {
+  border-width: 2px !important;
+  border-left: 6px solid var(--dp-reception-state) !important;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--dp-reception-state) 18%, transparent) !important;
+}
+
+.dp-reception-column {
+  border-width: 2px !important;
+}
+
+html[data-theme] .dp-reception-time {
+  border-color: #0284c7 !important;
+  background: #e0f2fe !important;
+  color: #075985 !important;
+  box-shadow: inset 0 0 0 1px rgba(3, 105, 161, .08) !important;
+}
+
+html[data-theme] .dp-reception-service {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html[data-theme] .dp-reception-plan {
+  border-color: #7c3aed !important;
+  background: #ede9fe !important;
+  color: #5b21b6 !important;
+}
+
+html[data-theme] .dp-reception-status {
+  color: color-mix(in srgb, var(--dp-reception-status) 58%, #0f172a) !important;
+  font-weight: 900 !important;
+}
+
+html[data-theme] .dp-reception-debt {
+  color: #be123c !important;
+  font-weight: 900 !important;
+}
+
+html[data-theme] .dp-reception-paid {
+  color: #047857 !important;
+  font-weight: 900 !important;
+}
+
+html[data-theme] .dp-reception-count {
+  background: #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+html[data-theme] .dp-reception-empty {
+  border-color: #94a3b8 !important;
+  color: #475569 !important;
+}
+
+html[data-theme] .dp-create-installments-button {
+  border-color: #0369a1 !important;
+  background: #075985 !important;
+  color: #ffffff !important;
+  box-shadow: 0 7px 18px rgba(7, 89, 133, .28) !important;
+}
+
+html[data-theme] .dp-create-installments-button:hover {
+  background: #0c4a6e !important;
+}
+
+html[data-theme] .dp-cash-report-toggle {
+  border: 1px solid #0f172a !important;
+  background: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .28) !important;
+}
+
+html[data-theme] .dp-cash-report-toggle:hover {
+  background: #155e75 !important;
+  color: #ffffff !important;
+}
+
 /* =====================================================
    CUATRO PALETAS GLOBALES
    ===================================================== */
@@ -211,6 +302,37 @@ html[data-theme] .dp-main select option {
 
 .dp-patient-csv-import:hover {
   background: #064e3b !important;
+}
+
+/* Paginación y catálogo: acciones con contraste fijo. Las reglas globales de
+   superficies claras no deben convertir estos botones primarios en blanco. */
+html[data-theme] .dp-main .dp-pagination-next,
+html[data-theme] .dp-main .dp-catalog-edit-action {
+  border-color: #075985 !important;
+  background: #0c4a6e !important;
+  color: #ffffff !important;
+  box-shadow: 0 5px 14px rgba(7, 89, 133, .24) !important;
+}
+
+html[data-theme] .dp-main .dp-pagination-next:hover:not(:disabled),
+html[data-theme] .dp-main .dp-catalog-edit-action:hover {
+  border-color: #0369a1 !important;
+  background: #075985 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme] .dp-main .dp-pagination-next:focus-visible,
+html[data-theme] .dp-main .dp-catalog-edit-action:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--dp-primary) 35%, transparent);
+  outline-offset: 2px;
+}
+
+html[data-theme] .dp-main .dp-pagination-next:disabled {
+  border-color: #cbd5e1 !important;
+  background: #e2e8f0 !important;
+  color: #64748b !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
 }
 
 html[data-theme] .dp-main input::placeholder,

@@ -82,6 +82,7 @@ OFFICIAL_OWNER_USERNAME = (
 
 DOCUMENTOS_DIR = DATA_DIR / "documentos"
 RESPALDOS_DIR = DATA_DIR / "respaldos"
+LOGS_DIR = DATA_DIR / "logs"
 TEST_DOCUMENTOS_DIR = TEST_DATA_DIR / "documentos"
 TEST_RESPALDOS_DIR = TEST_DATA_DIR / "respaldos"
 
@@ -101,6 +102,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)
 RESPALDOS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
 TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 TEST_DOCUMENTOS_DIR.mkdir(parents=True, exist_ok=True)

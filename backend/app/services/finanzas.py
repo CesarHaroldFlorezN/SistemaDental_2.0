@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from ..models import (
     MovimientoCuentaDB,
     PagoDB,
+    PlanDB,
     PlanPagoDB,
+    SesionPlanDB,
 )
 from ..schemas import OperacionPagoPayload
 from .citas import obtener_paciente
@@ -81,6 +83,95 @@ def _crear_cuota_pendiente(cuotas: list[dict], saldo: Decimal) -> None:
             "cubiertaPorAdelanto": False,
         }
     )
+
+
+def sincronizar_cuotas_con_sesiones_plan(
+    db: Session,
+    plan: PlanDB,
+    pago: PagoDB,
+    sesiones: list[SesionPlanDB],
+) -> PlanPagoDB | None:
+    """Mantiene una cuota por sesión cuando se amplía un plan clínico.
+
+    Las cuotas existentes conservan su identidad, fecha y estado de pago. Las
+    nuevas se agregan al final y el saldo pendiente se reparte después mediante
+    ``sincronizar_plan_pago_con_pago`` sin modificar importes ya cobrados.
+    """
+
+    plan_pago = db.query(PlanPagoDB).filter(PlanPagoDB.planId == plan.id).first()
+    if not plan_pago:
+        return None
+
+    cuotas_anteriores = [
+        dict(cuota)
+        for cuota in (plan_pago.cuotas or [])
+        if cuota.get("tipo", "cuota") == "cuota"
+    ]
+    por_sesion = {
+        int(cuota.get("sesionPlanId") or 0): cuota
+        for cuota in cuotas_anteriores
+        if cuota.get("sesionPlanId")
+    }
+    por_numero = {
+        int(cuota.get("sesionNum") or cuota.get("num") or 0): cuota
+        for cuota in cuotas_anteriores
+    }
+
+    fechas = [
+        str(cuota.get("fecha")) for cuota in cuotas_anteriores if cuota.get("fecha")
+    ]
+    fecha_base = datetime.now().astimezone().date()
+    if fechas:
+        try:
+            fecha_base = datetime.fromisoformat(max(fechas)).date()
+        except ValueError:
+            pass
+
+    cuotas_nuevas: list[dict] = []
+    sesiones_ordenadas = sorted(sesiones, key=lambda sesion: int(sesion.numero))
+    for sesion in sesiones_ordenadas:
+        numero = int(sesion.numero)
+        cuota = por_sesion.get(int(sesion.id)) or por_numero.get(numero)
+        if cuota:
+            cuota = dict(cuota)
+        else:
+            fecha_base += timedelta(days=30)
+            cuota = {
+                "num": numero,
+                "tipo": "cuota",
+                "fecha": fecha_base.isoformat(),
+                "monto": 0.0,
+                "pagado": False,
+                "fechaPago": None,
+                "metodoPago": None,
+                "cubiertaPorAdelanto": False,
+            }
+
+        cuota["num"] = numero
+        cuota["tipo"] = "cuota"
+        cuota["sesionPlanId"] = int(sesion.id)
+        cuota["sesionNum"] = numero
+        cuotas_nuevas.append(cuota)
+
+    claves_validas = {int(sesion.id) for sesion in sesiones_ordenadas}
+    numeros_validos = {int(sesion.numero) for sesion in sesiones_ordenadas}
+    eliminadas_pagadas = [
+        cuota
+        for cuota in cuotas_anteriores
+        if cuota.get("pagado")
+        and int(cuota.get("sesionPlanId") or 0) not in claves_validas
+        and int(cuota.get("sesionNum") or cuota.get("num") or 0) not in numeros_validos
+    ]
+    if eliminadas_pagadas:
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede retirar una sesión cuya cuota ya fue pagada.",
+        )
+
+    plan_pago.cuotas = cuotas_nuevas
+    pago.cuotas = cuotas_nuevas
+    db.flush()
+    return sincronizar_plan_pago_con_pago(db, pago)
 
 
 def sincronizar_plan_pago_con_pago(
@@ -423,6 +514,7 @@ def construir_cuenta_paciente(
                 "tipo": "cargo",
                 "pagoId": pago.id,
                 "fecha": (pago.fecha or (pago.creadoEn or "")[:10]),
+                "creadoEn": pago.creadoEn or pago.fecha,
                 "descripcion": (pago.concepto or "Atención dental"),
                 "cargo": redondear_monto(pago.total),
                 "abono": CERO,
@@ -461,6 +553,7 @@ def construir_cuenta_paciente(
                     "fecha": (
                         pago.fechaUltPago or pago.fecha or (pago.creadoEn or "")[:10]
                     ),
+                    "creadoEn": pago.fechaUltPago or pago.creadoEn or pago.fecha,
                     "descripcion": (
                         "Pago registrado anteriormente: "
                         f"{pago.concepto or 'Atención dental'}"

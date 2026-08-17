@@ -305,3 +305,47 @@ npm test
 ```
 
 El flujo automático de GitHub ejecuta pruebas, lint y compilación del frontend.
+
+## Agenda, sesiones vinculadas e ingresos por período
+
+El formulario de atención incorpora una agenda compacta de solo lectura con
+vistas mensual, semanal y diaria. Permite revisar la ocupación mientras se
+elige la fecha y conserva la edición de horarios exclusivamente en la agenda
+principal.
+
+Los planes de tratamiento existentes pueden ampliarse. Cuando tienen un plan
+de pagos vinculado, cada sesión nueva genera una cuota nueva asociada a esa
+sesión. Las cuotas pagadas son inmutables y el saldo restante se distribuye
+únicamente entre las pendientes. Reducir sesiones con cuotas vinculadas se
+bloquea para proteger el historial financiero.
+
+Finanzas conserva el resumen principal de cuatro tarjetas: Total Cobrado,
+Ingresos del Mes, Financiado Activo y Por Cobrar. Desde el botón **Ver ingresos
+y egresos** se abre un reporte independiente para hoy, esta semana, este mes,
+este año o desde el inicio. El reporte separa pagos y adelantos recibidos de
+anulaciones y devoluciones, muestra el resultado neto y detalla fecha, hora,
+paciente, método y concepto.
+
+Los campos de fecha y hora conservan el selector nativo completo de Chrome y
+Edge, con el indicador aclarado sin alterar el ancho ni el alto del control. El
+icono sigue siendo clicable y abre directamente el calendario o el reloj. La
+recepción actualiza también el panel lateral abierto en el mismo instante en
+que el paciente cambia a En espera o En atención, usando una notificación no
+bloqueante.
+
+El listado de pacientes se consulta al backend en bloques limitados y la tabla
+se muestra en páginas de 25 registros. La API acepta `limit`, `offset` y `q`, y
+valida la creación y edición con esquemas Pydantic tipados.
+
+Los errores inesperados se registran de forma persistente y rotativa en
+`data/logs/dentalpro.log`. Cuando corresponde, el mensaje muestra un código de
+diagnóstico que permite localizar el traceback sin exponer detalles técnicos
+en la interfaz.
+
+La migración 9 convierte `citas.fecha`, `citas.hora` y `citas.horaFin` a tipos
+SQLite `DATE` y `TIME`. Antes de reconstruir la tabla verifica que los datos
+históricos sean válidos y el sistema mantiene hacia el frontend los formatos
+`AAAA-MM-DD` y `HH:MM` para no romper compatibilidad.
+
+La ficha del paciente muestra fecha y hora de cargos, pagos, cuotas, adelantos
+y reversos cuando esa hora está disponible.

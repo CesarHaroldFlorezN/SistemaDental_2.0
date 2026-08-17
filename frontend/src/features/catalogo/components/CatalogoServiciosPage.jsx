@@ -333,7 +333,7 @@ export default function CatalogoServiciosPage({
                   <button
                     type="button"
                     onClick={() => abrirEdicion(servicio)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-cyan-800"
+                    className="dp-catalog-edit-action inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition"
                   >
                     <Pencil size={14} /> Editar
                   </button>

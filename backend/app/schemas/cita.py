@@ -1,3 +1,4 @@
+from datetime import date, time
 from decimal import Decimal
 from typing import Literal
 
@@ -30,7 +31,25 @@ class ServicioCitaPayload(BaseModel):
     costo: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
 
 
-class CitaPagoPayload(BaseModel):
+class HorarioCitaPayload(BaseModel):
+    fecha: date
+    hora: time
+    horaFin: time | None = None
+
+    @property
+    def fecha_iso(self) -> str:
+        return self.fecha.isoformat()
+
+    @property
+    def hora_iso(self) -> str:
+        return self.hora.strftime("%H:%M")
+
+    @property
+    def hora_fin_iso(self) -> str | None:
+        return self.horaFin.strftime("%H:%M") if self.horaFin else None
+
+
+class CitaPagoPayload(HorarioCitaPayload):
     pacienteId: int = Field(gt=0)
     casoClinicoId: int | None = Field(default=None, gt=0)
     planId: int | None = Field(default=None, gt=0)
@@ -41,13 +60,6 @@ class CitaPagoPayload(BaseModel):
     motivoConsulta: str = Field(default="", max_length=5000)
     piezaDental: str = Field(default="", max_length=30)
 
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-    horaFin: str | None = Field(
-        default=None,
-        min_length=5,
-        max_length=5,
-    )
     duracionMinutos: int = Field(default=60, ge=5, le=720)
     procedimiento: str = Field(min_length=2, max_length=200)
     servicios: list[ServicioCitaPayload] = Field(
@@ -70,12 +82,5 @@ class CambioEstadoPayload(BaseModel):
     estado: EstadoCita
 
 
-class ReprogramarCitaPayload(BaseModel):
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-    horaFin: str | None = Field(
-        default=None,
-        min_length=5,
-        max_length=5,
-    )
+class ReprogramarCitaPayload(HorarioCitaPayload):
     duracionMinutos: int = Field(default=60, ge=5, le=720)

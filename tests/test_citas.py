@@ -86,6 +86,28 @@ def test_crear_cita_con_registro_financiero() -> None:
     assert respuesta_eliminar_paciente.status_code == 200
 
 
+def test_rechazar_fecha_y_hora_no_iso_antes_de_guardar() -> None:
+    paciente_id = crear_paciente("TIPOS-FECHA")
+    payload = datos_cita(
+        paciente_id=paciente_id,
+        hora="09:00",
+        hora_fin="10:00",
+    )
+
+    fecha_invalida = client.post(
+        "/api/operaciones/citas",
+        json={**payload, "fecha": "15/06/2035"},
+    )
+    hora_invalida = client.post(
+        "/api/operaciones/citas",
+        json={**payload, "hora": "25:00"},
+    )
+
+    assert fecha_invalida.status_code == 422
+    assert hora_invalida.status_code == 422
+    assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
+
+
 def test_impedir_cruce_de_horarios() -> None:
     paciente_id = crear_paciente("002")
 

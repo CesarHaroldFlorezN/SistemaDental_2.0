@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 export const crearAccionesPlanesTratamiento = ({
   cargarPlanes,
   cargarPagos,
+  cargarPlanPagos,
   cargarCasosClinicos,
   setPlanSeleccionado,
   setModalPlanAbierto,
@@ -21,7 +22,12 @@ export const crearAccionesPlanesTratamiento = ({
       const planGuardado = respuesta?.registro || respuesta;
       setModalPlanAbierto(false);
       setPlanSeleccionado(null);
-      await Promise.all([cargarPlanes(), cargarPagos(), cargarCasosClinicos()]);
+      await Promise.all([
+        cargarPlanes(),
+        cargarPagos(),
+        cargarPlanPagos(),
+        cargarCasosClinicos()
+      ]);
 
       if (opciones.abrirPlanPago && planGuardado?.pago) {
         setPlanPagoContexto({

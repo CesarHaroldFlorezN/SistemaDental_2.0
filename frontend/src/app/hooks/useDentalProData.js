@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
 const crearCargador = (peticion, actualizar) => () =>
@@ -21,6 +21,7 @@ export default function useDentalProData(usuarioActual) {
   const [planes, setPlanes] = useState([]);
   const [casosClinicos, setCasosClinicos] = useState([]);
   const [serviciosCatalogo, setServiciosCatalogo] = useState([]);
+  const [movimientosCuenta, setMovimientosCuenta] = useState([]);
 
   const cargarPacientes = crearCargador(api.getPacientes, setPacientes);
   const cargarCitas = crearCargador(api.getCitas, setCitas);
@@ -35,6 +36,22 @@ export default function useDentalProData(usuarioActual) {
     () => api.getServiciosCatalogo(usuarioActual?.rol === 'administrador'),
     setServiciosCatalogo
   );
+  const cargarMovimientosCuenta = useCallback(() =>
+    api.getMovimientosCuenta()
+      .then((datos) => {
+        const registros = datos || [];
+        setMovimientosCuenta(registros);
+        return registros;
+      })
+      .catch((error) => {
+        console.error(error);
+        throw error;
+      }), []);
+  const actualizarCitaLocal = (citaId, cambios) => {
+    setCitas((actuales) => actuales.map((cita) =>
+      Number(cita.id) === Number(citaId) ? { ...cita, ...cambios } : cita
+    ));
+  };
 
   const limpiarDatos = () => {
     setPacientes([]);
@@ -44,6 +61,7 @@ export default function useDentalProData(usuarioActual) {
     setPlanes([]);
     setCasosClinicos([]);
     setServiciosCatalogo([]);
+    setMovimientosCuenta([]);
   };
 
   useEffect(() => {
@@ -62,6 +80,7 @@ export default function useDentalProData(usuarioActual) {
         api.getCitas(),
         puedeVerFinanzas ? api.getPagos() : Promise.resolve([]),
         puedeVerFinanzas ? api.getPlanPagos() : Promise.resolve([]),
+        puedeVerFinanzas ? api.getMovimientosCuenta() : Promise.resolve([]),
         puedeVerClinica ? api.getPlanes() : Promise.resolve([]),
         puedeVerClinica ? api.getCasosClinicos() : Promise.resolve([]),
         api.getServiciosCatalogo(usuarioActual.rol === 'administrador')
@@ -77,9 +96,10 @@ export default function useDentalProData(usuarioActual) {
         setCitas(obtenerDatos(1));
         setPagos(obtenerDatos(2));
         setPlanPagos(obtenerDatos(3));
-        setPlanes(obtenerDatos(4));
-        setCasosClinicos(obtenerDatos(5));
-        setServiciosCatalogo(obtenerDatos(6));
+        setMovimientosCuenta(obtenerDatos(4));
+        setPlanes(obtenerDatos(5));
+        setCasosClinicos(obtenerDatos(6));
+        setServiciosCatalogo(obtenerDatos(7));
 
         const errores = resultados
           .filter((resultado) => resultado.status === 'rejected')
@@ -103,6 +123,7 @@ export default function useDentalProData(usuarioActual) {
     planes,
     casosClinicos,
     serviciosCatalogo,
+    movimientosCuenta,
     cargarPacientes,
     cargarCitas,
     cargarPagos,
@@ -110,6 +131,8 @@ export default function useDentalProData(usuarioActual) {
     cargarPlanes,
     cargarCasosClinicos,
     cargarServiciosCatalogo,
+    cargarMovimientosCuenta,
+    actualizarCitaLocal,
     limpiarDatos
   };
 }

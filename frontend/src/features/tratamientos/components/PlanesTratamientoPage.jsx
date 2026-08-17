@@ -278,7 +278,7 @@ export default function PlanesTratamientoPage({
                     <button
                       type="button"
                       onClick={() => onCrearCuotas(plan, pago, sesiones)}
-                      className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-600 hover:text-white"
+                      className="dp-create-installments-button rounded-xl border px-4 py-2 text-xs font-black transition"
                     >
                       💳 Crear {sesiones.length} cuotas
                     </button>

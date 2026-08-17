@@ -14,6 +14,8 @@ export const crearAccionesCitas = ({
   cargarPlanPagos,
   cargarPlanes,
   cargarCasosClinicos,
+  cargarMovimientosCuenta,
+  actualizarCitaLocal,
   fMon,
   setVistaActiva,
   setBusquedaPP,
@@ -168,19 +170,27 @@ export const crearAccionesCitas = ({
     }
 
     try {
+      actualizarCitaLocal?.(cita.id, { estado: nuevoEstado });
       const respuesta = await api.cambiarEstadoCita(cita.id, nuevoEstado);
+      if (respuesta?.cita) {
+        actualizarCitaLocal?.(cita.id, respuesta.cita);
+      }
       await cargarCitas();
 
       Swal.fire({
+        toast: true,
+        position: 'top-end',
         title: nuevoEstado === 'en_atencion' ? 'Atención iniciada' : 'Estado actualizado',
         text: respuesta?.message || `La cita ahora está ${nombresEstado[nuevoEstado] || nuevoEstado}.`,
         icon: nuevoEstado === 'en_atencion' ? 'info' : 'success',
         background: '#1e293b',
         color: '#fff',
-        timer: 1600,
+        timer: 1400,
+        timerProgressBar: true,
         showConfirmButton: false
       });
     } catch (error) {
+      actualizarCitaLocal?.(cita.id, { estado: cita.estado });
       Swal.fire({
         title: 'No se pudo cambiar el estado',
         text: error.message || 'Ocurrió un error al actualizar la cita.',
@@ -281,6 +291,7 @@ export const crearAccionesCitas = ({
     cargarPagos,
     cargarPlanPagos,
     cargarPlanes,
+    cargarMovimientosCuenta,
     fMon,
     setPlanPagoContexto,
     setModalPPAbierto,
@@ -321,7 +332,12 @@ export const crearAccionesCitas = ({
     if (!resultado.isConfirmed) return;
     try {
       await api.registrarPago(pago.id, resultado.value);
-      await Promise.all([cargarPagos(), cargarPlanPagos(), cargarPlanes()]);
+      await Promise.all([
+        cargarPagos(),
+        cargarPlanPagos(),
+        cargarPlanes(),
+        cargarMovimientosCuenta()
+      ]);
       Swal.fire({ title: 'Pago registrado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1800, showConfirmButton: false });
     } catch (error) {
       Swal.fire({ title: 'No se pudo registrar', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });

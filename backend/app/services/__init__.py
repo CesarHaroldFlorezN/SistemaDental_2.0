@@ -54,6 +54,7 @@ from .finanzas import (
     construir_cuenta_paciente,
     devolver_pago,
     registrar_pago,
+    sincronizar_cuotas_con_sesiones_plan,
     sincronizar_plan_pago_con_pago,
 )
 from .usuarios import (
@@ -127,6 +128,7 @@ __all__ = [
     "revocar_sesion",
     "serializar_modelo",
     "serializar_plan_detallado",
+    "sincronizar_cuotas_con_sesiones_plan",
     "sincronizar_plan_pago_con_pago",
     "sincronizar_sesiones_plan",
     "validar_disponibilidad",

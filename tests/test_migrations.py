@@ -49,6 +49,12 @@ def test_aplicar_migracion_y_registrar_version(
     motor = crear_motor_temporal(tmp_path)
     crear_esquema_antiguo(motor)
 
+    with motor.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO citas (id, fecha) VALUES (?, ?)",
+            (1, "2036-08-15"),
+        )
+
     assert hay_migraciones_pendientes(motor)
 
     with motor.begin() as connection:
@@ -56,6 +62,12 @@ def test_aplicar_migracion_y_registrar_version(
 
         columnas = {
             fila[1]
+            for fila in connection.exec_driver_sql(
+                "PRAGMA table_info(citas)"
+            ).fetchall()
+        }
+        tipos_columnas = {
+            fila[1]: fila[2]
             for fila in connection.exec_driver_sql(
                 "PRAGMA table_info(citas)"
             ).fetchall()
@@ -68,6 +80,9 @@ def test_aplicar_migracion_y_registrar_version(
             ORDER BY version
             """
         ).fetchall()
+        cita_historica = connection.exec_driver_sql(
+            "SELECT fecha, hora, horaFin FROM citas WHERE id = 1"
+        ).one()
 
     assert "servicios" in columnas
     assert "horaFin" in columnas
@@ -84,7 +99,12 @@ def test_aplicar_migracion_y_registrar_version(
         (6, "trazabilidad_importaciones_oficiales"),
         (7, "contrasena_temporal_usuarios"),
         (8, "catalogo_servicios_canonico"),
+        (9, "fechas_horas_citas_tipadas"),
     ]
+    assert tipos_columnas["fecha"] == "DATE"
+    assert tipos_columnas["hora"] == "TIME"
+    assert tipos_columnas["horaFin"] == "TIME"
+    assert cita_historica == ("2036-08-15", None, None)
     assert not hay_migraciones_pendientes(motor)
 
     motor.dispose()
@@ -106,7 +126,7 @@ def test_no_repetir_migracion_aplicada(
             "SELECT COUNT(*) FROM schema_migrations"
         ).scalar_one()
 
-    assert cantidad == 8
+    assert cantidad == 9
 
     motor.dispose()
 

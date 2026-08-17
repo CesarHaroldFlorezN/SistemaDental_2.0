@@ -131,6 +131,12 @@ def test_registrar_anular_y_devolver_pago() -> None:
     assert "anulacion" in tipos
     assert "devolucion" in tipos
 
+    assert all(
+        movimiento.get("creadoEn")
+        for movimiento in cuenta["movimientos"]
+        if movimiento["tipo"] in {"cargo", "pago", "anulacion", "devolucion"}
+    )
+
     assert cuenta["resumen"]["cargos"] == 250
     assert cuenta["resumen"]["abonos"] == 80
     assert cuenta["resumen"]["saldo"] == 170

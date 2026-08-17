@@ -12,6 +12,7 @@ export const crearAccionesCierreCitas = ({
   cargarPagos,
   cargarPlanPagos,
   cargarPlanes,
+  cargarMovimientosCuenta,
   fMon,
   setPlanPagoContexto,
   setModalPPAbierto,
@@ -168,7 +169,13 @@ export const crearAccionesCierreCitas = ({
       setCitaParaAccion(null);
       setPagoParaAccion(null);
 
-      await Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos(), cargarPlanes()]);
+      await Promise.all([
+        cargarCitas(),
+        cargarPagos(),
+        cargarPlanPagos(),
+        cargarPlanes(),
+        cargarMovimientosCuenta()
+      ]);
 
       if (accionSaldo === 'agregar_plan' && nuevoSaldo > 0 && !planVinculado) {
         const paciente = pacientes.find((item) => Number(item.id) === Number(pacienteId));
@@ -314,7 +321,13 @@ export const crearAccionesCierreCitas = ({
       setModalCancelarAbierto(false);
       setCitaParaAccion(null);
       setPagoParaAccion(null);
-      await Promise.all([cargarCitas(), cargarPagos(), cargarPlanPagos(), cargarPlanes()]);
+      await Promise.all([
+        cargarCitas(),
+        cargarPagos(),
+        cargarPlanPagos(),
+        cargarPlanes(),
+        cargarMovimientosCuenta()
+      ]);
       Swal.fire({ title: 'Cita cancelada', text: 'La decision clinica y el movimiento financiero quedaron registrados.', icon: 'success', background: '#1e293b', color: '#fff', timer: 2200, showConfirmButton: false });
     } catch (error) {
       Swal.fire({ title: 'No se pudo cancelar', text: error.message || 'Ocurrio un error al procesar la cancelacion.', icon: 'error', background: '#1e293b', color: '#fff' });

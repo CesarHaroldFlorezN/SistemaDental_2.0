@@ -73,6 +73,39 @@ def test_no_permitir_dni_duplicado() -> None:
     client.delete(f"/api/pacientes/{paciente_id}")
 
 
+def test_listado_paginado_y_validacion_tipadas() -> None:
+    ids = []
+    for sufijo in ("PAG-1", "PAG-2", "PAG-3"):
+        respuesta = client.post("/api/pacientes", json=datos_paciente(sufijo))
+        assert respuesta.status_code == 200
+        ids.append(respuesta.json()["id"])
+
+    pagina = client.get("/api/pacientes?limit=2&offset=0&q=Paciente")
+    assert pagina.status_code == 200
+    assert len(pagina.json()) == 2
+    assert int(pagina.headers["X-Total-Count"]) >= 3
+    assert pagina.headers["X-Limit"] == "2"
+    assert pagina.headers["X-Offset"] == "0"
+
+    fecha_invalida = client.post(
+        "/api/pacientes",
+        json={
+            **datos_paciente("FECHA-INVALIDA"),
+            "fechaNacimiento": "15/08/2000",
+        },
+    )
+    assert fecha_invalida.status_code == 422
+
+    campo_desconocido = client.post(
+        "/api/pacientes",
+        json={**datos_paciente("CAMPO-EXTRA"), "campoInventado": "no permitido"},
+    )
+    assert campo_desconocido.status_code == 422
+
+    for paciente_id in ids:
+        assert client.delete(f"/api/pacientes/{paciente_id}").status_code == 200
+
+
 def test_exportar_pacientes_csv() -> None:
     respuesta_crear = client.post(
         "/api/pacientes",

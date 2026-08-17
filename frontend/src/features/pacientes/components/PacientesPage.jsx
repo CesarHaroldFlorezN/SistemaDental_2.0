@@ -1,11 +1,17 @@
 import {
+  ChevronLeft,
+  ChevronRight,
   Download,
   Edit,
   Search,
   Trash2,
   Upload,
   UserPlus,
+  X,
 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+
+const REGISTROS_POR_PAGINA = 25;
 
 export default function PacientesPage({
   pacientes,
@@ -18,6 +24,21 @@ export default function PacientesPage({
   onEditar,
   onEliminar,
 }) {
+  const [pagina, setPagina] = useState(1);
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(pacientes.length / REGISTROS_POR_PAGINA)
+  );
+  const pacientesVisibles = useMemo(() => {
+    const inicio = (pagina - 1) * REGISTROS_POR_PAGINA;
+    return pacientes.slice(inicio, inicio + REGISTROS_POR_PAGINA);
+  }, [pacientes, pagina]);
+
+  useEffect(() => setPagina(1), [busqueda]);
+  useEffect(() => {
+    if (pagina > totalPaginas) setPagina(totalPaginas);
+  }, [pagina, totalPaginas]);
+
   return (
     <div>
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
@@ -79,8 +100,18 @@ export default function PacientesPage({
           placeholder="Buscar por ficha, nombre, DNI, teléfono o correo..."
           value={busqueda}
           onChange={(event) => onCambiarBusqueda(event.target.value)}
-          className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-cyan-500"
+          className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-11 pr-28 text-sm shadow-sm outline-none transition focus:border-cyan-500"
         />
+        {busqueda && (
+          <button
+            type="button"
+            onClick={() => onCambiarBusqueda('')}
+            className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-lg border border-slate-600 bg-slate-700 px-2.5 py-1.5 text-xs font-black text-white transition hover:bg-cyan-700"
+            aria-label="Limpiar búsqueda de pacientes"
+          >
+            <X size={14} /> Limpiar
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-700/80 bg-slate-800/80 shadow-xl">
@@ -96,8 +127,8 @@ export default function PacientesPage({
           </thead>
 
           <tbody className="divide-y divide-slate-700/50 text-sm">
-            {pacientes.length > 0 ? (
-              pacientes.map((paciente) => (
+            {pacientesVisibles.length > 0 ? (
+              pacientesVisibles.map((paciente) => (
                 <tr
                   key={paciente.id}
                   className="transition hover:bg-slate-700/40"
@@ -164,6 +195,41 @@ export default function PacientesPage({
             )}
           </tbody>
         </table>
+        {pacientes.length > REGISTROS_POR_PAGINA && (
+          <div className="flex flex-col gap-3 border-t border-slate-300 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-bold text-slate-600">
+              Mostrando {(pagina - 1) * REGISTROS_POR_PAGINA + 1}–
+              {Math.min(
+                pagina * REGISTROS_POR_PAGINA,
+                pacientes.length
+              )}{' '}
+              de {pacientes.length} pacientes
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPagina((actual) => Math.max(1, actual - 1))}
+                disabled={pagina === 1}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-400 bg-slate-100 px-3 py-2 text-xs font-black text-slate-800 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={15} /> Anterior
+              </button>
+              <span className="min-w-24 text-center text-xs font-black text-slate-800">
+                Página {pagina} de {totalPaginas}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setPagina((actual) => Math.min(totalPaginas, actual + 1))
+                }
+                disabled={pagina === totalPaginas}
+                className="dp-pagination-next inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed"
+              >
+                Siguiente <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

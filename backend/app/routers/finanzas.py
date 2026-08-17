@@ -33,6 +33,7 @@ from ..services import (
     registrar_pago,
     serializar_modelo,
     serializar_plan_detallado,
+    sincronizar_cuotas_con_sesiones_plan,
     sincronizar_plan_pago_con_pago,
     sincronizar_sesiones_plan,
 )
@@ -380,12 +381,14 @@ def actualizar_plan(
     if plan.pagoId:
         pago = db.query(PagoDB).filter(PagoDB.id == plan.pagoId).first()
     plan_pago = db.query(PlanPagoDB).filter(PlanPagoDB.planId == plan.id).first()
-    if plan_pago and int(payload.nSesiones) != int(plan.nSesiones or 1):
+    sesiones_anteriores = int(plan.nSesiones or 1)
+    if plan_pago and int(payload.nSesiones) < sesiones_anteriores:
         raise HTTPException(
             status_code=409,
             detail=(
-                "No puedes cambiar el número de sesiones mientras exista un "
-                "cronograma de cuotas vinculado."
+                "No puedes reducir sesiones mientras exista un cronograma de "
+                "cuotas vinculado. Puedes agregar sesiones; el sistema creará "
+                "sus cuotas automáticamente."
             ),
         )
     nuevo_costo = redondear_monto(payload.costo)
@@ -404,7 +407,7 @@ def actualizar_plan(
     plan.estado = payload.estado
 
     try:
-        sincronizar_sesiones_plan(db, plan, payload.nSesiones)
+        sesiones = sincronizar_sesiones_plan(db, plan, payload.nSesiones)
         if pago and nuevo_costo == Decimal("0.00"):
             if plan_pago:
                 raise HTTPException(
@@ -424,6 +427,13 @@ def actualizar_plan(
             ]
             pago.total = nuevo_costo
             pago.saldo = redondear_monto(nuevo_costo - redondear_monto(pago.cobrado))
+            if plan_pago:
+                sincronizar_cuotas_con_sesiones_plan(
+                    db,
+                    plan,
+                    pago,
+                    sesiones,
+                )
         elif nuevo_costo > Decimal("0.00"):
             pago = PagoDB(
                 pacienteId=plan.pacienteId,
