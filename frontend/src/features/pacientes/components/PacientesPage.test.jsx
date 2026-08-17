@@ -77,7 +77,10 @@ describe('directorio de pacientes', () => {
     expect(screen.getByText('Paciente 1')).toBeInTheDocument();
     expect(screen.queryByText('Paciente 30')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }));
+    const siguiente = screen.getByRole('button', { name: /siguiente/i });
+    expect(siguiente).toHaveClass('dp-pagination-next');
+
+    fireEvent.click(siguiente);
 
     expect(screen.getByText('Paciente 30')).toBeInTheDocument();
     expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();

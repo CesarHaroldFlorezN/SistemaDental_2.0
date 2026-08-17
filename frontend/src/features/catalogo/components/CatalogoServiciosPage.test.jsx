@@ -75,4 +75,14 @@ describe('gestión del catálogo', () => {
 
     expect(screen.getByText('Consulta de evaluación')).toBeInTheDocument();
   });
+
+  it('mantiene visible la acción para editar un servicio', () => {
+    render(
+      <CatalogoServiciosPage servicios={servicios} onRecargar={vi.fn()} />
+    );
+
+    expect(screen.getByRole('button', { name: /editar/i })).toHaveClass(
+      'dp-catalog-edit-action'
+    );
+  });
 });

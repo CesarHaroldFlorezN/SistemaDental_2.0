@@ -223,7 +223,7 @@ export default function PacientesPage({
                   setPagina((actual) => Math.min(totalPaginas, actual + 1))
                 }
                 disabled={pagina === totalPaginas}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-black text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className="dp-pagination-next inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed"
               >
                 Siguiente <ChevronRight size={15} />
               </button>

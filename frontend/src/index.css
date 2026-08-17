@@ -304,6 +304,37 @@ html[data-theme] .dp-main select option {
   background: #064e3b !important;
 }
 
+/* Paginación y catálogo: acciones con contraste fijo. Las reglas globales de
+   superficies claras no deben convertir estos botones primarios en blanco. */
+html[data-theme] .dp-main .dp-pagination-next,
+html[data-theme] .dp-main .dp-catalog-edit-action {
+  border-color: #075985 !important;
+  background: #0c4a6e !important;
+  color: #ffffff !important;
+  box-shadow: 0 5px 14px rgba(7, 89, 133, .24) !important;
+}
+
+html[data-theme] .dp-main .dp-pagination-next:hover:not(:disabled),
+html[data-theme] .dp-main .dp-catalog-edit-action:hover {
+  border-color: #0369a1 !important;
+  background: #075985 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme] .dp-main .dp-pagination-next:focus-visible,
+html[data-theme] .dp-main .dp-catalog-edit-action:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--dp-primary) 35%, transparent);
+  outline-offset: 2px;
+}
+
+html[data-theme] .dp-main .dp-pagination-next:disabled {
+  border-color: #cbd5e1 !important;
+  background: #e2e8f0 !important;
+  color: #64748b !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
 html[data-theme] .dp-main input::placeholder,
 html[data-theme] .dp-main textarea::placeholder {
   color: color-mix(in srgb, var(--dp-muted) 78%, transparent) !important;
