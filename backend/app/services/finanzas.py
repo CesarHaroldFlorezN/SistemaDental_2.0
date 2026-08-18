@@ -19,35 +19,43 @@ CERO = Decimal("0.00")
 
 
 def _total_cuotas_pagadas(cuotas: list[dict]) -> Decimal:
-    return redondear_monto(
-        sum(
-            (
-                Decimal(str(cuota.get("monto") or 0))
-                for cuota in cuotas
-                if cuota.get("tipo") == "cuota" and cuota.get("pagado")
-            ),
-            start=CERO,
-        )
-    )
+    total = CERO
+    for cuota in cuotas:
+        if cuota.get("tipo") == "cuota":
+            if cuota.get("pagado"):
+                total += Decimal(str(cuota.get("monto") or 0))
+            elif cuota.get("pagadoParcial"):
+                total += Decimal(str(cuota.get("montoPagado") or 0))
+    return redondear_monto(total)
 
 
 def _redistribuir_saldo_pendiente(
     cuotas: list[dict],
     saldo: Decimal,
 ) -> list[dict]:
-    """Reparte un saldo exacto entre cuotas pendientes sin tocar las pagadas."""
-
-    pendientes = [
+    pendientes_puras = [
         indice
         for indice, cuota in enumerate(cuotas)
-        if cuota.get("tipo") == "cuota" and not cuota.get("pagado")
+        if cuota.get("tipo") == "cuota"
+        and not cuota.get("pagado")
+        and not cuota.get("pagadoParcial")
     ]
-    if not pendientes:
+
+    # En esta lógica, el "monto" de una cuota parcial ES su remanente exacto
+    saldo_parciales = sum(
+        Decimal(str(c.get("monto") or 0))
+        for c in cuotas
+        if c.get("tipo") == "cuota" and c.get("pagadoParcial")
+    )
+
+    saldo_a_redistribuir = saldo - saldo_parciales
+
+    if not pendientes_puras:
         return cuotas
 
-    centavos = int(redondear_monto(saldo) * 100)
-    base, sobrante = divmod(centavos, len(pendientes))
-    for posicion, indice in enumerate(pendientes):
+    centavos = int(redondear_monto(saldo_a_redistribuir) * 100)
+    base, sobrante = divmod(centavos, len(pendientes_puras))
+    for posicion, indice in enumerate(pendientes_puras):
         monto = Decimal(base + (1 if posicion < sobrante else 0)) / Decimal(100)
         cuotas[indice]["monto"] = float(monto)
         cuotas[indice]["cubiertaPorAdelanto"] = monto <= CERO
@@ -78,6 +86,8 @@ def _crear_cuota_pendiente(cuotas: list[dict], saldo: Decimal) -> None:
             "fecha": (fecha_base + timedelta(days=30)).isoformat(),
             "monto": float(redondear_monto(saldo)),
             "pagado": False,
+            "pagadoParcial": False,
+            "montoPagado": None,
             "fechaPago": None,
             "metodoPago": None,
             "cubiertaPorAdelanto": False,
@@ -91,13 +101,6 @@ def sincronizar_cuotas_con_sesiones_plan(
     pago: PagoDB,
     sesiones: list[SesionPlanDB],
 ) -> PlanPagoDB | None:
-    """Mantiene una cuota por sesión cuando se amplía un plan clínico.
-
-    Las cuotas existentes conservan su identidad, fecha y estado de pago. Las
-    nuevas se agregan al final y el saldo pendiente se reparte después mediante
-    ``sincronizar_plan_pago_con_pago`` sin modificar importes ya cobrados.
-    """
-
     plan_pago = db.query(PlanPagoDB).filter(PlanPagoDB.planId == plan.id).first()
     if not plan_pago:
         return None
@@ -142,6 +145,8 @@ def sincronizar_cuotas_con_sesiones_plan(
                 "fecha": fecha_base.isoformat(),
                 "monto": 0.0,
                 "pagado": False,
+                "pagadoParcial": False,
+                "montoPagado": None,
                 "fechaPago": None,
                 "metodoPago": None,
                 "cubiertaPorAdelanto": False,
@@ -158,14 +163,14 @@ def sincronizar_cuotas_con_sesiones_plan(
     eliminadas_pagadas = [
         cuota
         for cuota in cuotas_anteriores
-        if cuota.get("pagado")
+        if (cuota.get("pagado") or cuota.get("pagadoParcial"))
         and int(cuota.get("sesionPlanId") or 0) not in claves_validas
         and int(cuota.get("sesionNum") or cuota.get("num") or 0) not in numeros_validos
     ]
     if eliminadas_pagadas:
         raise HTTPException(
             status_code=409,
-            detail="No se puede retirar una sesión cuya cuota ya fue pagada.",
+            detail="No se puede retirar una sesión cuya cuota ya tiene un pago registrado.",
         )
 
     plan_pago.cuotas = cuotas_nuevas
@@ -174,17 +179,7 @@ def sincronizar_cuotas_con_sesiones_plan(
     return sincronizar_plan_pago_con_pago(db, pago)
 
 
-def sincronizar_plan_pago_con_pago(
-    db: Session,
-    pago: PagoDB,
-) -> PlanPagoDB | None:
-    """Sincroniza deuda, plan y cuotas dentro de la transacción llamadora.
-
-    Los cobros históricos y las cuotas pagadas son inmutables. Cuando cambia el
-    costo clínico, únicamente se redistribuye el nuevo saldo entre las cuotas
-    pendientes.
-    """
-
+def sincronizar_plan_pago_con_pago(db: Session, pago: PagoDB) -> PlanPagoDB | None:
     plan = db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == pago.id).first()
     if not plan:
         return None
@@ -194,13 +189,9 @@ def sincronizar_plan_pago_con_pago(
     anticipo = redondear_monto(plan.anticipo)
     pagado_cuotas = _total_cuotas_pagadas(cuotas)
 
-    # Conserva cobros heredados aunque una versión anterior no los hubiera
-    # desglosado correctamente entre anticipo y cuotas pagadas.
     cobrado_desglosado = redondear_monto(anticipo + pagado_cuotas)
     cobrado_registrado = max(
-        cobrado_desglosado,
-        redondear_monto(plan.cobrado),
-        redondear_monto(pago.cobrado),
+        cobrado_desglosado, redondear_monto(plan.cobrado), redondear_monto(pago.cobrado)
     )
     if cobrado_registrado > cobrado_desglosado:
         anticipo = redondear_monto(anticipo + cobrado_registrado - cobrado_desglosado)
@@ -209,38 +200,36 @@ def sincronizar_plan_pago_con_pago(
     if total < cobrado:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "El nuevo total no puede ser menor que el monto ya cobrado. "
-                "Primero revierte el cobro correspondiente desde Planes de pago."
-            ),
+            detail="El nuevo total no puede ser menor que el monto ya cobrado. Primero revierte el cobro correspondiente.",
         )
 
     saldo = redondear_monto(total - cobrado)
     pendientes = [
-        cuota
-        for cuota in cuotas
-        if cuota.get("tipo") == "cuota" and not cuota.get("pagado")
+        c
+        for c in cuotas
+        if c.get("tipo") == "cuota"
+        and not c.get("pagado")
+        and not c.get("pagadoParcial")
     ]
     if saldo > CERO and not pendientes:
         if plan.planId:
             raise HTTPException(
                 status_code=409,
-                detail=(
-                    "El plan clínico ya no tiene cuotas pendientes. "
-                    "Agrega o ajusta sus sesiones antes de aumentar la deuda."
-                ),
+                detail="El plan clínico ya no tiene cuotas 100% pendientes.",
             )
         _crear_cuota_pendiente(cuotas, saldo)
 
     cuotas = _redistribuir_saldo_pendiente(cuotas, saldo)
+
+    # El costo programado suma el tamaño real (remanente + lo ya pagado)
     total_cuotas = redondear_monto(
         sum(
             (
-                Decimal(str(cuota.get("monto") or 0))
-                for cuota in cuotas
-                if cuota.get("tipo") == "cuota"
-            ),
-            start=CERO,
+                Decimal(str(c.get("monto") or 0))
+                + Decimal(str(c.get("montoPagado") or 0))
+            )
+            for c in cuotas
+            if c.get("tipo") == "cuota"
         )
     )
 
@@ -260,35 +249,18 @@ def sincronizar_plan_pago_con_pago(
     return plan
 
 
-def _obtener_pago(
-    db: Session,
-    pago_id: int,
-) -> PagoDB:
+def _obtener_pago(db: Session, pago_id: int) -> PagoDB:
     pago = db.query(PagoDB).filter(PagoDB.id == pago_id).first()
-
     if not pago:
-        raise HTTPException(
-            status_code=404,
-            detail="El registro de pago no existe.",
-        )
-
+        raise HTTPException(status_code=404, detail="El registro de pago no existe.")
     return pago
 
 
-def _asegurar_sin_plan_de_cuotas(
-    db: Session,
-    pago: PagoDB,
-) -> None:
+def _asegurar_sin_plan_de_cuotas(db: Session, pago: PagoDB) -> None:
     plan = db.query(PlanPagoDB).filter(PlanPagoDB.pagoId == pago.id).first()
-
     if plan:
         raise HTTPException(
-            status_code=409,
-            detail=(
-                "Este pago pertenece a un plan de cuotas. "
-                "Gestiona el movimiento desde Planes de pago "
-                "para conservar el cronograma."
-            ),
+            status_code=409, detail="Este pago pertenece a un plan de cuotas."
         )
 
 
@@ -321,44 +293,28 @@ def _crear_movimiento(
         usuario=usuario,
         creadoEn=ahora_iso(),
     )
-
     db.add(movimiento)
     return movimiento
 
 
-def registrar_pago(
-    db: Session,
-    pago_id: int,
-    payload: OperacionPagoPayload,
-):
+def registrar_pago(db: Session, pago_id: int, payload: OperacionPagoPayload):
     pago = _obtener_pago(db, pago_id)
     _asegurar_sin_plan_de_cuotas(db, pago)
-
     saldo = redondear_monto(pago.saldo)
     monto = redondear_monto(payload.monto)
-
     if monto > saldo:
         raise HTTPException(
-            status_code=400,
-            detail=("El monto no puede superar el saldo pendiente."),
+            status_code=400, detail="El monto no puede superar el saldo pendiente."
         )
-
     pago.cobrado = redondear_monto(redondear_monto(pago.cobrado) + monto)
-    pago.saldo = redondear_monto(
-        max(
-            CERO,
-            redondear_monto(pago.total) - pago.cobrado,
-        )
-    )
+    pago.saldo = redondear_monto(max(CERO, redondear_monto(pago.total) - pago.cobrado))
     pago.metodo = payload.metodo.strip() or "Efectivo"
     pago.fechaUltPago = datetime.now().astimezone().date().isoformat()
-
     pago.tipoPago = (
         "completo"
         if pago.saldo <= 0
         else ("cuotas" if pago.tipoPago == "cuotas" else "anticipo")
     )
-
     movimiento = _crear_movimiento(
         db=db,
         pago=pago,
@@ -370,11 +326,9 @@ def registrar_pago(
         motivo=payload.motivo,
         usuario=payload.usuario,
     )
-
     db.commit()
     db.refresh(pago)
     db.refresh(movimiento)
-
     return {
         "message": "Pago registrado.",
         "pago": serializar_modelo(pago),
@@ -382,38 +336,22 @@ def registrar_pago(
     }
 
 
-def anular_pago(
-    db: Session,
-    pago_id: int,
-    payload: OperacionPagoPayload,
-):
+def anular_pago(db: Session, pago_id: int, payload: OperacionPagoPayload):
     pago = _obtener_pago(db, pago_id)
     _asegurar_sin_plan_de_cuotas(db, pago)
-
     monto = redondear_monto(payload.monto)
     cobrado = redondear_monto(pago.cobrado)
-
     if monto > cobrado:
         raise HTTPException(
-            status_code=400,
-            detail=("No puedes anular más de lo que está cobrado."),
+            status_code=400, detail="No puedes anular más de lo que está cobrado."
         )
-
     if not payload.motivo.strip():
         raise HTTPException(
-            status_code=400,
-            detail=("El motivo de la anulación es obligatorio."),
+            status_code=400, detail="El motivo de la anulación es obligatorio."
         )
-
     pago.cobrado = redondear_monto(cobrado - monto)
-    pago.saldo = redondear_monto(
-        max(
-            CERO,
-            redondear_monto(pago.total) - pago.cobrado,
-        )
-    )
+    pago.saldo = redondear_monto(max(CERO, redondear_monto(pago.total) - pago.cobrado))
     pago.tipoPago = "contado" if pago.cobrado <= 0 else "anticipo"
-
     movimiento = _crear_movimiento(
         db=db,
         pago=pago,
@@ -425,51 +363,33 @@ def anular_pago(
         motivo=payload.motivo,
         usuario=payload.usuario,
     )
-
     db.commit()
     db.refresh(pago)
     db.refresh(movimiento)
-
     return {
-        "message": ("Pago anulado sin borrar el historial."),
+        "message": "Pago anulado sin borrar el historial.",
         "pago": serializar_modelo(pago),
         "movimiento": serializar_modelo(movimiento),
     }
 
 
-def devolver_pago(
-    db: Session,
-    pago_id: int,
-    payload: OperacionPagoPayload,
-):
+def devolver_pago(db: Session, pago_id: int, payload: OperacionPagoPayload):
     pago = _obtener_pago(db, pago_id)
     _asegurar_sin_plan_de_cuotas(db, pago)
-
     monto = redondear_monto(payload.monto)
     cobrado = redondear_monto(pago.cobrado)
-
     if monto > cobrado:
         raise HTTPException(
-            status_code=400,
-            detail=("No puedes devolver más de lo que está cobrado."),
+            status_code=400, detail="No puedes devolver más de lo que está cobrado."
         )
-
     if not payload.motivo.strip():
         raise HTTPException(
-            status_code=400,
-            detail=("El motivo de la devolución es obligatorio."),
+            status_code=400, detail="El motivo de la devolución es obligatorio."
         )
-
     pago.cobrado = redondear_monto(cobrado - monto)
-    pago.saldo = redondear_monto(
-        max(
-            CERO,
-            redondear_monto(pago.total) - pago.cobrado,
-        )
-    )
+    pago.saldo = redondear_monto(max(CERO, redondear_monto(pago.total) - pago.cobrado))
     pago.devuelto = redondear_monto(redondear_monto(pago.devuelto) + monto)
     pago.tipoPago = "contado" if pago.cobrado <= 0 else "anticipo"
-
     movimiento = _crear_movimiento(
         db=db,
         pago=pago,
@@ -481,24 +401,18 @@ def devolver_pago(
         motivo=payload.motivo,
         usuario=payload.usuario,
     )
-
     db.commit()
     db.refresh(pago)
     db.refresh(movimiento)
-
     return {
-        "message": ("Devolución registrada sin borrar el pago original."),
+        "message": "Devolución registrada.",
         "pago": serializar_modelo(pago),
         "movimiento": serializar_modelo(movimiento),
     }
 
 
-def construir_cuenta_paciente(
-    db: Session,
-    paciente_id: int,
-):
+def construir_cuenta_paciente(db: Session, paciente_id: int):
     obtener_paciente(db, paciente_id)
-
     pagos = db.query(PagoDB).filter(PagoDB.pacienteId == paciente_id).all()
     movimientos_db = (
         db.query(MovimientoCuentaDB)
@@ -506,7 +420,6 @@ def construir_cuenta_paciente(
         .all()
     )
     movimientos = []
-
     for pago in pagos:
         movimientos.append(
             {
@@ -522,13 +435,11 @@ def construir_cuenta_paciente(
                 "orden": 0,
             }
         )
-
         vinculados = [
             movimiento
             for movimiento in movimientos_db
             if int(movimiento.pagoId or 0) == int(pago.id)
         ]
-
         neto_registrado = sum(
             (
                 redondear_monto(movimiento.abono) - redondear_monto(movimiento.cargo)
@@ -536,14 +447,9 @@ def construir_cuenta_paciente(
             ),
             start=CERO,
         )
-
         legado = redondear_monto(
-            max(
-                CERO,
-                redondear_monto(pago.cobrado) - neto_registrado,
-            )
+            max(CERO, redondear_monto(pago.cobrado) - neto_registrado)
         )
-
         if legado > 0:
             movimientos.append(
                 {
@@ -556,7 +462,7 @@ def construir_cuenta_paciente(
                     "creadoEn": pago.fechaUltPago or pago.creadoEn or pago.fecha,
                     "descripcion": (
                         "Pago registrado anteriormente: "
-                        f"{pago.concepto or 'Atención dental'}"
+                        + f"{pago.concepto or 'Atención dental'}"
                     ),
                     "cargo": 0,
                     "abono": legado,
@@ -564,12 +470,10 @@ def construir_cuenta_paciente(
                     "orden": 1,
                 }
             )
-
     for movimiento in movimientos_db:
         item = serializar_modelo(movimiento)
         item["orden"] = 1
         movimientos.append(item)
-
     movimientos.sort(
         key=lambda item: (
             str(item.get("fecha") or ""),
@@ -578,25 +482,20 @@ def construir_cuenta_paciente(
             str(item.get("id") or ""),
         )
     )
-
     saldo = CERO
     cargos = CERO
     abonos = CERO
     creditos = redondear_monto(
         sum((redondear_monto(pago.creditoFavor) for pago in pagos), start=CERO)
     )
-
     for item in movimientos:
         cargo = redondear_monto(item.get("cargo"))
         abono = redondear_monto(item.get("abono"))
-
         cargos += cargo
         abonos += abono
         saldo = redondear_monto(saldo + cargo - abono)
-
         item["saldoAcumulado"] = max(CERO, saldo)
         item.pop("orden", None)
-
     return {
         "movimientos": movimientos,
         "resumen": {

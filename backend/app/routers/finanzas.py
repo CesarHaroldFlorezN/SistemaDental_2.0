@@ -681,7 +681,7 @@ def registrar_adelanto_plan_pago(
     payload: OperacionPagoPayload,
     db: Session = Depends(get_db),
 ):
-    """Registra un adelanto separado y redistribuye solo las cuotas pendientes."""
+    from ..services.finanzas import _redistribuir_saldo_pendiente
 
     registro = db.query(PlanPagoDB).filter(PlanPagoDB.id == item_id).first()
     if not registro:
@@ -701,20 +701,21 @@ def registrar_adelanto_plan_pago(
         )
 
     cuotas = [dict(cuota) for cuota in (registro.cuotas or [])]
-    pendientes = [
-        indice
-        for indice, cuota in enumerate(cuotas)
-        if cuota.get("tipo") == "cuota" and not cuota.get("pagado")
-    ]
     nuevo_anticipo = redondear_monto(redondear_monto(registro.anticipo) + monto)
+
     pagado_cuotas = redondear_monto(
         sum(
             (
-                Decimal(str(cuota.get("monto") or 0))
-                for cuota in cuotas
-                if cuota.get("pagado")
-            ),
-            start=Decimal("0.00"),
+                Decimal(str(c.get("monto") or 0))
+                if c.get("pagado")
+                else (
+                    Decimal(str(c.get("montoPagado") or 0))
+                    if c.get("pagadoParcial")
+                    else Decimal("0.00")
+                )
+            )
+            for c in cuotas
+            if c.get("tipo") == "cuota"
         )
     )
     nuevo_saldo = redondear_monto(
@@ -723,31 +724,23 @@ def registrar_adelanto_plan_pago(
             redondear_monto(registro.totalAcordado) - nuevo_anticipo - pagado_cuotas,
         )
     )
-    if nuevo_saldo > Decimal("0.00") and not pendientes:
-        raise HTTPException(
-            status_code=409,
-            detail="No hay cuotas pendientes donde redistribuir el saldo.",
-        )
 
-    if pendientes:
-        centavos = int(nuevo_saldo * 100)
-        base, sobrante = divmod(centavos, len(pendientes))
-        for posicion, indice in enumerate(pendientes):
-            monto_cuota = float(
-                Decimal(base + (1 if posicion < sobrante else 0)) / Decimal(100)
-            )
-            cuotas[indice]["monto"] = monto_cuota
-            cuotas[indice]["cubiertaPorAdelanto"] = monto_cuota <= 0
+    cuotas = _redistribuir_saldo_pendiente(cuotas, nuevo_saldo)
 
     nuevo_cobrado = redondear_monto(nuevo_anticipo + pagado_cuotas)
     registro.anticipo = nuevo_anticipo
     registro.cobrado = nuevo_cobrado
     registro.saldo = nuevo_saldo
     registro.cuotas = cuotas
+
     registro.totalCuotas = redondear_monto(
         sum(
-            (Decimal(str(cuota.get("monto") or 0)) for cuota in cuotas),
-            start=Decimal("0.00"),
+            (
+                Decimal(str(c.get("monto") or 0))
+                + Decimal(str(c.get("montoPagado") or 0))
+            )
+            for c in cuotas
+            if c.get("tipo") == "cuota"
         )
     )
     registro.estado = "completado" if nuevo_saldo <= Decimal("0.00") else "activo"
@@ -757,6 +750,7 @@ def registrar_adelanto_plan_pago(
     pago.cuotas = cuotas
     pago.fechaUltPago = ahora_iso()[:10]
     pago.tipoPago = "completo" if nuevo_saldo <= Decimal("0.00") else "cuotas"
+
     db.add(
         MovimientoCuentaDB(
             pacienteId=pago.pacienteId,
@@ -790,6 +784,103 @@ def registrar_adelanto_plan_pago(
             status_code=400,
             detail="No se pudo registrar el adelanto.",
         ) from error
+
+
+@router.delete(
+    "/api/planPagos/{item_id}/adelantos/ultimo",
+    dependencies=[Depends(exigir_personal_financiero)],
+)
+def revertir_ultimo_adelanto_plan(
+    item_id: int,
+    db: Session = Depends(get_db),
+):
+    from ..services.finanzas import _redistribuir_saldo_pendiente, _total_cuotas_pagadas
+
+    registro = db.query(PlanPagoDB).filter(PlanPagoDB.id == item_id).first()
+    if not registro:
+        raise HTTPException(status_code=404, detail="Plan de pagos no encontrado.")
+
+    pago = db.query(PagoDB).filter(PagoDB.id == registro.pagoId).first()
+    ultimo_mov = (
+        db.query(MovimientoCuentaDB)
+        .filter(
+            MovimientoCuentaDB.pagoId == pago.id,
+            MovimientoCuentaDB.tipo == "adelanto_plan",
+        )
+        .order_by(MovimientoCuentaDB.id.desc())
+        .first()
+    )
+
+    if not ultimo_mov:
+        raise HTTPException(
+            status_code=400, detail="No se encontraron adelantos recientes."
+        )
+
+    monto_revertir = redondear_monto(ultimo_mov.abono)
+    nuevo_anticipo = max(
+        Decimal("0.00"), redondear_monto(registro.anticipo) - monto_revertir
+    )
+
+    cuotas = [dict(cuota) for cuota in (registro.cuotas or [])]
+    pagado_cuotas = _total_cuotas_pagadas(cuotas)
+    nuevo_cobrado = redondear_monto(nuevo_anticipo + pagado_cuotas)
+    nuevo_saldo = redondear_monto(
+        max(Decimal("0.00"), redondear_monto(registro.totalAcordado) - nuevo_cobrado)
+    )
+
+    cuotas = _redistribuir_saldo_pendiente(cuotas, nuevo_saldo)
+
+    registro.anticipo = nuevo_anticipo
+    registro.cobrado = nuevo_cobrado
+    registro.saldo = nuevo_saldo
+    registro.cuotas = cuotas
+    registro.totalCuotas = redondear_monto(
+        sum(
+            (
+                Decimal(str(c.get("monto") or 0))
+                + Decimal(str(c.get("montoPagado") or 0))
+            )
+            for c in cuotas
+            if c.get("tipo") == "cuota"
+        )
+    )
+    registro.estado = "completado" if nuevo_saldo <= Decimal("0.00") else "activo"
+
+    if pago:
+        pago.cobrado = nuevo_cobrado
+        pago.saldo = nuevo_saldo
+        pago.cuotas = cuotas
+        pago.tipoPago = "completo" if nuevo_saldo <= Decimal("0.00") else "cuotas"
+
+    db.add(
+        MovimientoCuentaDB(
+            pacienteId=pago.pacienteId,
+            casoClinicoId=pago.casoClinicoId,
+            planId=pago.planId,
+            citaId=pago.citaId,
+            pagoId=pago.id,
+            tipo="reversion_adelanto",
+            descripcion=f"Reversión de adelanto: {pago.concepto}",
+            cargo=monto_revertir,
+            abono=0,
+            fecha=ahora_iso()[:10],
+            metodo=ultimo_mov.metodo,
+            referencia=ultimo_mov.referencia,
+            motivo="Reversión manual",
+            usuario="Administrador",
+            creadoEn=ahora_iso(),
+        )
+    )
+    try:
+        db.commit()
+        db.refresh(registro)
+        return {
+            "message": "Adelanto revertido con éxito.",
+            "registro": serializar_modelo(registro),
+        }
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error al revertir.") from error
 
 
 @router.put(
@@ -852,31 +943,34 @@ def actualizar_plan_pago(
                 detail="Una cuota nueva debe registrarse primero como pendiente.",
             )
 
-    cambios_estado = [
-        (anteriores_por_clave[clave], nuevas_por_clave[clave])
-        for clave in anteriores_por_clave.keys() & nuevas_por_clave.keys()
-        if bool(anteriores_por_clave[clave].get("pagado"))
-        != bool(nuevas_por_clave[clave].get("pagado"))
-    ]
+    cambios_estado = []
+    for clave in anteriores_por_clave.keys() & nuevas_por_clave.keys():
+        ant = anteriores_por_clave[clave]
+        nue = nuevas_por_clave[clave]
+        if (
+            bool(ant.get("pagado")) != bool(nue.get("pagado"))
+            or bool(ant.get("pagadoParcial")) != bool(nue.get("pagadoParcial"))
+            or redondear_monto(ant.get("montoPagado") or 0)
+            != redondear_monto(nue.get("montoPagado") or 0)
+        ):
+            cambios_estado.append((ant, nue))
+        else:
+            # PROTECCIÓN: Bloquea cualquier intento de alterar el monto de una cuota que ya está pagada
+            if ant.get("pagado") and redondear_monto(
+                ant.get("monto") or 0
+            ) != redondear_monto(nue.get("monto") or 0):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No se puede alterar el monto del cronograma de una cuota histórica.",
+                )
+
     if len(cambios_estado) > 1:
         raise HTTPException(
             status_code=400,
             detail="Registra o revierte una sola cuota por operación.",
         )
 
-    montos_modificados = any(
-        redondear_monto(anteriores_por_clave[clave].get("monto"))
-        != redondear_monto(nuevas_por_clave[clave].get("monto"))
-        for clave in anteriores_por_clave.keys() & nuevas_por_clave.keys()
-    )
-    if cambios_estado and (
-        montos_modificados or anteriores_por_clave.keys() != nuevas_por_clave.keys()
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="No se puede modificar el cronograma mientras se registra un pago.",
-        )
-
+    # Validaciones rigurosas RESTAURADAS
     if registro.planId:
         plan = db.query(PlanDB).filter(PlanDB.id == registro.planId).first()
         sesiones = (
@@ -900,28 +994,22 @@ def actualizar_plan_pago(
                 status_code=400,
                 detail="No se puede romper el vínculo entre cuotas y sesiones.",
             )
-        if montos_modificados:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Los montos de un plan de tratamiento solo cambian "
-                    "mediante un adelanto."
-                ),
-            )
 
     total = redondear_monto(registro.totalAcordado)
     anticipo = redondear_monto(registro.anticipo)
+
     total_programado = redondear_monto(
         sum(
             (
-                Decimal(str(cuota.get("monto") or 0))
-                for cuota in cuotas
-                if cuota.get("tipo") == "cuota"
-            ),
-            start=Decimal("0.00"),
+                Decimal(str(c.get("monto") or 0))
+                + Decimal(str(c.get("montoPagado") or 0))
+            )
+            for c in cuotas
+            if c.get("tipo") == "cuota"
         )
     )
     total_financiado = redondear_monto(max(Decimal("0.00"), total - anticipo))
+
     if cuotas and total_programado != total_financiado:
         raise HTTPException(
             status_code=400,
@@ -934,13 +1022,19 @@ def actualizar_plan_pago(
     pagado_cuotas = redondear_monto(
         sum(
             (
-                Decimal(str(cuota.get("monto") or 0))
-                for cuota in cuotas
-                if cuota.get("tipo") == "cuota" and cuota.get("pagado")
-            ),
-            start=Decimal("0.00"),
+                Decimal(str(c.get("monto") or 0))
+                if c.get("pagado")
+                else (
+                    Decimal(str(c.get("montoPagado") or 0))
+                    if c.get("pagadoParcial")
+                    else Decimal("0.00")
+                )
+            )
+            for c in cuotas
+            if c.get("tipo") == "cuota"
         )
     )
+
     nuevo_cobrado = redondear_monto(min(total, anticipo + pagado_cuotas))
     saldo = redondear_monto(max(Decimal("0.00"), total - nuevo_cobrado))
     cobrado_anterior = redondear_monto(registro.cobrado)
@@ -982,6 +1076,9 @@ def actualizar_plan_pago(
             )
         cuota_anterior, cuota_nueva = cambios_estado[0]
         cuota_cambiada = cuota_nueva if diferencia > 0 else cuota_anterior
+        es_parcial = bool(cuota_cambiada.get("pagadoParcial"))
+        texto_parcial = " (Pago Parcial)" if es_parcial else ""
+
         db.add(
             MovimientoCuentaDB(
                 pacienteId=pago.pacienteId,
@@ -992,7 +1089,7 @@ def actualizar_plan_pago(
                 tipo="pago_cuota" if diferencia > 0 else "anulacion_cuota",
                 descripcion=(
                     f"{'Pago' if diferencia > 0 else 'Reversión'} de cuota "
-                    f"{cuota_cambiada.get('num') or ''}"
+                    f"{cuota_cambiada.get('num') or ''}{texto_parcial}"
                     f"{' · sesión ' + str(cuota_cambiada.get('sesionNum')) if cuota_cambiada.get('sesionNum') else ''}: "
                     f"{pago.concepto or 'Atención dental'}"
                 ).strip(),

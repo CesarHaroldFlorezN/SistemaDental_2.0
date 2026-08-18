@@ -26,18 +26,17 @@ const handleResponse = async (response) => {
 const request = async (url, options = {}) => {
   try {
     const response = await fetch(url, {
-  credentials: 'include',
-  ...options
-});
+      credentials: 'include',
+      ...options
+    });
     return await handleResponse(response);
   } catch (error) {
     if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
       throw new Error(
-  'No se pudo conectar con el servidor. Verifica que DentalPro esté ejecutándose.',
-  { cause: error }
-);
+        'No se pudo conectar con el servidor. Verifica que DentalPro esté ejecutándose.',
+        { cause: error }
+      );
     }
-
     throw error;
   }
 };
@@ -93,9 +92,7 @@ const getTodosPacientes = async () => {
 };
 
 export const api = {
-
-
-    // ===================================================
+  // ===================================================
   // AUTENTICACIÓN
   // ===================================================
   iniciarSesion: (nombreUsuario, contrasena) =>
@@ -107,22 +104,15 @@ export const api = {
       })
     ),
 
-  obtenerSesion: () =>
-    request(`${API_URL}/auth/me`),
+  obtenerSesion: () => request(`${API_URL}/auth/me`),
 
   cerrarSesion: () =>
-    request(
-      `${API_URL}/auth/logout`,
-      {
-        method: 'POST'
-      }
-    ),
+    request(`${API_URL}/auth/logout`, {
+      method: 'POST'
+    }),
 
   cambiarContrasena: (data) =>
-    request(
-      `${API_URL}/auth/cambiar-contrasena`,
-      jsonOptions('POST', data)
-    ),
+    request(`${API_URL}/auth/cambiar-contrasena`, jsonOptions('POST', data)),
 
   // ===================================================
   // USUARIOS (SOLO ADMINISTRADOR)
@@ -186,10 +176,7 @@ export const api = {
     request(`${API_URL}/operaciones/citas`, jsonOptions('POST', data)),
 
   actualizarCitaConPago: (id, data) =>
-    request(
-      `${API_URL}/operaciones/citas/${id}`,
-      jsonOptions('PUT', data)
-    ),
+    request(`${API_URL}/operaciones/citas/${id}`, jsonOptions('PUT', data)),
 
   eliminarCitaConPago: (id) =>
     request(`${API_URL}/operaciones/citas/${id}`, { method: 'DELETE' }),
@@ -206,7 +193,6 @@ export const api = {
       jsonOptions('PATCH', data)
     ),
 
-  // Alias para componentes antiguos.
   crearCita: (data) =>
     request(`${API_URL}/operaciones/citas`, jsonOptions('POST', data)),
 
@@ -217,7 +203,9 @@ export const api = {
   // CASOS CLÍNICOS Y SESIONES PLANIFICADAS
   // ===================================================
   getCasosClinicos: (pacienteId = null) =>
-    request(`${API_URL}/casosClinicos${pacienteId ? `?pacienteId=${pacienteId}` : ''}`),
+    request(
+      `${API_URL}/casosClinicos${pacienteId ? `?pacienteId=${pacienteId}` : ''}`
+    ),
 
   crearCasoClinico: (data) =>
     request(`${API_URL}/casosClinicos`, jsonOptions('POST', data)),
@@ -226,7 +214,10 @@ export const api = {
     request(`${API_URL}/casosClinicos/${id}`, jsonOptions('PUT', data)),
 
   registrarDiagnosticoCaso: (id, data) =>
-    request(`${API_URL}/casosClinicos/${id}/diagnostico`, jsonOptions('PATCH', data)),
+    request(
+      `${API_URL}/casosClinicos/${id}/diagnostico`,
+      jsonOptions('PATCH', data)
+    ),
 
   getSesionesPlan: (planId = null) =>
     request(`${API_URL}/sesionesPlan${planId ? `?planId=${planId}` : ''}`),
@@ -245,15 +236,23 @@ export const api = {
   eliminarPago: (id) =>
     request(`${API_URL}/pagos/${id}`, { method: 'DELETE' }),
 
-  // DENTALPRO_V8_CUENTA: operaciones financieras auditables.
   registrarPago: (id, data) =>
-    request(`${API_URL}/operaciones/pagos/${id}/registrar`, jsonOptions('POST', data)),
+    request(
+      `${API_URL}/operaciones/pagos/${id}/registrar`,
+      jsonOptions('POST', data)
+    ),
 
   anularPago: (id, data) =>
-    request(`${API_URL}/operaciones/pagos/${id}/anular`, jsonOptions('POST', data)),
+    request(
+      `${API_URL}/operaciones/pagos/${id}/anular`,
+      jsonOptions('POST', data)
+    ),
 
   devolverPago: (id, data) =>
-    request(`${API_URL}/operaciones/pagos/${id}/devolver`, jsonOptions('POST', data)),
+    request(
+      `${API_URL}/operaciones/pagos/${id}/devolver`,
+      jsonOptions('POST', data)
+    ),
 
   getCuentaPaciente: (pacienteId) =>
     request(`${API_URL}/pacientes/${pacienteId}/cuenta`),
@@ -270,15 +269,25 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('descripcion', descripcion);
-    return request(`${API_URL}/pacientes/${pacienteId}/documentos`, { method: 'POST', body: formData });
+    return request(`${API_URL}/pacientes/${pacienteId}/documentos`, {
+      method: 'POST',
+      body: formData
+    });
   },
 
   descargarDocumentoPaciente: (pacienteId, documentoId) => {
-    window.open(`${API_URL}/pacientes/${pacienteId}/documentos/${documentoId}/descargar`, '_blank', 'noopener,noreferrer');
+    window.open(
+      `${API_URL}/pacientes/${pacienteId}/documentos/${documentoId}/descargar`,
+      '_blank',
+      'noopener,noreferrer'
+    );
   },
 
   eliminarDocumentoPaciente: (pacienteId, documentoId) =>
-    request(`${API_URL}/pacientes/${pacienteId}/documentos/${documentoId}`, { method: 'DELETE' }),
+    request(
+      `${API_URL}/pacientes/${pacienteId}/documentos/${documentoId}`,
+      { method: 'DELETE' }
+    ),
 
   // ===================================================
   // PLANES DE PAGO
@@ -293,6 +302,11 @@ export const api = {
 
   registrarAdelantoPlanPago: (id, data) =>
     request(`${API_URL}/planPagos/${id}/adelantos`, jsonOptions('POST', data)),
+
+  revertirUltimoAdelantoPlanPago: (id) =>
+    request(`${API_URL}/planPagos/${id}/adelantos/ultimo`, {
+      method: 'DELETE'
+    }),
 
   eliminarPlanPago: (id) =>
     request(`${API_URL}/planPagos/${id}`, { method: 'DELETE' }),
