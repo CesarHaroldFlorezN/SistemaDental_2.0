@@ -961,7 +961,7 @@ def actualizar_plan_pago(
             ) != redondear_monto(nue.get("monto") or 0):
                 raise HTTPException(
                     status_code=400,
-                    detail="No se puede alterar el monto de una cuota histórica ya pagada.",
+                    detail="No se puede alterar el monto del cronograma de una cuota histórica.",
                 )
 
     if len(cambios_estado) > 1:
