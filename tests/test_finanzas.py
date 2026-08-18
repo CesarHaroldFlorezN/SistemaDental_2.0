@@ -289,6 +289,12 @@ def test_crud_de_recursos_financieros() -> None:
     assert respuesta_actualizar_plan.status_code == 200
     assert respuesta_actualizar_plan.json()["registro"]["estado"] == "completado"
 
+    # Estructura de cuotas válidas alineadas con el nuevo motor financiero
+    cuotas_iniciales = [
+        {"num": 1, "tipo": "cuota", "monto": 100.0, "pagado": False, "pagadoParcial": False},
+        {"num": 2, "tipo": "cuota", "monto": 100.0, "pagado": False, "pagadoParcial": False}
+    ]
+
     respuesta_plan_pago = client.post(
         "/api/planPagos",
         json={
@@ -300,8 +306,8 @@ def test_crud_de_recursos_financieros() -> None:
             "anticipo": 0,
             "metodoPreferido": "Efectivo",
             "estado": "activo",
-            "cuotas": [],
-            "totalCuotas": 2,
+            "cuotas": cuotas_iniciales,
+            "totalCuotas": 200,
             "cobrado": 0,
             "saldo": 200,
             "fechaCreacion": "2036-07-20",
@@ -318,10 +324,12 @@ def test_crud_de_recursos_financieros() -> None:
         plan["id"] == plan_pago_id for plan in respuesta_listar_plan_pagos.json()
     )
 
+    # Actualización pasando el cronograma consistente para simular al frontend react
     respuesta_actualizar_plan_pago = client.put(
         f"/api/planPagos/{plan_pago_id}",
         json={
             "estado": "finalizado",
+            "cuotas": cuotas_iniciales
         },
     )
 
