@@ -954,6 +954,15 @@ def actualizar_plan_pago(
             != redondear_monto(nue.get("montoPagado") or 0)
         ):
             cambios_estado.append((ant, nue))
+        else:
+            # PROTECCIÓN: Bloquea cualquier intento de alterar el monto de una cuota que ya está pagada
+            if ant.get("pagado") and redondear_monto(
+                ant.get("monto") or 0
+            ) != redondear_monto(nue.get("monto") or 0):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No se puede alterar el monto de una cuota histórica ya pagada.",
+                )
 
     if len(cambios_estado) > 1:
         raise HTTPException(
