@@ -26,6 +26,7 @@ export default function PlanesPagoPage({
   onRevertirCuota,
   onAgregarCuota,
   onRegistrarAdelanto,
+  onRevertirUltimoAdelanto, // <-- Se recibe la nueva función
   onEliminar,
   formatearMoneda
 }) {
@@ -64,16 +65,18 @@ export default function PlanesPagoPage({
         {planesPago.length ? (
           planesPago.map((plan) => {
             const cuotas = plan.cuotas || [];
+            
+            // Re-calculo ultra seguro de lo pagado integrando los montos parciales
             const totalPagado = Number(
               plan.cobrado ??
                 Number(plan.anticipo || 0) +
-                  cuotas
-                    .filter((cuota) => cuota.pagado)
-                    .reduce(
-                      (total, cuota) => total + Number(cuota.monto || 0),
-                      0
-                    )
+                  cuotas.reduce((total, cuota) => {
+                    if (cuota.pagado) return total + Number(cuota.monto || 0);
+                    if (cuota.pagadoParcial) return total + Number(cuota.montoPagado || 0);
+                    return total;
+                  }, 0)
             );
+            
             const total = Number.parseFloat(plan.totalAcordado || 0);
             const porcentaje = total > 0
               ? Math.min(100, (totalPagado / total) * 100).toFixed(1)
@@ -197,7 +200,9 @@ export default function PlanesPagoPage({
                                   ? 'Cuota pagada'
                                   : cuota.cubiertaPorAdelanto
                                     ? 'Cubierta por adelanto'
-                                    : 'Pendiente de pago'}
+                                    : cuota.pagadoParcial
+                                      ? <span className="text-amber-500">Pago parcial (Abonó {formatearMoneda(cuota.montoPagado)})</span>
+                                      : 'Pendiente de pago'}
                               </div>
                             </td>
                           )}
@@ -206,6 +211,11 @@ export default function PlanesPagoPage({
                           </td>
                           <td className="p-3 font-serif font-bold text-white">
                             {formatearMoneda(cuota.monto)}
+                            {cuota.pagadoParcial && (
+                              <span className="block text-[10.5px] text-amber-400 font-sans mt-0.5 font-normal">
+                                De un total de {formatearMoneda(Number(cuota.monto || 0) + Number(cuota.montoPagado || 0))}
+                              </span>
+                            )}
                           </td>
                           <td className="space-x-1.5 p-3 text-right">
                             {!cuota.pagado && !cuota.cubiertaPorAdelanto ? (
@@ -213,9 +223,15 @@ export default function PlanesPagoPage({
                                 <button
                                   type="button"
                                   onClick={() => onPagarCuota(plan, indice)}
-                                  className="cursor-pointer rounded bg-emerald-600 px-2.5 py-1 font-semibold text-white transition hover:bg-emerald-500"
+                                  className={`cursor-pointer rounded px-2.5 py-1 font-semibold text-white transition ${
+                                    cuota.pagadoParcial
+                                      ? 'bg-amber-600 hover:bg-amber-500'
+                                      : 'bg-emerald-600 hover:bg-emerald-500'
+                                  }`}
                                 >
-                                  💵 {esTratamiento ? `Pagar cuota ${cuota.num}` : 'Pagar'}
+                                  💵 {cuota.pagadoParcial 
+                                      ? `Completar ${formatearMoneda(cuota.monto)}` 
+                                      : (esTratamiento ? `Pagar cuota ${cuota.num}` : 'Pagar')}
                                 </button>
                                 {!esTratamiento && (
                                   <button
@@ -286,6 +302,19 @@ export default function PlanesPagoPage({
                       💵 Registrar adelanto
                     </button>
                   )}
+                  
+                  {/* NUEVO BOTÓN DE REVERTIR ADELANTO */}
+                  {(plan.cuotas?.some(c => c.cubiertaPorAdelanto) || Number(plan.anticipo || 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => onRevertirUltimoAdelanto?.(plan)}
+                      className="rounded-xl border border-red-500/50 bg-red-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-red-950/30 transition hover:bg-red-500"
+                      title="Revertir el último pago por adelantado"
+                    >
+                      ↩️ Revertir adelanto
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => onEliminar(plan.id)}

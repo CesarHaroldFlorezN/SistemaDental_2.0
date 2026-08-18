@@ -11,13 +11,16 @@ const estadoPagoSesion = (sesion, cuota) =>
     ? 'pagada'
     : cuota?.cubiertaPorAdelanto
       ? 'cubierta_por_adelanto'
-      : cuota
-        ? 'pendiente'
-        : 'sin_cronograma');
+      : cuota?.pagadoParcial
+        ? 'pagado_parcial'
+        : cuota
+          ? 'pendiente'
+          : 'sin_cronograma');
 
 const ETIQUETAS_PAGO = {
   pagada: 'Cuota pagada',
   cubierta_por_adelanto: 'Cubierta por adelanto',
+  pagado_parcial: 'Pago parcial',
   pendiente: 'Pago pendiente',
   sin_cronograma: 'Sin cuota creada'
 };
@@ -186,14 +189,18 @@ export default function PlanesTratamientoPage({
                           : sesion.estado === 'agendada'
                             ? 'dp-treatment-session-scheduled'
                             : 'dp-treatment-session-pending';
+                            
                       const clasePago =
                         estadoPago === 'pagada'
                           ? 'dp-treatment-payment-paid'
                           : estadoPago === 'cubierta_por_adelanto'
                             ? 'dp-treatment-payment-advance'
-                            : estadoPago === 'pendiente'
-                              ? 'dp-treatment-payment-pending'
-                              : 'dp-treatment-payment-unplanned';
+                            : estadoPago === 'pagado_parcial'
+                              ? 'border-amber-500/50 bg-amber-500/20 text-amber-300' // Clase custom para Parcial
+                              : estadoPago === 'pendiente'
+                                ? 'dp-treatment-payment-pending'
+                                : 'dp-treatment-payment-unplanned';
+
                       return (
                         <div
                           key={sesion.id}
@@ -219,20 +226,31 @@ export default function PlanesTratamientoPage({
                           <span className="dp-treatment-session-amount mt-0.5 text-base font-black">
                             {cuota ? formatearMoneda(cuota.monto) : '—'}
                           </span>
+                          {cuota?.pagadoParcial && (
+                            <span className="text-[9.5px] font-bold text-amber-500">
+                              (Abonó {formatearMoneda(cuota.montoPagado)})
+                            </span>
+                          )}
+                          
                           <span
                             className={`dp-treatment-payment-state mt-2 rounded-lg border px-2 py-1 text-center text-[10px] font-black ${clasePago}`}
                           >
                             {ETIQUETAS_PAGO[estadoPago]}
                           </span>
-                          {estadoPago === 'pendiente' &&
+                          
+                          {(estadoPago === 'pendiente' || estadoPago === 'pagado_parcial') &&
                             planPago &&
                             indiceCuota >= 0 && (
                               <button
                                 type="button"
                                 onClick={() => onPagarCuota(planPago, indiceCuota)}
-                                className="mt-2 rounded-lg bg-emerald-600 px-2 py-1.5 text-[10px] font-black text-white hover:bg-emerald-500"
+                                className={`mt-2 rounded-lg px-2 py-1.5 text-[10px] font-black text-white ${
+                                  estadoPago === 'pagado_parcial' 
+                                    ? 'bg-amber-600 hover:bg-amber-500' 
+                                    : 'bg-emerald-600 hover:bg-emerald-500'
+                                }`}
                               >
-                                Pagar esta cuota
+                                {estadoPago === 'pagado_parcial' ? 'Completar pago' : 'Pagar esta cuota'}
                               </button>
                             )}
                         </div>
