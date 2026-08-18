@@ -2,13 +2,24 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['desktop.py'],
     pathex=[],
     binaries=[],
     datas=[
        ('frontend/dist', 'frontend'),
     ],
-    hiddenimports=[],
+    hiddenimports=[
+        'uvicorn.logging',
+        'uvicorn.loops',
+        'uvicorn.loops.auto',
+        'uvicorn.protocols',
+        'uvicorn.protocols.http',
+        'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.websockets',
+        'uvicorn.protocols.websockets.auto',
+        'uvicorn.lifespan',
+        'uvicorn.lifespan.on'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -24,13 +35,13 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='SistemaDental',
+    name='DentalPro',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
-    disable_windowed_traceback=False,
+    console=False,
+    disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
@@ -44,5 +55,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='SistemaDental',
+    name='DentalPro',
 )

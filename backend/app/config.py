@@ -26,10 +26,29 @@ else:
     BUNDLE_DIR = ROOT_DIR
 
 
+def _directorio_datos_predeterminado() -> Path:
+    """Separa los datos clínicos de los binarios y de carpetas sincronizadas."""
+
+    if not IS_FROZEN:
+        return APP_DIR / "data"
+
+    if os.getenv("PROGRAMDATA"):
+        datos_comunes = Path(os.environ["PROGRAMDATA"]) / "DentalPro"
+        # El instalador crea esta carpeta y concede escritura a los usuarios.
+        # Una copia portátil sin instalar usa LocalAppData para no exigir UAC.
+        if datos_comunes.is_dir() and os.access(datos_comunes, os.W_OK):
+            return datos_comunes / "data"
+
+    if os.getenv("LOCALAPPDATA"):
+        return Path(os.environ["LOCALAPPDATA"]) / "DentalPro" / "data"
+
+    return APP_DIR / "data"
+
+
 DATA_DIR = Path(
     os.getenv(
         "DENTALPRO_DATA_DIR",
-        str(APP_DIR / "data"),
+        str(_directorio_datos_predeterminado()),
     )
 ).resolve()
 
