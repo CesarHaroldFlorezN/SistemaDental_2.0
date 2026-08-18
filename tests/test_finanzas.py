@@ -291,8 +291,20 @@ def test_crud_de_recursos_financieros() -> None:
 
     # Estructura de cuotas válidas alineadas con el nuevo motor financiero
     cuotas_iniciales = [
-        {"num": 1, "tipo": "cuota", "monto": 100.0, "pagado": False, "pagadoParcial": False},
-        {"num": 2, "tipo": "cuota", "monto": 100.0, "pagado": False, "pagadoParcial": False}
+        {
+            "num": 1,
+            "tipo": "cuota",
+            "monto": 100.0,
+            "pagado": False,
+            "pagadoParcial": False,
+        },
+        {
+            "num": 2,
+            "tipo": "cuota",
+            "monto": 100.0,
+            "pagado": False,
+            "pagadoParcial": False,
+        },
     ]
 
     respuesta_plan_pago = client.post(
@@ -327,10 +339,7 @@ def test_crud_de_recursos_financieros() -> None:
     # Actualización pasando el cronograma consistente para simular al frontend react
     respuesta_actualizar_plan_pago = client.put(
         f"/api/planPagos/{plan_pago_id}",
-        json={
-            "estado": "finalizado",
-            "cuotas": cuotas_iniciales
-        },
+        json={"estado": "finalizado", "cuotas": cuotas_iniciales},
     )
 
     assert respuesta_actualizar_plan_pago.status_code == 200
