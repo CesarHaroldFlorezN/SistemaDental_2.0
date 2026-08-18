@@ -140,6 +140,18 @@ Los datos locales se almacenan en:
 data/dentalpro.db
 ```
 
+En el ejecutable instalado para Windows, la base oficial se separa de los
+binarios y de OneDrive:
+
+```text
+C:\ProgramData\DentalPro\data\dentalpro.db
+```
+
+Una instalación portátil usa `%LOCALAPPDATA%\DentalPro\data` cuando no existe
+la carpeta preparada por el instalador. La primera ejecución puede importar de
+forma segura `data/dentalpro.db` y `data/documentos/`; nunca importa las bases
+`original`, `pruebas` o `vacia`, ni reemplaza una base productiva existente.
+
 En Windows, la base aislada de pruebas se almacena en:
 
 ```text
@@ -238,8 +250,20 @@ Después se genera el programa:
 El resultado se encontrará dentro de:
 
 ```text
-dist/SistemaDental/
+dist/DentalPro/
 ```
+
+El ejecutable utiliza `desktop.py`: no muestra consola, abre automáticamente la
+interfaz y reutiliza una instancia que ya esté activa. Para generar además el
+instalador privado con la base oficial y los documentos de la clínica:
+
+```powershell
+.\scripts\construir_windows.ps1 -IncluirDatosClinica
+```
+
+Consulta [la guía de instalación para Windows](docs/INSTALACION_WINDOWS.md)
+antes de trasladar el paquete. Los instaladores generados con datos reales son
+privados y nunca deben publicarse en GitHub.
 
 ## Arquitectura del frontend
 

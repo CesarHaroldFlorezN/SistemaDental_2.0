@@ -10,7 +10,9 @@ describe('resumen financiero por períodos', () => {
 
   it('separa día, semana, mes, año e histórico usando movimientos netos', () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-15T16:00:00-05:00'));
+    // El resumen usa el día local del equipo. Mantener fechas locales evita
+    // que la prueba cambie de día al ejecutarse en otra zona horaria.
+    vi.setSystemTime(new Date('2026-08-15T16:00:00'));
 
     const pagos = [
       { id: 1, cobrado: 80, saldo: 20, tipoPago: 'anticipo' },
@@ -27,13 +29,13 @@ describe('resumen financiero por períodos', () => {
         pagoId: 1,
         abono: 100,
         cargo: 0,
-        creadoEn: '2026-08-15T09:00:00-05:00'
+        creadoEn: '2026-08-15T09:00:00'
       },
       {
         pagoId: 1,
         abono: 0,
         cargo: 20,
-        creadoEn: '2026-08-15T10:00:00-05:00'
+        creadoEn: '2026-08-15T10:00:00'
       }
     ];
 
