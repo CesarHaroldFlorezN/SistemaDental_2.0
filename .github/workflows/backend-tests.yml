@@ -39,8 +39,8 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Actualizar pip
-        run: python -m pip install --upgrade pip
+      - name: Actualizar herramientas de empaquetado
+        run: python -m pip install --upgrade pip "setuptools>=83"
 
       - name: Instalar DentalPro
         run: python -m pip install -e ".[dev]"
