@@ -1,6 +1,10 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
+from backend.app.database import SessionLocal
 from backend.app.main import app
+from backend.app.models import DocumentoPacienteDB
 
 client = TestClient(app)
 
@@ -47,6 +51,8 @@ def test_subir_listar_descargar_y_eliminar_documento() -> None:
     assert documento["nombre"] == "historia-clinica.txt"
     assert documento["tipo"] == "text/plain"
     assert documento["descripcion"] == "Historia clínica de prueba"
+    assert not Path(documento["ruta"]).is_absolute()
+    assert Path(documento["ruta"]).parent == Path(str(paciente_id))
 
     respuesta_listar = client.get(f"/api/pacientes/{paciente_id}/documentos")
 
@@ -60,6 +66,20 @@ def test_subir_listar_descargar_y_eliminar_documento() -> None:
     assert respuesta_descargar.status_code == 200
     assert respuesta_descargar.content == contenido
     assert respuesta_descargar.headers["content-type"].startswith("text/plain")
+
+    with SessionLocal() as db:
+        registro = db.get(DocumentoPacienteDB, documento_id)
+        registro.ruta = (
+            "C:\\DentalPro-Antiguo\\data\\documentos\\"
+            f"{paciente_id}\\{Path(documento['ruta']).name}"
+        )
+        db.commit()
+
+    respuesta_ruta_antigua = client.get(
+        f"/api/pacientes/{paciente_id}/documentos/{documento_id}/descargar"
+    )
+    assert respuesta_ruta_antigua.status_code == 200
+    assert respuesta_ruta_antigua.content == contenido
 
     respuesta_eliminar = client.delete(
         f"/api/pacientes/{paciente_id}/documentos/{documento_id}"

@@ -46,3 +46,5 @@ htmlcov/
 
 # Registros locales de diagnostico
 data/logs/
+
+data/

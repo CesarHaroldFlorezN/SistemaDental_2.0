@@ -1079,6 +1079,13 @@ def actualizar_plan_pago(
         es_parcial = bool(cuota_cambiada.get("pagadoParcial"))
         texto_parcial = " (Pago Parcial)" if es_parcial else ""
 
+        # LEEMOS LA FECHA HISTÓRICA DEL FRONTEND
+        fecha_operacion = (
+            cuota_cambiada.get("fechaPago")
+            or cuota_cambiada.get("fechaUltimoAbono")
+            or ahora_iso()[:10]
+        )
+
         db.add(
             MovimientoCuentaDB(
                 pacienteId=pago.pacienteId,
@@ -1095,7 +1102,7 @@ def actualizar_plan_pago(
                 ).strip(),
                 cargo=abs(diferencia) if diferencia < 0 else 0,
                 abono=max(Decimal("0.00"), diferencia),
-                fecha=ahora_iso()[:10],
+                fecha=fecha_operacion,
                 metodo=cuota_cambiada.get("metodoPago") or "Pago de cuota",
                 referencia=cuota_cambiada.get("referencia") or "",
                 motivo="Movimiento generado desde el cronograma de cuotas",

@@ -59,9 +59,7 @@ def preparar(origen: Path, destino: Path) -> Path:
     base_origen = origen / "dentalpro.db"
 
     if not validar_base(base_origen):
-        raise ValueError(
-            f"No se encontró una base SQLite válida en {base_origen}."
-        )
+        raise ValueError(f"No se encontró una base SQLite válida en {base_origen}.")
 
     if destino == origen or origen in destino.parents:
         raise ValueError("El paquete privado debe generarse fuera de data/.")

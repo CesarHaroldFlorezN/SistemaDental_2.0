@@ -1,14 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from ..database import (
-    COOKIE_ENTORNO_DATOS,
-    ENTORNO_OFICIAL,
-    ENTORNO_PRUEBAS,
-    entorno_desde_request,
-    fabrica_sesiones_entorno,
-    get_db,
-)
+from ..database import get_db
 from ..dependencias import COOKIE_SESION
 from ..schemas import (
     CambiarContrasenaPropiaPayload,
@@ -22,7 +15,6 @@ from ..services import (
     CredencialesInvalidasError,
     SesionInvalidaError,
     UsuarioBloqueadoError,
-    buscar_usuario_por_nombre,
     cambiar_contrasena_usuario,
     es_administrador_propietario,
     iniciar_sesion,
@@ -38,49 +30,14 @@ router = APIRouter(
 )
 
 
-def _resolver_entorno_inicio_sesion(nombre_usuario: str) -> str:
-    coincidencias: list[tuple[str, bool]] = []
-
-    for entorno in (ENTORNO_OFICIAL, ENTORNO_PRUEBAS):
-        fabrica_sesiones = fabrica_sesiones_entorno(entorno)
-        try:
-            with fabrica_sesiones() as db:
-                usuario = buscar_usuario_por_nombre(db, nombre_usuario)
-        except ValueError:
-            return ENTORNO_OFICIAL
-
-        if usuario is not None:
-            coincidencias.append((entorno, bool(usuario.activo)))
-
-    activas = [entorno for entorno, activa in coincidencias if activa]
-
-    if len(activas) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "La cuenta está activa en más de una base de datos. "
-                "Un administrador debe corregir su asignación."
-            ),
-        )
-
-    if activas:
-        return activas[0]
-
-    if len(coincidencias) == 1:
-        return coincidencias[0][0]
-
-    return ENTORNO_OFICIAL
-
-
-def crear_respuesta_sesion(usuario, entorno: str) -> SesionResponse:
+def crear_respuesta_sesion(usuario) -> SesionResponse:
     return SesionResponse(
         usuario=UsuarioSesionResponse(
             id=usuario.id,
             nombre=usuario.nombre,
             nombre_usuario=usuario.nombre_usuario,
             rol=usuario.rol,
-            entorno_datos=entorno,
-            es_propietario=es_administrador_propietario(usuario, entorno),
+            es_propietario=es_administrador_propietario(usuario),
             debe_cambiar_contrasena=bool(usuario.debe_cambiar_contrasena),
         ),
     )
@@ -90,7 +47,6 @@ def _configurar_cookies_sesion(
     response: Response,
     *,
     token: str,
-    entorno: str,
 ) -> None:
     opciones = {
         "max_age": DURACION_SESION_SEGUNDOS,
@@ -105,22 +61,16 @@ def _configurar_cookies_sesion(
         value=token,
         **opciones,
     )
-    response.set_cookie(
-        key=COOKIE_ENTORNO_DATOS,
-        value=entorno,
-        **opciones,
-    )
 
 
 def _eliminar_cookies_sesion(response: Response) -> None:
-    for cookie in (COOKIE_SESION, COOKIE_ENTORNO_DATOS):
-        response.delete_cookie(
-            key=cookie,
-            httponly=True,
-            secure=False,
-            samesite="strict",
-            path="/",
-        )
+    response.delete_cookie(
+        key=COOKIE_SESION,
+        httponly=True,
+        secure=False,
+        samesite="strict",
+        path="/",
+    )
 
 
 @router.post(
@@ -130,17 +80,14 @@ def _eliminar_cookies_sesion(response: Response) -> None:
 def login(
     payload: CredencialesPayload,
     response: Response,
+    db: Session = Depends(get_db),
 ):
-    entorno = _resolver_entorno_inicio_sesion(payload.nombre_usuario)
-    fabrica_sesiones = fabrica_sesiones_entorno(entorno)
-
     try:
-        with fabrica_sesiones() as db:
-            usuario, token = iniciar_sesion(
-                db,
-                nombre_usuario=payload.nombre_usuario,
-                contrasena=payload.contrasena,
-            )
+        usuario, token = iniciar_sesion(
+            db,
+            nombre_usuario=payload.nombre_usuario,
+            contrasena=payload.contrasena,
+        )
     except UsuarioBloqueadoError as error:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
@@ -155,10 +102,9 @@ def login(
     _configurar_cookies_sesion(
         response,
         token=token,
-        entorno=entorno,
     )
 
-    return crear_respuesta_sesion(usuario, entorno)
+    return crear_respuesta_sesion(usuario)
 
 
 @router.get(
@@ -182,10 +128,7 @@ def obtener_sesion_actual(
             detail="Sesión no válida o vencida.",
         ) from error
 
-    return crear_respuesta_sesion(
-        usuario,
-        entorno_desde_request(request),
-    )
+    return crear_respuesta_sesion(usuario)
 
 
 @router.post("/cambiar-contrasena")

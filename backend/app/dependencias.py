@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from .config import ES_PRACTICA
 from .database import get_db
 from .models import UsuarioDB
 from .services import (
@@ -11,7 +12,7 @@ from .services import (
     obtener_usuario_por_token,
 )
 
-COOKIE_SESION = "dentalpro_sesion"
+COOKIE_SESION = "dentalpro_practica_sesion" if ES_PRACTICA else "dentalpro_sesion"
 
 BaseDatosDep = Annotated[
     Session,

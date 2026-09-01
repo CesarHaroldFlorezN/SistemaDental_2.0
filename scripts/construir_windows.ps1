@@ -12,8 +12,17 @@ $python = Join-Path $raiz ".venv\Scripts\python.exe"
 $frontend = Join-Path $raiz "frontend"
 $dist = Join-Path $raiz "dist"
 $programa = Join-Path $dist "DentalPro"
+$programaPractica = Join-Path $dist "DentalProPractica"
+$ejecutableOficial = Join-Path $programa "DentalPro.exe"
+$ejecutablePractica = Join-Path $programaPractica "DentalProPractica.exe"
 $payload = Join-Path $dist "payload-clinica"
 $salidaPrivada = Join-Path $dist "paquetes-privados"
+$datosOficiales = if ($env:ProgramData) {
+    Join-Path $env:ProgramData "DentalPro\data"
+}
+else {
+    $null
+}
 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
     throw "No se encontró .venv\Scripts\python.exe. Activa o crea el entorno virtual."
@@ -62,13 +71,27 @@ try {
     }
 
     & $python -m PyInstaller --clean --noconfirm SistemaDental.spec
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $programa)) {
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ejecutableOficial -PathType Leaf)) {
         throw "PyInstaller no generó dist\DentalPro."
     }
 
+    & $python -m PyInstaller --clean --noconfirm DentalProPractica.spec
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ejecutablePractica -PathType Leaf)) {
+        throw "PyInstaller no generó dist\DentalProPractica."
+    }
+
     if ($IncluirDatosClinica) {
+        if (-not $datosOficiales) {
+            throw "Windows no informó la carpeta ProgramData."
+        }
+
+        $baseOficial = Join-Path $datosOficiales "dentalpro.db"
+        if (-not (Test-Path -LiteralPath $baseOficial -PathType Leaf)) {
+            throw "No se encontró la base oficial en $baseOficial."
+        }
+
         & $python scripts\preparar_paquete_clinica.py `
-            --origen data `
+            --origen $datosOficiales `
             --destino $payload
         if ($LASTEXITCODE -ne 0) {
             throw "No se pudo preparar la copia privada de dentalpro.db."
@@ -108,6 +131,10 @@ try {
         $marca = Get-Date -Format "yyyyMMdd_HHmmss"
         $portable = Join-Path $dist "DentalPro_Portable_$marca"
         Copy-Item -LiteralPath $programa -Destination $portable -Recurse
+        Copy-Item `
+            -LiteralPath $programaPractica `
+            -Destination (Join-Path $portable "Practica") `
+            -Recurse
 
         if ($IncluirDatosClinica) {
             Copy-Item -LiteralPath $payload -Destination (Join-Path $portable "data") -Recurse
@@ -119,6 +146,7 @@ try {
         Write-Host "Inno Setup no está instalado. Se generó la versión portátil:"
         Write-Host $zip
         Write-Host "Al abrir DentalPro.exe no aparecerá la consola y la página se abrirá sola."
+        Write-Host "DentalPro Práctica está en Practica\DentalProPractica.exe."
         if ($IncluirDatosClinica) {
             Write-Warning "Este ZIP contiene dentalpro.db. Es privado: no lo subas a GitHub."
         }

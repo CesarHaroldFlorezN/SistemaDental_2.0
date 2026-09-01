@@ -134,53 +134,55 @@ La advertencia relacionada con archivos mayores de 500 kB no impide la compilaci
 
 ## Base de datos y documentos
 
-Los datos locales se almacenan en:
-
-```text
-data/dentalpro.db
-```
-
-En el ejecutable instalado para Windows, la base oficial se separa de los
-binarios y de OneDrive:
+En Windows existe una sola ubicación oficial, tanto al ejecutar el código como
+al usar el programa instalado:
 
 ```text
 C:\ProgramData\DentalPro\data\dentalpro.db
 ```
 
-Una instalación portátil usa `%LOCALAPPDATA%\DentalPro\data` cuando no existe
-la carpeta preparada por el instalador. La primera ejecución puede importar de
-forma segura `data/dentalpro.db` y `data/documentos/`; nunca importa las bases
-`original`, `pruebas` o `vacia`, ni reemplaza una base productiva existente.
-
-En Windows, la base aislada de pruebas se almacena en:
+El paquete también incluye una edición de entrenamiento completamente aislada:
 
 ```text
-%LOCALAPPDATA%\DentalPro\pruebas\dentalpro-pruebas.db
+C:\ProgramData\DentalPro-Practica\data\dentalpro.db
 ```
 
-No deben mantenerse activas las variables antiguas `DENTALPRO_DATA_DIR` o
-`DENTALPRO_DB_PATH` durante el uso normal. El sistema detecta automáticamente
-en cuál de las dos bases existe una cuenta activa y abre únicamente ese
-entorno.
+`DentalPro.exe` siempre abre la base oficial y `DentalProPractica.exe` siempre
+abre la base ficticia. No existe selector de base ni variable de entorno que
+permita cruzarlas. Cada edición tiene su propio proceso, puerto detectado,
+cookie de sesión, documentos, respaldos y registros. Pueden permanecer abiertas
+al mismo tiempo.
+
+La base de Práctica se crea sola con tres pacientes ficticios. Su acceso inicial
+es `practica.admin` / `Practica2026!`. La barra ámbar y el aviso permanente
+**Modo práctica** permiten distinguirla. Solo allí aparece **Restablecer
+práctica**, que exige escribir `RESTABLECER PRACTICA` y repone exclusivamente
+los ejemplos de entrenamiento; nunca abre, copia ni modifica la base oficial.
+
+La primera ejecución del instalador privado puede importar de forma segura
+`data/dentalpro.db` y `data/documentos/`; nunca importa las bases `original`,
+`pruebas` o `vacia`, ni reemplaza una base clínica existente.
+
+Las variables antiguas `DENTALPRO_DATA_DIR` y `DENTALPRO_DB_PATH` se rechazan
+durante el uso normal. Solo las pruebas automatizadas pueden usar una carpeta
+temporal mediante `DENTALPRO_TEST_MODE=1`; esa carpeta no es seleccionable desde
+el programa ni contiene datos de la clínica.
 
 El menú **Usuarios** está disponible para cuentas administradoras:
 
-- el Administrador oficial puede listar y crear cuentas en ambas bases;
-- el Administrador de pruebas solo puede gestionar la base de pruebas;
-- `cesar.admin` y `adminpruebas` son cuentas propietarias protegidas;
+- todas las cuentas autorizadas trabajan sobre la misma base clínica;
+- `cesar.admin` es la cuenta propietaria protegida;
 - solo una cuenta propietaria puede crear o modificar otros administradores;
 - los administradores delegados pueden gestionar cuentas de Odontología y
   Recepción, pero no crear otros administradores;
 - crear, activar, desactivar o restablecer una clave exige confirmar la
   contraseña del Administrador;
-- una misma cuenta no puede estar activa simultáneamente en ambas bases;
-- para cambiar una cuenta de base, primero se desactiva en el origen y después
-  se crea en el destino con una nueva contraseña temporal.
+- la interfaz no ofrece selector de base ni crea una base clínica alternativa.
 
 Los documentos de pacientes se almacenan en:
 
 ```text
-data/documentos/
+C:\ProgramData\DentalPro\data\documentos\
 ```
 
 Estos archivos no se suben a GitHub para proteger la información privada de los pacientes.
@@ -241,25 +243,32 @@ npm run build
 cd ..
 ```
 
-Después se genera el programa:
+Después se generan ambas ediciones:
 
 ```powershell
 .\.venv\Scripts\python.exe -m PyInstaller SistemaDental.spec
+.\.venv\Scripts\python.exe -m PyInstaller DentalProPractica.spec
 ```
 
-El resultado se encontrará dentro de:
+Los resultados se encontrarán dentro de:
 
 ```text
 dist/DentalPro/
+dist/DentalProPractica/
 ```
 
-El ejecutable utiliza `desktop.py`: no muestra consola, abre automáticamente la
-interfaz y reutiliza una instancia que ya esté activa. Para generar además el
-instalador privado con la base oficial y los documentos de la clínica:
+Los ejecutables utilizan `desktop.py` y `desktop_practica.py`: no muestran
+consola, abren automáticamente la interfaz y reutilizan únicamente una instancia
+de su misma edición. Para generar además el instalador privado con la base
+oficial y los documentos de la clínica:
 
 ```powershell
 .\scripts\construir_windows.ps1 -IncluirDatosClinica
 ```
+
+La opción privada lee exclusivamente
+`C:\ProgramData\DentalPro\data\dentalpro.db`; nunca empaqueta la copia heredada
+que pueda permanecer en `data/` dentro del proyecto.
 
 Consulta [la guía de instalación para Windows](docs/INSTALACION_WINDOWS.md)
 antes de trasladar el paquete. Los instaladores generados con datos reales son

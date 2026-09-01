@@ -8,9 +8,13 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-export default function LoginPage({ onLogin }) {
-  const [nombreUsuario, setNombreUsuario] = useState('');
-  const [contrasena, setContrasena] = useState('');
+export default function LoginPage({ onLogin, esPractica = false }) {
+  const [nombreUsuario, setNombreUsuario] = useState(
+    esPractica ? 'practica.admin' : ''
+  );
+  const [contrasena, setContrasena] = useState(
+    esPractica ? 'Practica2026!' : ''
+  );
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +43,7 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4 py-10 text-white">
+    <main className={`relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 text-white ${esPractica ? 'bg-amber-950' : 'bg-slate-950'}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(37,99,235,0.2),transparent_38%)]" />
 
       <div className="absolute left-[-7rem] top-[-7rem] h-72 w-72 rounded-full border border-cyan-500/10 bg-cyan-500/5 blur-2xl" />
@@ -52,17 +56,20 @@ export default function LoginPage({ onLogin }) {
               DP
             </div>
 
-            <p className="mb-3 text-sm font-bold uppercase tracking-[0.3em] text-cyan-400">
-              DentalPro
+            <p className={`mb-3 text-sm font-bold uppercase tracking-[0.3em] ${esPractica ? 'text-amber-300' : 'text-cyan-400'}`}>
+              {esPractica ? 'DentalPro Práctica' : 'DentalPro'}
             </p>
 
             <h1 className="max-w-md text-4xl font-black leading-tight text-white">
-              Gestión clínica segura y organizada.
+              {esPractica
+                ? 'Aprende sin tocar pacientes reales.'
+                : 'Gestión clínica segura y organizada.'}
             </h1>
 
             <p className="mt-5 max-w-md leading-relaxed text-slate-300">
-              Accede a pacientes, agenda, tratamientos y finanzas desde un
-              entorno protegido.
+              {esPractica
+                ? 'Todos los nombres, citas y pagos de esta edición son ficticios y están aislados de la clínica.'
+                : 'Accede a pacientes, agenda, tratamientos y finanzas desde un entorno protegido.'}
             </p>
           </div>
 
@@ -78,12 +85,12 @@ export default function LoginPage({ onLogin }) {
               DP
             </div>
 
-            <p className="font-bold text-cyan-400">DentalPro</p>
+            <p className={esPractica ? 'font-bold text-amber-300' : 'font-bold text-cyan-400'}>{esPractica ? 'DentalPro Práctica' : 'DentalPro'}</p>
           </div>
 
           <div className="mb-8">
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.22em] text-cyan-400">
-              Acceso seguro
+              {esPractica ? 'Entorno de entrenamiento' : 'Acceso seguro'}
             </p>
 
             <h2 className="text-3xl font-black text-white">
@@ -91,7 +98,9 @@ export default function LoginPage({ onLogin }) {
             </h2>
 
             <p className="mt-3 text-sm leading-relaxed text-slate-400">
-              Ingresa con el usuario administrativo creado para DentalPro.
+              {esPractica
+                ? 'Las credenciales de demostración ya están completadas.'
+                : 'Ingresa con el usuario administrativo creado para DentalPro.'}
             </p>
           </div>
 
@@ -172,6 +181,12 @@ export default function LoginPage({ onLogin }) {
               </div>
             )}
 
+            {esPractica && (
+              <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                <strong>Base de práctica:</strong> puedes crear, editar y borrar sin afectar los 1,775 pacientes reales.
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={procesando}
@@ -181,7 +196,11 @@ export default function LoginPage({ onLogin }) {
                 <LoaderCircle className="h-5 w-5 animate-spin" />
               )}
 
-              {procesando ? 'Verificando…' : 'Ingresar a DentalPro'}
+              {procesando
+                ? 'Verificando…'
+                : esPractica
+                  ? 'Ingresar a DentalPro Práctica'
+                  : 'Ingresar a DentalPro'}
             </button>
           </form>
 

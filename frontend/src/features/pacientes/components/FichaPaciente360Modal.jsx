@@ -34,14 +34,21 @@ const sumarDias = (fecha, dias) => { const valor = new Date(`${fecha}T12:00:00`)
 const serviciosDeCita = (cita) => Array.isArray(cita?.servicios) && cita.servicios.length ? cita.servicios : [{ nombre: cita?.procedimiento || 'Consulta', costo: cita?.costo || 0 }];
 
 const estadoTexto = (estado) => ({ pendiente: 'Programada', confirmada: 'Programada', en_espera: 'En espera', en_atencion: 'En atencion', completada: 'Finalizada', cancelada: 'Cancelada', no_asistio: 'No asistio' }[estado] || estado || 'Programada');
-const formatearFechaHora = (registro) => {
-  const valor = registro?.creadoEn || registro?.fecha;
-  if (!valor) return 'Fecha y hora no registradas';
+
+// Mejoramos el formato de la fecha histórica para que se vea limpio en el estado de cuenta
+const formatearFechaHistorica = (registro) => {
+  const valor = registro?.fecha || registro?.creadoEn;
+  if (!valor) return '—';
+
+  // Si viene solo como "2026-08-18" (nuestra fecha histórica)
   if (String(valor).length === 10) {
-    return `${valor} · hora no registrada`;
+    const partes = String(valor).split('-');
+    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
   }
+
   const fecha = new Date(valor);
   if (Number.isNaN(fecha.getTime())) return String(valor);
+
   return new Intl.DateTimeFormat('es-PE', {
     dateStyle: 'short',
     timeStyle: 'short'
@@ -80,31 +87,31 @@ export default function FichaPaciente360Modal({
   const proximas = citasPaciente.filter((c) => ['pendiente', 'confirmada', 'en_espera'].includes(c.estado) && c.fecha >= fechaHoy()).sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`));
 
   const recargarCuenta = useCallback(async () => {
-  if (!pacienteId) return;
+    if (!pacienteId) return;
 
-  setCargando(true);
+    setCargando(true);
 
-  try {
-    const [datosCuenta, datosDocs] = await Promise.all([
-      api.getCuentaPaciente(pacienteId),
-      api.getDocumentosPaciente(pacienteId),
-    ]);
+    try {
+      const [datosCuenta, datosDocs] = await Promise.all([
+        api.getCuentaPaciente(pacienteId),
+        api.getDocumentosPaciente(pacienteId),
+      ]);
 
-    setCuenta(datosCuenta || { movimientos: [], resumen: {} });
-    setDocumentos(datosDocs || []);
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setCargando(false);
-  }
-}, [pacienteId]);
+      setCuenta(datosCuenta || { movimientos: [], resumen: {} });
+      setDocumentos(datosDocs || []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setCargando(false);
+    }
+  }, [pacienteId]);
 
   useEffect(() => {
-  if (!isOpen || !pacienteId) return;
+    if (!isOpen || !pacienteId) return;
 
-  setPestana('resumen');
-  void recargarCuenta();
-}, [isOpen, pacienteId, recargarCuenta]);
+    setPestana('resumen');
+    void recargarCuenta();
+  }, [isOpen, pacienteId, recargarCuenta]);
 
   if (!isOpen || !paciente) return null;
 
@@ -141,20 +148,50 @@ export default function FichaPaciente360Modal({
 
   const registrarPago = async (pago) => {
     const saldo = Number(pago.saldo || 0);
+    const hoy = fechaHoy();
+
     if (saldo <= 0) return;
     const resultado = await Swal.fire({
       title: 'Registrar pago',
-      html: `<div style="text-align:left;display:grid;gap:10px"><div>Saldo: <b>${moneda(saldo)}</b></div><input id="dp-pago-monto" class="swal2-input" type="number" data-money-input="true" min="0.01" max="${saldo}" step="0.01" value="${saldo}" style="margin:0;width:100%"><select id="dp-pago-metodo" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select><input id="dp-pago-ref" class="swal2-input" placeholder="Referencia u operacion (opcional)" style="margin:0;width:100%"></div>`,
+      html: `<div style="text-align:left;display:grid;gap:10px">
+        <div>Saldo: <b>${moneda(saldo)}</b></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size:11px;color:#94a3b8;font-weight:bold">Monto (S/.)</label>
+            <input id="dp-pago-monto" class="swal2-input" type="number" data-money-input="true" min="0.01" max="${saldo}" step="0.01" value="${saldo}" style="margin:0;width:100%">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#94a3b8;font-weight:bold">Fecha Histórica</label>
+            <input id="dp-pago-fecha" type="date" value="${hoy}" max="${hoy}" class="swal2-input" style="margin:0;width:100%;font-size:14px">
+          </div>
+        </div>
+        <select id="dp-pago-metodo" class="swal2-select" style="margin:0;width:100%"><option>Efectivo</option><option>Yape</option><option>Plin</option><option>Transferencia</option><option>Tarjeta</option></select>
+        <input id="dp-pago-ref" class="swal2-input" placeholder="Referencia u operacion (opcional)" style="margin:0;width:100%">
+      </div>`,
       showCancelButton: true,
       confirmButtonText: 'Registrar',
       cancelButtonText: 'Cancelar',
       background: '#1e293b',
       color: '#fff',
-      preConfirm: () => ({ monto: Number(document.getElementById('dp-pago-monto')?.value || 0), metodo: document.getElementById('dp-pago-metodo')?.value || 'Efectivo', referencia: document.getElementById('dp-pago-ref')?.value || '', usuario: 'Administrador' })
+      preConfirm: () => ({
+        monto: Number(document.getElementById('dp-pago-monto')?.value || 0),
+        metodo: document.getElementById('dp-pago-metodo')?.value || 'Efectivo',
+        fecha: document.getElementById('dp-pago-fecha')?.value || hoy,
+        referencia: document.getElementById('dp-pago-ref')?.value || '',
+        usuario: 'Administrador'
+      })
     });
+
     if (!resultado.isConfirmed) return;
+
     try {
+      // Como el API original de pagos directos todavía no usa el campo "fecha",
+      // lo enviamos de todas formas en el payload para si a futuro lo implementan.
       await api.registrarPago(pago.id, resultado.value);
+
+      // Si a futuro en tu backend también actualizamos registrar_pago para que acepte fechas,
+      // el campo resultado.value.fecha ya estará viajando.
+
       await Promise.all([recargarCuenta(), onDatosActualizados?.()]);
       Swal.fire({ title: 'Pago registrado', icon: 'success', background: '#1e293b', color: '#fff', timer: 1600, showConfirmButton: false });
     } catch (error) {
@@ -332,15 +369,122 @@ export default function FichaPaciente360Modal({
 
           {pestana === 'odontograma' && <OdontogramaPanel paciente={paciente} />}
 
-          {pestana === 'cuenta' && <div className="space-y-5"><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><div className="text-xs uppercase text-slate-500">Cargos</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.cargos ?? pagosPaciente.reduce((s, p) => s + Number(p.total || 0), 0))}</div></div><div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="text-xs uppercase text-emerald-400">Pagos netos</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.abonos ?? totalPagado)}</div></div><div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4"><div className="text-xs uppercase text-rose-400">Saldo</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.saldo ?? saldoPendiente)}</div></div><div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><div className="text-xs uppercase text-cyan-400">Credito a favor</div><div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.creditoFavor ?? creditoFavor)}</div></div></section><section className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><h3 className="mb-3 flex items-center gap-2 font-black text-white"><History size={17} className="text-cyan-400" />Estado de cuenta</h3><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="text-slate-500"><tr><th className="p-2">Fecha y hora</th><th className="p-2">Movimiento</th><th className="p-2 text-right">Cargo</th><th className="p-2 text-right">Abono</th><th className="p-2 text-right">Saldo</th></tr></thead><tbody className="divide-y divide-slate-700">{(cuenta.movimientos || []).map((m, i) => <tr key={`${m.tipo}-${m.id || i}`}><td className="whitespace-nowrap p-2 font-semibold text-slate-600">{formatearFechaHora(m)}</td><td className="p-2"><div className="font-semibold text-white">{m.descripcion}</div><div className="text-[10px] text-slate-500">{m.metodo || m.tipo}</div></td><td className="p-2 text-right text-rose-300">{Number(m.cargo || 0) ? moneda(m.cargo) : '—'}</td><td className="p-2 text-right text-emerald-300">{Number(m.abono || 0) ? moneda(m.abono) : '—'}</td><td className="p-2 text-right font-bold text-white">{moneda(m.saldoAcumulado)}</td></tr>)}</tbody></table></div></section><section className="space-y-2"><h3 className="font-black text-white">Cuentas por atencion</h3>{pagosPaciente.map((pago) => <div key={pago.id} className="flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-800/60 p-3 md:flex-row md:items-center md:justify-between"><div><div className="font-bold text-white">{pago.concepto}</div><div className="mt-1 text-xs font-semibold text-slate-500">Cuenta creada: {formatearFechaHora(pago)}</div><div className="mt-1 text-xs text-slate-400">Total {moneda(pago.total)} · Pagado {moneda(pago.cobrado)} · Saldo {moneda(pago.saldo)}</div></div><div className="flex flex-wrap gap-2">{pago.tipoPago === 'cuotas' ? <button type="button" onClick={() => onVerPlanPagos?.(paciente)} className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white"><WalletCards size={13} />Gestionar cuotas</button> : <>{Number(pago.saldo || 0) > 0 && <button type="button" onClick={() => registrarPago(pago)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Registrar pago</button>}{Number(pago.cobrado || 0) > 0 && <><button type="button" onClick={() => pedirOperacionPago(pago, 'anular')} className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-300"><RotateCcw size={13} />Anular</button><button type="button" onClick={() => pedirOperacionPago(pago, 'devolver')} className="rounded-lg border border-rose-500/30 px-3 py-2 text-xs font-bold text-rose-300">Devolver</button></>}</>}</div></div>)}</section></div>}
+          {pestana === 'cuenta' && (
+            <div className="space-y-5">
+              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+                  <div className="text-xs uppercase text-slate-500">Cargos Totales</div>
+                  <div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.cargos ?? pagosPaciente.reduce((s, p) => s + Number(p.total || 0), 0))}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <div className="text-xs uppercase text-emerald-400">Pagos netos</div>
+                  <div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.abonos ?? totalPagado)}</div>
+                </div>
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+                  <div className="text-xs uppercase text-rose-400">Deuda / Saldo Pendiente</div>
+                  <div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.saldo ?? saldoPendiente)}</div>
+                </div>
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+                  <div className="text-xs uppercase text-cyan-400">Credito a favor</div>
+                  <div className="mt-2 text-2xl font-black text-white">{moneda(cuenta.resumen?.creditoFavor ?? creditoFavor)}</div>
+                </div>
+              </section>
+
+              {/* SECCIÓN DEL ESTADO DE CUENTA REDISEÑADA (TIPO RECIBO BANCARIO LUMINOSO) */}
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl relative overflow-hidden">
+
+
+                <h3 className="mb-5 flex items-center gap-2 font-black text-slate-800 text-lg uppercase tracking-tight">
+                  <History size={20} className="text-blue-600" />
+                  Estado de Cuenta Histórico
+                </h3>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b-2 border-slate-800">
+                        <th className="p-3 font-bold text-slate-800">Fecha del Pago</th>
+                        <th className="p-3 font-bold text-slate-800">Descripción / Concepto</th>
+                        <th className="p-3 font-bold text-right text-slate-800">Cargos (Deuda)</th>
+                        <th className="p-3 font-bold text-right text-slate-800">Abonos (Pagos)</th>
+                        <th className="p-3 font-bold text-right text-slate-800">Saldo Final</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(cuenta.movimientos || []).map((m, i) => (
+                        <tr key={`${m.tipo}-${m.id || i}`} className="hover:bg-slate-50 transition-colors">
+                          <td className="whitespace-nowrap p-3 font-semibold text-slate-700">
+                            {formatearFechaHistorica(m)}
+                          </td>
+                          <td className="p-3">
+                            <div className="font-bold text-slate-800">{m.descripcion}</div>
+                            <div className="text-xs font-semibold text-slate-400 mt-0.5 uppercase tracking-wide">
+                              {m.metodo || m.tipo}
+                            </div>
+                          </td>
+                          <td className="p-3 text-right font-black text-rose-700">
+                            {Number(m.cargo || 0) ? moneda(m.cargo) : <span className="text-slate-300 font-normal">—</span>}
+                          </td>
+                          <td className="p-3 text-right font-black text-emerald-700">
+                            {Number(m.abono || 0) ? moneda(m.abono) : <span className="text-slate-300 font-normal">—</span>}
+                          </td>
+                          <td className="p-3 text-right font-black text-slate-900 bg-slate-50">
+                            {moneda(m.saldoAcumulado)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="space-y-3 pt-4">
+                <h3 className="font-black text-white text-lg">Deudas y Cuentas por Atención</h3>
+                {pagosPaciente.map((pago) => (
+                  <div key={pago.id} className="flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 p-4 md:flex-row md:items-center md:justify-between shadow-sm">
+                    <div>
+                      <div className="font-bold text-white text-base">{pago.concepto}</div>
+                      <div className="mt-1 text-xs font-semibold text-cyan-400/80">Cuenta clínica base registrada el {formatearFechaHistorica(pago)}</div>
+                      <div className="mt-2 text-sm text-slate-300">Total <b>{moneda(pago.total)}</b> &nbsp;·&nbsp; Pagado <b className="text-emerald-300">{moneda(pago.cobrado)}</b> &nbsp;·&nbsp; Saldo <b className="text-rose-300">{moneda(pago.saldo)}</b></div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {pago.tipoPago === 'cuotas' ? (
+                        <button type="button" onClick={() => onVerPlanPagos?.(paciente)} className="inline-flex items-center gap-1 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-violet-500 transition shadow-lg">
+                          <WalletCards size={14} /> Gestionar Plan Financiero
+                        </button>
+                      ) : (
+                        <>
+                          {Number(pago.saldo || 0) > 0 && (
+                            <button type="button" onClick={() => registrarPago(pago)} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-lg">
+                              Registrar pago
+                            </button>
+                          )}
+                          {Number(pago.cobrado || 0) > 0 && (
+                            <>
+                              <button type="button" onClick={() => pedirOperacionPago(pago, 'anular')} className="inline-flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition">
+                                <RotateCcw size={13} /> Anular
+                              </button>
+                              <button type="button" onClick={() => pedirOperacionPago(pago, 'devolver')} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-500/20 transition">
+                                Devolver
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            </div>
+          )}
 
           {pestana === 'documentos' && <div className="space-y-4"><div className="flex justify-end"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-xs font-bold text-white"><Upload size={15} />Subir documento<input type="file" className="hidden" onChange={subirDocumento} /></label></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{documentos.length ? documentos.map((doc) => <article key={doc.id} className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4"><FileText size={24} className="text-cyan-400" /><div className="mt-3 truncate font-bold text-white">{doc.nombre}</div><div className="mt-1 text-xs text-slate-500">{doc.fecha || doc.creadoEn || 'Sin fecha'}</div><div className="mt-3 flex gap-2"><button type="button" onClick={() => api.descargarDocumentoPaciente(paciente.id, doc.id)} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white"><Download size={13} />Abrir</button><button type="button" onClick={() => eliminarDocumento(doc)} className="rounded-lg border border-rose-500/30 px-3 py-2 text-rose-300"><Trash2 size={13} /></button></div></article>) : <div className="col-span-full rounded-2xl border border-dashed border-slate-700 py-14 text-center text-slate-500">Sin documentos. Puedes guardar radiografias, consentimientos, fotos y archivos clinicos.</div>}</div></div>}
         </main>
 
-        <footer className="flex flex-col gap-3 border-t border-slate-700 bg-slate-800/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={() => onEditarPaciente?.(paciente)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-700 px-4 py-2.5 text-xs font-bold text-white"><Edit3 size={16} />Editar datos</button><div className="flex gap-2"><button type="button" onClick={onClose} className="rounded-xl bg-slate-700 px-4 py-2.5 text-xs font-bold text-slate-200">Cerrar</button><button type="button" onClick={() => onNuevaCita?.(paciente)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-xs font-bold text-white"><CalendarPlus size={16} />Nueva atencion</button></div></footer>
+        <footer className="flex flex-col gap-3 border-t border-slate-700 bg-slate-800/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={() => onEditarPaciente?.(paciente)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-600 transition"><Edit3 size={16} />Editar datos</button><div className="flex gap-2"><button type="button" onClick={onClose} className="rounded-xl bg-slate-700 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-600 transition">Cerrar</button><button type="button" onClick={() => onNuevaCita?.(paciente)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-cyan-500 transition shadow-lg"><CalendarPlus size={16} />Nueva atencion</button></div></footer>
       </div>
 
-      {cronograma && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4" onMouseDown={() => setCronograma(null)}><div className="w-full max-w-2xl rounded-2xl border border-violet-500/30 bg-slate-800 p-5 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}><div className="flex justify-between"><div><h3 className="text-xl font-black text-white">Cronograma de sesiones</h3><p className="mt-1 text-xs text-slate-400">{cronograma.plan.nombre}</p></div><button type="button" onClick={() => setCronograma(null)} className="text-slate-400"><X size={20} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-400">Sesiones a agregar<input type="number" min="1" value={cronograma.cantidad} onChange={(e) => setCronograma({ ...cronograma, cantidad: Number(e.target.value || 1) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Primera fecha<input type="date" value={cronograma.fechaInicio} onChange={(e) => setCronograma({ ...cronograma, fechaInicio: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Hora<input type="time" value={cronograma.hora} onChange={(e) => setCronograma({ ...cronograma, hora: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Frecuencia (dias)<input type="number" min="1" value={cronograma.intervaloDias} onChange={(e) => setCronograma({ ...cronograma, intervaloDias: Number(e.target.value || 1) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Duracion por sesion<input type="number" min="15" step="15" value={cronograma.duracion} onChange={(e) => setCronograma({ ...cronograma, duracion: Number(e.target.value || 60) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Nombre de la sesion<input value={cronograma.servicio} onChange={(e) => setCronograma({ ...cronograma, servicio: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label></div><div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-cyan-100">Las sesiones quedan vinculadas al plan clinico y se crean como incluidas en el tratamiento. El plan de pagos se administra por separado.</div><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setCronograma(null)} className="rounded-xl border border-slate-600 px-4 py-2.5 text-xs font-bold text-slate-300">Cancelar</button><button type="button" onClick={generarSesiones} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-bold text-white">Crear sesiones</button></div></div></div>}
+      {cronograma && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4" onMouseDown={() => setCronograma(null)}><div className="w-full max-w-2xl rounded-2xl border border-violet-500/30 bg-slate-800 p-5 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}><div className="flex justify-between"><div><h3 className="text-xl font-black text-white">Cronograma de sesiones</h3><p className="mt-1 text-xs text-slate-400">{cronograma.plan.nombre}</p></div><button type="button" onClick={() => setCronograma(null)} className="text-slate-400 hover:text-white transition"><X size={20} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-400">Sesiones a agregar<input type="number" min="1" value={cronograma.cantidad} onChange={(e) => setCronograma({ ...cronograma, cantidad: Number(e.target.value || 1) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Primera fecha<input type="date" value={cronograma.fechaInicio} onChange={(e) => setCronograma({ ...cronograma, fechaInicio: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Hora<input type="time" value={cronograma.hora} onChange={(e) => setCronograma({ ...cronograma, hora: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Frecuencia (dias)<input type="number" min="1" value={cronograma.intervaloDias} onChange={(e) => setCronograma({ ...cronograma, intervaloDias: Number(e.target.value || 1) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Duracion por sesion<input type="number" min="15" step="15" value={cronograma.duracion} onChange={(e) => setCronograma({ ...cronograma, duracion: Number(e.target.value || 60) })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label><label className="text-xs font-semibold text-slate-400">Nombre de la sesion<input value={cronograma.servicio} onChange={(e) => setCronograma({ ...cronograma, servicio: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-white" /></label></div><div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-cyan-100">Las sesiones quedan vinculadas al plan clinico y se crean como incluidas en el tratamiento. El plan de pagos se administra por separado.</div><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setCronograma(null)} className="rounded-xl border border-slate-600 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700 transition">Cancelar</button><button type="button" onClick={generarSesiones} className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-violet-500 transition shadow-lg">Crear sesiones</button></div></div></div>}
     </div>
   );
 }

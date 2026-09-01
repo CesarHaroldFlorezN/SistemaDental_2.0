@@ -16,15 +16,15 @@ export const crearAccionesPlanesPago = ({
     const pendientesPuras = plan.cuotas.filter(q => !q.pagado && !q.pagadoParcial && q.tipo !== 'anticipo');
     const pagadoCompleto = plan.cuotas.filter(q => q.pagado).reduce((a, c) => a + Number(c.monto || 0), 0);
     const pagadoParcial = plan.cuotas.filter(q => q.pagadoParcial).reduce((a, c) => a + Number(c.montoPagado || 0), 0);
-    
+
     const anticipo = Number(plan.anticipo || 0);
     const cobradoTotal = anticipo + pagadoCompleto + pagadoParcial;
-    
+
     // El monto atrapado en las cuotas parciales (c.monto ES el remanente)
     const saldoParciales = plan.cuotas.filter(q => q.pagadoParcial).reduce((a, c) => a + Number(c.monto || 0), 0);
-    
+
     const restante = Math.max(0, Number(plan.totalAcordado || 0) - cobradoTotal - saldoParciales);
-    
+
     if (pendientesPuras.length > 0) {
       const centavos = Math.round(restante * 100);
       const base = Math.floor(centavos / pendientesPuras.length);
@@ -33,7 +33,7 @@ export const crearAccionesPlanesPago = ({
         cuota.monto = (base + (indice < sobrante ? 1 : 0)) / 100;
       });
     }
-    
+
     plan.totalCuotas = plan.cuotas.reduce((a, q) => a + Number(q.monto || 0) + Number(q.montoPagado || 0), 0);
     plan.cobrado = cobradoTotal;
     plan.saldo = Math.max(0, Number(plan.totalAcordado || 0) - plan.cobrado);
@@ -42,24 +42,33 @@ export const crearAccionesPlanesPago = ({
   const handlePagarCuota = async (plan, idx) => {
     const cuota = plan.cuotas[idx];
     if (!cuota || cuota.pagado) return;
-    
+
     const montoPendiente = Number(cuota.monto || 0);
     const yaPagado = Number(cuota.montoPagado || 0);
-    const saldoMaximo = Number(plan.saldo || 0) + montoPendiente; 
-    
+    const saldoMaximo = Number(plan.saldo || 0) + montoPendiente;
+    const hoy = obtenerFechaLocal();
+
     const etiquetaSesion = plan.origen === 'plan_tratamiento'
       ? `Cuota ${cuota.num} vinculada a la sesión ${cuota.sesionNum || cuota.num}`
       : `Cuota ${cuota.num}`;
-      
+
     const resultado = await Swal.fire({
       title: cuota.pagadoParcial ? `Completar Cuota` : `Registrar pago`,
       html: `<div style="text-align:left;display:grid;gap:12px">
         <div style="font-weight:bold;color:#22d3ee">${etiquetaSesion}</div>
-        <div style="font-size:12px;color:#cbd5e1">Ingresa el monto a pagar. Si pagas menos de ${fMon(montoPendiente)}, quedará como pago parcial.</div>
-        <div>
-          <label style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:bold">Monto a pagar (S/.)</label>
-          <input id="dp-monto-cuota" type="number" min="0.10" max="${saldoMaximo}" step="0.01" value="${montoPendiente}" class="swal2-input" style="margin:0;width:100%;font-weight:bold;color:#34d399">
+        <div style="font-size:12px;color:#cbd5e1">Ingresa el monto y la fecha real en la que el paciente realizó este pago.</div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:bold">Monto (S/.)</label>
+            <input id="dp-monto-cuota" type="number" min="0.10" max="${saldoMaximo}" step="0.01" value="${montoPendiente}" class="swal2-input" style="margin:0;width:100%;font-weight:bold;color:#34d399">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:bold">Fecha del pago</label>
+            <input id="dp-fecha-cuota" type="date" value="${hoy}" max="${hoy}" class="swal2-input" style="margin:0;width:100%;font-size:14px">
+          </div>
         </div>
+
         <select id="dp-metodo-cuota" class="swal2-select" style="margin:0;width:100%">
           <option>Efectivo</option>
           <option>Yape</option>
@@ -78,68 +87,70 @@ export const crearAccionesPlanesPago = ({
         const montoIngresado = Number(document.getElementById('dp-monto-cuota')?.value || 0);
         if (montoIngresado <= 0) return Swal.showValidationMessage(`El monto debe ser mayor a 0.`);
         if (montoIngresado > saldoMaximo) return Swal.showValidationMessage(`El monto no puede superar la deuda total.`);
-        return { 
+        return {
           monto: montoIngresado,
-          metodo: document.getElementById('dp-metodo-cuota')?.value || 'Efectivo', 
-          referencia: document.getElementById('dp-ref-cuota')?.value || '' 
+          fecha: document.getElementById('dp-fecha-cuota')?.value || hoy,
+          metodo: document.getElementById('dp-metodo-cuota')?.value || 'Efectivo',
+          referencia: document.getElementById('dp-ref-cuota')?.value || ''
         };
       }
     });
-    
+
     if (!resultado.isConfirmed) return;
-    
+
     const montoIngresado = resultado.value.monto;
     const nuevoMontoPagado = yaPagado + montoIngresado;
     const esPagoCompleto = montoIngresado >= montoPendiente;
-    
+    const fechaReal = resultado.value.fecha;
+
     const cuotasActualizadas = plan.cuotas.map((item, indice) => {
       if (indice !== idx) return { ...item };
-      
+
       if (esPagoCompleto) {
         const montoExtra = montoIngresado - montoPendiente;
         return {
           ...item,
-          monto: yaPagado + montoPendiente + montoExtra, // Restaura la cuota a su tamaño original histórico
+          monto: yaPagado + montoPendiente + montoExtra,
           pagado: true,
           pagadoParcial: false,
           montoPagado: null,
-          fechaPago: obtenerFechaLocal(),
+          fechaPago: fechaReal, // <- Usamos la fecha seleccionada
           metodoPago: resultado.value.metodo,
           referencia: resultado.value.referencia
         };
       } else {
         return {
           ...item,
-          monto: montoPendiente - montoIngresado, // El UI leerá el saldo remanente automáticamente
+          monto: montoPendiente - montoIngresado,
           pagado: false,
           pagadoParcial: true,
           montoPagado: nuevoMontoPagado,
           fechaPago: null,
           metodoPago: resultado.value.metodo,
-          referencia: resultado.value.referencia
+          referencia: resultado.value.referencia,
+          fechaUltimoAbono: fechaReal // <- Guardamos la fecha del abono
         };
       }
     });
-    
+
     const planActualizado = { ...plan, cuotas: cuotasActualizadas };
-    
-    // Recalcula todo si hubo un pago parcial (para cuadrar caja) o una amortización (para restar a las demás)
+
     if (!esPagoCompleto || montoIngresado > montoPendiente) {
       reajustarCuotas(planActualizado);
     }
-    
+
     try {
       await api.actualizarPlanPago(plan.id, planActualizado);
       await Promise.all([cargarPlanPagos(), cargarPagos(), cargarPlanes(), cargarMovimientosCuenta()]);
-      
+
       const extraPago = montoIngresado - montoPendiente;
-      let msg = `Pago registrado.`;
-      if (!esPagoCompleto) msg = `Pago parcial guardado. Falta ${fMon(montoPendiente - montoIngresado)} de la cuota.`;
-      if (extraPago > 0) msg = `Cuota pagada y se amortizaron ${fMon(extraPago)} al saldo.`;
-        
-      Swal.fire({ title: esPagoCompleto ? `Cuota completada` : `Pago Parcial`, text: msg, icon: 'success', background: '#1e293b', color: '#fff', timer: 2500, showConfirmButton: false });
+      let msg = `Pago registrado con fecha ${fechaReal}.`;
+      if (!esPagoCompleto) msg = `Abono guardado. Faltan ${fMon(montoPendiente - montoIngresado)}.`;
+      if (extraPago > 0) msg = `Pagado y amortizado al capital.`;
+
+      Swal.fire({ title: 'Exito', text: msg, icon: 'success', background: '#1e293b', color: '#fff', timer: 2500, showConfirmButton: false });
     } catch (error) {
-      Swal.fire({ title: 'No se pudo pagar', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
+      Swal.fire({ title: 'Error', text: error.message, icon: 'error', background: '#1e293b', color: '#fff' });
     }
   };
 
@@ -172,15 +183,15 @@ export const crearAccionesPlanesPago = ({
   };
 
   const handleRevertirUltimoAdelanto = async (plan) => {
-    const confirm = await Swal.fire({ 
-        title: '¿Revertir último adelanto?', 
+    const confirm = await Swal.fire({
+        title: '¿Revertir último adelanto?',
         text: 'Se descontará el último adelanto y se recalcularán las cuotas.',
-        icon: 'warning', 
-        showCancelButton: true, 
-        background: '#1e293b', 
-        color: '#fff', 
-        confirmButtonColor: '#ef4444', 
-        confirmButtonText: 'Sí, revertir' 
+        icon: 'warning',
+        showCancelButton: true,
+        background: '#1e293b',
+        color: '#fff',
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Sí, revertir'
     });
     if (confirm.isConfirmed) {
       try {
@@ -199,9 +210,9 @@ export const crearAccionesPlanesPago = ({
       const cuotasActualizadas = plan.cuotas.map((cuota, posicion) => {
         if (posicion !== idx) return { ...cuota };
         return {
-          ...cuota, 
+          ...cuota,
           monto: Number(cuota.monto || 0) + Number(cuota.montoPagado || 0), // Restaura su tamaño real histórico
-          pagado: false, pagadoParcial: false, montoPagado: null, fechaPago: null, metodoPago: null, referencia: '' 
+          pagado: false, pagadoParcial: false, montoPagado: null, fechaPago: null, metodoPago: null, referencia: ''
         };
       });
       const planA = { ...plan, estado: 'activo', cuotas: cuotasActualizadas };
