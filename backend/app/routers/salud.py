@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 
-from ..config import DB_PATH
+from ..config import APP_NAME, DB_PATH, EDICION
 
 router = APIRouter()
 
@@ -12,6 +12,8 @@ router = APIRouter()
 def salud(request: Request):
     return {
         "estado": "ok",
+        "aplicacion": APP_NAME,
+        "edicion": EDICION,
         "base_datos": str(DB_PATH),
         "version": request.app.version,
     }

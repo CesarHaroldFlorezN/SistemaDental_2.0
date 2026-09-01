@@ -10,13 +10,13 @@ from fastapi import (
     File,
     Form,
     HTTPException,
-    Request,
     UploadFile,
 )
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ..database import directorio_documentos_request, get_db
+from ..config import DOCUMENTOS_DIR
+from ..database import get_db
 from ..models import DocumentoPacienteDB
 from ..services import (
     ahora_iso,
@@ -25,6 +25,37 @@ from ..services import (
 )
 
 router = APIRouter()
+
+
+def _resolver_ruta_documento(
+    ruta_guardada: str,
+    paciente_id: int,
+) -> Path:
+    """Resuelve rutas relativas y normaliza registros absolutos antiguos."""
+
+    raiz = DOCUMENTOS_DIR.resolve()
+    texto = str(ruta_guardada or "").strip()
+    ruta = Path(texto)
+
+    # Las instalaciones antiguas guardaban rutas completas de Windows. Solo se
+    # conserva el nombre del archivo y se lo ubica dentro del almacén oficial.
+    nombre = texto.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    candidata = (
+        ruta
+        if texto and not ruta.is_absolute() and ":" not in texto
+        else Path(str(paciente_id)) / nombre
+    )
+    destino = (raiz / candidata).resolve()
+
+    try:
+        destino.relative_to(raiz)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404,
+            detail="La ruta del documento no es válida.",
+        ) from error
+
+    return destino
 
 
 @router.get(
@@ -53,7 +84,6 @@ def listar_documentos_paciente(
 )
 async def subir_documento_paciente(
     paciente_id: int,
-    request: Request,
     file: UploadFile = File(...),
     descripcion: str = Form(""),
     db: Session = Depends(get_db),
@@ -71,7 +101,7 @@ async def subir_documento_paciente(
         or "documento"
     )
 
-    carpeta = directorio_documentos_request(request) / str(paciente_id)
+    carpeta = DOCUMENTOS_DIR / str(paciente_id)
     carpeta.mkdir(parents=True, exist_ok=True)
 
     marca_tiempo = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
@@ -92,7 +122,7 @@ async def subir_documento_paciente(
         pacienteId=paciente_id,
         nombre=nombre_original,
         tipo=(file.content_type or "application/octet-stream"),
-        ruta=str(destino),
+        ruta=str(Path(str(paciente_id)) / destino.name),
         descripcion=descripcion,
         fecha=(datetime.now().astimezone().date().isoformat()),
         creadoEn=ahora_iso(),
@@ -139,7 +169,7 @@ def descargar_documento_paciente(
             detail="El documento no existe.",
         )
 
-    ruta = Path(registro.ruta)
+    ruta = _resolver_ruta_documento(registro.ruta, paciente_id)
 
     if not ruta.exists():
         raise HTTPException(
@@ -178,7 +208,7 @@ def eliminar_documento_paciente(
             detail="El documento no existe.",
         )
 
-    ruta = Path(registro.ruta)
+    ruta = _resolver_ruta_documento(registro.ruta, paciente_id)
 
     try:
         if ruta.exists():

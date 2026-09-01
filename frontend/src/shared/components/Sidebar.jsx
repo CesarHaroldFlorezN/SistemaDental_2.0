@@ -12,6 +12,7 @@ import {
   FolderKanban,
   ListTree,
   LayoutDashboard,
+  RotateCcw,
   UserCog,
   Users
 } from 'lucide-react';
@@ -32,7 +33,9 @@ export default function Sidebar({
   vistaActiva,
   setVistaActiva,
   usuarioActual,
-  onCerrarSesion
+  onCerrarSesion,
+  esPractica = false,
+  onRestablecerPractica
 }) {
   const [contraido, setContraido] = useState(() => localStorage.getItem('dp-sidebar-contraido') === '1');
   const nombreRolActual = usuarioActual?.esPropietario
@@ -113,14 +116,14 @@ export default function Sidebar({
     <aside className={`dp-sidebar ${contraido ? 'w-[76px]' : 'w-64'} sticky top-0 z-40 flex h-screen shrink-0 select-none flex-col justify-between border-r border-slate-700/80 bg-slate-800/95 p-3 shadow-xl transition-[width] duration-300`}>
       <div className="min-w-0">
         <div className={`relative mb-5 flex items-center border-b border-slate-700/80 py-4 ${contraido ? 'justify-center px-1' : 'gap-3 px-2'}`}>
-          <div className="shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-400">
+          <div className={`shrink-0 rounded-xl border p-2 ${esPractica ? 'border-amber-400/50 bg-amber-400/15 text-amber-300' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400'}`}>
             <Activity size={23} />
           </div>
 
           {!contraido && (
             <div className="min-w-0">
-              <h2 className="truncate text-lg font-bold leading-tight text-white">DentalPro</h2>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">Sistema clínico</span>
+              <h2 className="truncate text-lg font-bold leading-tight text-white">{esPractica ? 'DentalPro Práctica' : 'DentalPro'}</h2>
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${esPractica ? 'text-amber-300' : 'text-cyan-400'}`}>{esPractica ? 'Entrenamiento aislado' : 'Sistema clínico'}</span>
             </div>
           )}
 
@@ -146,7 +149,9 @@ export default function Sidebar({
                 title={contraido ? item.nombre : undefined}
                 className={`group flex w-full items-center rounded-xl py-3 text-sm font-semibold transition duration-200 ${contraido ? 'justify-center px-2' : 'gap-3 px-3.5'} ${
                   activo
-                    ? 'dp-sidebar-active bg-cyan-600 text-white shadow-lg shadow-cyan-600/20'
+                    ? esPractica
+                      ? 'bg-amber-500 text-amber-950 shadow-lg shadow-amber-600/20'
+                      : 'dp-sidebar-active bg-cyan-600 text-white shadow-lg shadow-cyan-600/20'
                     : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
                 }`}
               >
@@ -183,13 +188,25 @@ export default function Sidebar({
                 {nombreRolActual}
               </p>
 
-              <p className={`mt-1 flex items-center gap-1 truncate text-[9px] font-black uppercase tracking-wide ${usuarioActual?.entornoDatos === 'pruebas' ? 'text-amber-300' : 'text-emerald-300'}`}>
+              <p className={`mt-1 flex items-center gap-1 truncate text-[9px] font-black uppercase tracking-wide ${esPractica ? 'text-amber-300' : 'text-emerald-300'}`}>
                 <Database size={10} />
-                {usuarioActual?.entornoDatos === 'pruebas' ? 'Base de pruebas' : 'Base oficial'}
+                {esPractica ? 'Base ficticia aislada' : 'Base clínica única'}
               </p>
             </div>
           )}
         </div>
+
+        {esPractica && usuarioActual?.rol === 'administrador' && (
+          <button
+            type="button"
+            onClick={onRestablecerPractica}
+            title="Restablecer los datos ficticios"
+            className={`mb-2 flex w-full items-center rounded-xl border border-amber-500/30 py-2.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500/10 ${contraido ? 'justify-center px-2' : 'gap-3 px-3.5'}`}
+          >
+            <RotateCcw size={17} />
+            {!contraido && <span>Restablecer práctica</span>}
+          </button>
+        )}
 
         <button
           type="button"

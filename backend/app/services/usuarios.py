@@ -5,7 +5,7 @@ import re
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from ..config import OFFICIAL_OWNER_USERNAME, TEST_ADMIN_USERNAME
+from ..config import OFFICIAL_OWNER_USERNAME
 from ..models import SesionDB, UsuarioDB
 from ..seguridad import crear_hash_contrasena
 from .comun import ahora_iso
@@ -59,14 +59,10 @@ def buscar_usuario_por_nombre(
 
 def es_administrador_propietario(
     usuario: UsuarioDB,
-    entorno: str,
 ) -> bool:
-    nombre_propietario = (
-        TEST_ADMIN_USERNAME if entorno == "pruebas" else OFFICIAL_OWNER_USERNAME
-    )
     return bool(
         usuario.rol == "administrador"
-        and usuario.nombre_usuario.strip().lower() == nombre_propietario
+        and usuario.nombre_usuario.strip().lower() == OFFICIAL_OWNER_USERNAME
     )
 
 

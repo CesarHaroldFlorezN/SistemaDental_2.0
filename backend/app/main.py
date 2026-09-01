@@ -9,14 +9,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .almacen import migrar_datos_heredados
 from .config import (
     ALLOWED_ORIGINS,
+    APP_DIR,
+    DATA_DIR,
+    ES_PRACTICA,
     FRONTEND_DIR,
-    TEST_DB_PATH,
-    TEST_RESPALDOS_DIR,
-    validar_aislamiento_bases,
+    MODO_PRUEBAS,
+    validar_base_unica,
 )
-from .database import test_engine
 from .dependencias import (
     exigir_personal_clinico,
     obtener_usuario_actual,
@@ -32,6 +34,7 @@ from .routers import (
     finanzas_router,
     odontograma_router,
     pacientes_router,
+    practica_router,
     salud_router,
     usuarios_router,
 )
@@ -42,16 +45,24 @@ from .routers import (
 
 logger = configurar_logging()
 
-try:
-    validar_aislamiento_bases()
+
+def _preparar_almacen_clinico() -> None:
+    """Inicializa la base sin importar datos reales durante las pruebas."""
+
+    validar_base_unica()
+    if not MODO_PRUEBAS and not ES_PRACTICA:
+        migrar_datos_heredados(APP_DIR / "data", DATA_DIR)
     inicializar_base_datos()
-    inicializar_base_datos(
-        test_engine,
-        ruta_bd=TEST_DB_PATH,
-        directorio_respaldos=TEST_RESPALDOS_DIR,
-    )
+    if ES_PRACTICA:
+        from .practica import inicializar_base_practica
+
+        inicializar_base_practica()
+
+
+try:
+    _preparar_almacen_clinico()
 except Exception:
-    logger.exception("DentalPro no pudo inicializar sus bases de datos.")
+    logger.exception("DentalPro no pudo inicializar su base de datos.")
     raise
 
 
@@ -160,6 +171,8 @@ app.include_router(
 )
 
 app.include_router(salud_router)
+if ES_PRACTICA:
+    app.include_router(practica_router)
 
 # =====================================================
 # FRONTEND REACT

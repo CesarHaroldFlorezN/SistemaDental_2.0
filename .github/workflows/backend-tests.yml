@@ -46,10 +46,15 @@ jobs:
         run: python -m pip install -e ".[dev]"
 
       - name: Validar código con Ruff
-        run: python -m ruff check backend tests main.py
+        run: python -m ruff check backend tests main.py desktop.py desktop_practica.py scripts
 
       - name: Validar formato con Ruff
-        run: python -m ruff format --check backend tests main.py
+        run: python -m ruff format --check backend tests main.py desktop.py desktop_practica.py scripts
+
+      - name: Comprobar dependencias de Python
+        run: |
+          python -m pip check
+          python -m pip_audit
 
       - name: Ejecutar pruebas
         run: python -m pytest

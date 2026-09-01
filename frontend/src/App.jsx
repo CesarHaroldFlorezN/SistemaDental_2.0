@@ -62,7 +62,9 @@ export default function App() {
   const rutaActual = resolverRutaApp(location.pathname);
   const vistaActiva = rutaActual.vista;
   const [usuarioActual, setUsuarioActual] = useState(null);
+  const [informacionSistema, setInformacionSistema] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const esPractica = informacionSistema?.edicion === 'practica';
 
 
   // ==========================================
@@ -99,27 +101,31 @@ export default function App() {
   useEffect(() => {
     let componenteActivo = true;
 
-    api.obtenerSesion()
-      .then((respuesta) => {
-        if (componenteActivo) {
-          setUsuarioActual(respuesta.usuario);
-        }
-      })
-      .catch(() => {
-        if (componenteActivo) {
-          setUsuarioActual(null);
-        }
-      })
-      .finally(() => {
-        if (componenteActivo) {
-          setVerificandoSesion(false);
-        }
-      });
+    Promise.allSettled([
+      api.getSalud(),
+      api.obtenerSesion()
+    ]).then(([salud, sesion]) => {
+      if (!componenteActivo) return;
+      setInformacionSistema(
+        salud.status === 'fulfilled' ? salud.value : null
+      );
+      setUsuarioActual(
+        sesion.status === 'fulfilled' ? sesion.value.usuario : null
+      );
+      setVerificandoSesion(false);
+    });
 
     return () => {
       componenteActivo = false;
     };
   }, []);
+
+  useEffect(() => {
+    document.title = esPractica ? 'DentalPro Práctica' : 'DentalPro';
+    return () => {
+      document.title = 'DentalPro';
+    };
+  }, [esPractica]);
   const {
     pacientes,
     citas,
@@ -250,6 +256,50 @@ export default function App() {
     }
   };
 
+  const handleRestablecerPractica = async () => {
+    const confirmacion = await Swal.fire({
+      title: 'Restablecer DentalPro Práctica',
+      html: 'Se borrarán únicamente los datos de entrenamiento y volverán los ejemplos iniciales. La base oficial no será tocada.<br><br>Escribe <strong>RESTABLECER PRACTICA</strong>.',
+      input: 'text',
+      inputPlaceholder: 'RESTABLECER PRACTICA',
+      showCancelButton: true,
+      confirmButtonText: 'Restablecer práctica',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d97706',
+      background: '#1e293b',
+      color: '#fff',
+      preConfirm: (valor) => {
+        if (valor?.trim() !== 'RESTABLECER PRACTICA') {
+          Swal.showValidationMessage('La confirmación no coincide.');
+          return false;
+        }
+        return valor.trim();
+      }
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      await api.restablecerPractica(confirmacion.value);
+      await Swal.fire({
+        title: 'Práctica restablecida',
+        text: 'Los datos y el acceso ficticio inicial están listos nuevamente.',
+        icon: 'success',
+        background: '#1e293b',
+        color: '#fff'
+      });
+      window.location.assign('/');
+    } catch (error) {
+      Swal.fire({
+        title: 'No se pudo restablecer',
+        text: error.message,
+        icon: 'error',
+        background: '#1e293b',
+        color: '#fff'
+      });
+    }
+  };
+
   if (verificandoSesion) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
@@ -265,7 +315,7 @@ export default function App() {
 
   if (!usuarioActual) {
     return (
-      <LoginPage onLogin={handleLogin} />
+      <LoginPage onLogin={handleLogin} esPractica={esPractica} />
     );
   }
 
@@ -409,13 +459,15 @@ export default function App() {
         setVistaActiva={handleCambiarVista}
         usuarioActual={usuarioActual}
         onCerrarSesion={handleCerrarSesion}
+        esPractica={esPractica}
+        onRestablecerPractica={handleRestablecerPractica}
       />
 
       <main className="dp-main min-w-0 flex-1 overflow-y-auto bg-slate-900 p-4 transition-colors duration-200 sm:p-6 xl:p-8">
 
-        {usuarioActual.entornoDatos === 'pruebas' && (
-          <div className="mx-auto mb-4 flex max-w-[1800px] items-center justify-center rounded-xl border border-amber-500 bg-amber-950 px-4 py-2 text-center text-xs font-black uppercase tracking-wide text-amber-100 shadow-lg">
-            Entorno de pruebas activo · Los cambios no afectan la base oficial
+        {esPractica && (
+          <div className="sticky top-0 z-40 mx-auto mb-4 flex max-w-[1800px] items-center justify-center rounded-xl border-2 border-amber-500 bg-amber-300 px-4 py-2 text-center text-sm font-black uppercase tracking-wide text-amber-950 shadow-lg shadow-amber-950/20">
+            Modo práctica · Solo datos ficticios · La base oficial está aislada
           </div>
         )}
 

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import desktop
 from desktop import migrar_datos_heredados, validar_base_sqlite
 
 
@@ -60,3 +61,32 @@ def test_rechazar_base_de_paquete_invalida(tmp_path: Path) -> None:
         migrar_datos_heredados(origen, destino)
 
     assert not (destino / "dentalpro.db").exists()
+
+
+class _RespuestaSalud:
+    status = 200
+
+    def __init__(self, edicion: str):
+        self.edicion = edicion
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self) -> bytes:
+        return (
+            '{"estado":"ok","version":"2.0","edicion":"' + self.edicion + '"}'
+        ).encode()
+
+
+def test_lanzadores_solo_reutilizan_su_propia_edicion(monkeypatch) -> None:
+    monkeypatch.setattr(
+        desktop.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: _RespuestaSalud("practica"),
+    )
+
+    assert desktop._respuesta_dentalpro(8000, edicion="practica") is True
+    assert desktop._respuesta_dentalpro(8000, edicion="oficial") is False

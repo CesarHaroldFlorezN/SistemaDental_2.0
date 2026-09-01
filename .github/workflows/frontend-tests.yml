@@ -47,3 +47,6 @@ jobs:
 
       - name: Compilar frontend
         run: npm run build
+
+      - name: Auditar dependencias del frontend
+        run: npm audit --audit-level=high

@@ -1,4 +1,3 @@
-import logging
 import os
 import shutil
 import tempfile
@@ -7,19 +6,17 @@ from types import SimpleNamespace
 
 TEST_DATA_DIR = Path(tempfile.mkdtemp(prefix="dentalpro-tests-"))
 
+os.environ["DENTALPRO_TEST_MODE"] = "1"
 os.environ["DENTALPRO_DATA_DIR"] = str(TEST_DATA_DIR)
-os.environ["DENTALPRO_DB_PATH"] = str(TEST_DATA_DIR / "dentalpro-test.db")
 
 
 def pytest_sessionfinish(session, exitstatus) -> None:
     """Cierra y elimina la base temporal al terminar las pruebas."""
 
     try:
-        from backend.app.database import engine, test_engine
+        from backend.app.database import engine
 
         engine.dispose()
-        test_engine.dispose()
-        logging.shutdown()
     finally:
         shutil.rmtree(TEST_DATA_DIR, ignore_errors=True)
 

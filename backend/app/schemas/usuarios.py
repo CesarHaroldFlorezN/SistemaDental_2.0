@@ -1,5 +1,3 @@
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -13,9 +11,6 @@ class UsuarioGestionResponse(BaseModel):
     nombre: str
     nombre_usuario: str = Field(serialization_alias="nombreUsuario")
     rol: str
-    entorno_datos: Literal["oficial", "pruebas"] = Field(
-        serialization_alias="entornoDatos"
-    )
     es_propietario: bool = Field(serialization_alias="esPropietario")
     activo: bool
     debe_cambiar_contrasena: bool = Field(serialization_alias="debeCambiarContrasena")
@@ -36,7 +31,6 @@ class CrearUsuarioPayload(BaseModel):
         max_length=40,
     )
     rol: str
-    entorno_datos: Literal["oficial", "pruebas"] = Field(alias="entornoDatos")
     contrasena_temporal: str = Field(
         alias="contrasenaTemporal",
         min_length=12,

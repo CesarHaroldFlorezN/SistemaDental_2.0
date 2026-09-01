@@ -92,6 +92,8 @@ const getTodosPacientes = async () => {
 };
 
 export const api = {
+  getSalud: () => request(`${API_URL}/salud`),
+
   // ===================================================
   // AUTENTICACIÓN
   // ===================================================
@@ -114,6 +116,12 @@ export const api = {
   cambiarContrasena: (data) =>
     request(`${API_URL}/auth/cambiar-contrasena`, jsonOptions('POST', data)),
 
+  restablecerPractica: (confirmacion) =>
+    request(
+      `${API_URL}/practica/restablecer`,
+      jsonOptions('POST', { confirmacion })
+    ),
+
   // ===================================================
   // USUARIOS (SOLO ADMINISTRADOR)
   // ===================================================
@@ -122,15 +130,15 @@ export const api = {
   crearUsuario: (data) =>
     request(`${API_URL}/usuarios`, jsonOptions('POST', data)),
 
-  cambiarEstadoUsuario: (entorno, id, data) =>
+  cambiarEstadoUsuario: (id, data) =>
     request(
-      `${API_URL}/usuarios/${entorno}/${id}/estado`,
+      `${API_URL}/usuarios/${id}/estado`,
       jsonOptions('PATCH', data)
     ),
 
-  restablecerContrasenaUsuario: (entorno, id, data) =>
+  restablecerContrasenaUsuario: (id, data) =>
     request(
-      `${API_URL}/usuarios/${entorno}/${id}/restablecer-contrasena`,
+      `${API_URL}/usuarios/${id}/restablecer-contrasena`,
       jsonOptions('POST', data)
     ),
 

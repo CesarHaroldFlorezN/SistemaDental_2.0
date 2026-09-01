@@ -30,16 +30,24 @@ Name: "{commonappdata}\DentalPro\data"; Permissions: users-modify
 Name: "{commonappdata}\DentalPro\data\documentos"; Permissions: users-modify
 Name: "{commonappdata}\DentalPro\data\respaldos"; Permissions: users-modify
 Name: "{commonappdata}\DentalPro\data\logs"; Permissions: users-modify
+Name: "{commonappdata}\DentalPro-Practica"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\DentalPro-Practica\data"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\DentalPro-Practica\data\documentos"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\DentalPro-Practica\data\respaldos"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{commonappdata}\DentalPro-Practica\data\logs"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Files]
 Source: "..\dist\DentalPro\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\DentalProPractica\*"; DestDir: "{app}\Practica"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\payload-clinica\dentalpro.db"; DestDir: "{commonappdata}\DentalPro\data"; Flags: onlyifdoesntexist uninsneveruninstall skipifsourcedoesntexist
 Source: "..\dist\payload-clinica\MANIFIESTO_DATOS.json"; DestDir: "{commonappdata}\DentalPro\data"; Flags: onlyifdoesntexist uninsneveruninstall skipifsourcedoesntexist
 Source: "..\dist\payload-clinica\documentos\*"; DestDir: "{commonappdata}\DentalPro\data\documentos"; Flags: onlyifdoesntexist uninsneveruninstall recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{autodesktop}\DentalPro"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\DentalPro Práctica"; Filename: "{app}\Practica\DentalProPractica.exe"; WorkingDir: "{app}\Practica"
 Name: "{group}\DentalPro"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{group}\DentalPro Práctica"; Filename: "{app}\Practica\DentalProPractica.exe"; WorkingDir: "{app}\Practica"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir DentalPro"; Flags: nowait postinstall skipifsilent

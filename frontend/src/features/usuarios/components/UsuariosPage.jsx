@@ -24,16 +24,10 @@ const NOMBRES_ROL = {
   recepcion: 'Recepción'
 };
 
-const NOMBRES_ENTORNO = {
-  oficial: 'Base oficial',
-  pruebas: 'Base de pruebas'
-};
-
-const formularioVacio = (entornoDatos = 'oficial') => ({
+const formularioVacio = () => ({
   nombre: '',
   nombreUsuario: '',
   rol: 'odontologo',
-  entornoDatos,
   contrasenaTemporal: '',
   confirmacion: '',
   contrasenaAdministrador: ''
@@ -71,16 +65,6 @@ const generarContrasena = () => {
   return caracteres.join('');
 };
 
-function EtiquetaEntorno({ entorno }) {
-  const esPruebas = entorno === 'pruebas';
-  return (
-    <span className={`inline-flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black ${esPruebas ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}>
-      <Database size={12} />
-      {NOMBRES_ENTORNO[entorno] || entorno}
-    </span>
-  );
-}
-
 function ModalGestion({
   modal,
   formulario,
@@ -93,11 +77,6 @@ function ModalGestion({
   const [mostrar, setMostrar] = useState(false);
   const esCrear = modal.tipo === 'crear';
   const esRestablecer = modal.tipo === 'restablecer';
-  const puedeElegirBase =
-    esCrear && usuarioActual.entornoDatos === 'oficial';
-  const entornoOperacion = esCrear
-    ? formulario.entornoDatos
-    : modal.usuario?.entornoDatos;
   const titulo = esCrear
     ? 'Crear nuevo usuario'
     : esRestablecer
@@ -177,37 +156,13 @@ function ModalGestion({
                 />
               </label>
 
-              <label className="block text-xs font-bold text-slate-300">
-                Base de datos autorizada
-                {puedeElegirBase ? (
-                  <select
-                    value={formulario.entornoDatos}
-                    onChange={(event) =>
-                      setFormulario((actual) => ({
-                        ...actual,
-                        entornoDatos: event.target.value
-                      }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400"
-                  >
-                    <option value="oficial">
-                      Base oficial · información real de la clínica
-                    </option>
-                    <option value="pruebas">
-                      Base de pruebas · simulaciones aisladas
-                    </option>
-                  </select>
-                ) : (
-                  <div className="mt-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm font-bold text-amber-100">
-                    Base de pruebas
-                  </div>
-                )}
-              </label>
-
-              <div className={`rounded-xl border px-3 py-2.5 text-xs leading-relaxed ${formulario.entornoDatos === 'pruebas' ? 'border-amber-500/40 bg-amber-500/10 text-amber-100' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'}`}>
-                {formulario.entornoDatos === 'pruebas'
-                  ? 'Esta cuenta solo verá datos de prueba. Nunca tendrá acceso a los pacientes oficiales.'
-                  : 'Esta cuenta trabajará con pacientes y operaciones reales de la clínica.'}
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-xs leading-relaxed text-emerald-100">
+                <span className="inline-flex items-center gap-1 font-black">
+                  <Database size={13} /> Base clínica única
+                </span>
+                <p className="mt-1">
+                  Esta cuenta trabajará en la única base autorizada de DentalPro.
+                </p>
               </div>
 
               <label className="block text-xs font-bold text-slate-300">
@@ -238,19 +193,10 @@ function ModalGestion({
 
               {formulario.rol === 'administrador' && (
                 <div className="dp-user-owner-notice rounded-xl border px-3 py-2.5 text-xs font-semibold leading-relaxed">
-                  El nuevo Administrador podrá gestionar usuarios y trabajar con todos los módulos de la base asignada, pero no podrá crear ni modificar a otros administradores.
+                  El nuevo Administrador podrá gestionar usuarios y trabajar con todos los módulos de la base clínica, pero no podrá crear ni modificar a otros administradores.
                 </div>
               )}
             </>
-          )}
-
-          {!esCrear && (
-            <div className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-950/55 px-3 py-2.5">
-              <span className="text-xs font-bold text-slate-400">
-                Base asignada
-              </span>
-              <EtiquetaEntorno entorno={entornoOperacion} />
-            </div>
           )}
 
           {(esCrear || esRestablecer) && (
@@ -381,19 +327,12 @@ function ModalGestion({
 }
 
 export default function UsuariosPage({ usuarioActual }) {
-  const entornoPredeterminado =
-    usuarioActual.entornoDatos === 'pruebas' ? 'pruebas' : 'oficial';
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [modal, setModal] = useState(null);
-  const [filtroEntorno, setFiltroEntorno] = useState(
-    usuarioActual.entornoDatos === 'pruebas' ? 'pruebas' : 'todos'
-  );
-  const [formulario, setFormulario] = useState(
-    formularioVacio(entornoPredeterminado)
-  );
+  const [formulario, setFormulario] = useState(formularioVacio());
   const [guardando, setGuardando] = useState(false);
 
   const cargar = async () => {
@@ -415,7 +354,7 @@ export default function UsuariosPage({ usuarioActual }) {
   const abrir = (tipo, usuario = null) => {
     setMensaje('');
     setError('');
-    setFormulario(formularioVacio(entornoPredeterminado));
+    setFormulario(formularioVacio());
     setModal({ tipo, usuario });
   };
 
@@ -439,16 +378,14 @@ export default function UsuariosPage({ usuarioActual }) {
           nombre: formulario.nombre,
           nombreUsuario: formulario.nombreUsuario,
           rol: formulario.rol,
-          entornoDatos: formulario.entornoDatos,
           contrasenaTemporal: formulario.contrasenaTemporal,
           contrasenaAdministrador: formulario.contrasenaAdministrador
         });
         setMensaje(
-          `Usuario creado en ${NOMBRES_ENTORNO[formulario.entornoDatos]}. Entrégale su clave temporal de manera privada.`
+          'Usuario creado en la base clínica. Entrégale su clave temporal de manera privada.'
         );
       } else if (modal.tipo === 'restablecer') {
         await api.restablecerContrasenaUsuario(
-          modal.usuario.entornoDatos,
           modal.usuario.id,
           {
             contrasenaTemporal: formulario.contrasenaTemporal,
@@ -460,7 +397,6 @@ export default function UsuariosPage({ usuarioActual }) {
         );
       } else {
         await api.cambiarEstadoUsuario(
-          modal.usuario.entornoDatos,
           modal.usuario.id,
           {
             activo: !modal.usuario.activo,
@@ -475,7 +411,7 @@ export default function UsuariosPage({ usuarioActual }) {
       }
 
       setModal(null);
-      setFormulario(formularioVacio(entornoPredeterminado));
+      setFormulario(formularioVacio());
       await cargar();
     } catch (err) {
       setError(err.message || 'No se pudo completar la operación.');
@@ -483,17 +419,6 @@ export default function UsuariosPage({ usuarioActual }) {
       setGuardando(false);
     }
   };
-
-  const usuariosVisibles = usuarios.filter(
-    (usuario) =>
-      filtroEntorno === 'todos' || usuario.entornoDatos === filtroEntorno
-  );
-  const totalOficial = usuarios.filter(
-    (usuario) => usuario.entornoDatos === 'oficial'
-  ).length;
-  const totalPruebas = usuarios.filter(
-    (usuario) => usuario.entornoDatos === 'pruebas'
-  ).length;
 
   return (
     <section className="dp-users">
@@ -505,22 +430,15 @@ export default function UsuariosPage({ usuarioActual }) {
                 <ShieldCheck size={13} /> Administrador propietario
               </span>
             )}
-            {usuarioActual.entornoDatos === 'oficial' && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300">
-                <ShieldCheck size={13} /> Administra ambas bases
-              </span>
-            )}
-            {usuarioActual.entornoDatos === 'pruebas' && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">
-                <ShieldCheck size={13} /> Solo base de pruebas
-              </span>
-            )}
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300">
+              <Database size={13} /> Base clínica única
+            </span>
           </div>
           <h1 className="text-3xl font-black text-cyan-400">
             Gestión segura de usuarios
           </h1>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
-            Define la base autorizada y la jerarquía de cada cuenta. Solo el propietario puede crear o modificar otros administradores.
+            Administra las cuentas y sus permisos en la única base clínica. Solo el propietario puede crear o modificar otros administradores.
           </p>
         </div>
         <button
@@ -531,25 +449,6 @@ export default function UsuariosPage({ usuarioActual }) {
           <Plus size={17} /> Nuevo usuario
         </button>
       </div>
-
-      {usuarioActual.entornoDatos === 'oficial' && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {[
-            ['todos', `Todos · ${usuarios.length}`],
-            ['oficial', `Base oficial · ${totalOficial}`],
-            ['pruebas', `Base de pruebas · ${totalPruebas}`]
-          ].map(([valor, etiqueta]) => (
-            <button
-              key={valor}
-              type="button"
-              onClick={() => setFiltroEntorno(valor)}
-              className={`rounded-xl border px-3 py-2 text-xs font-black transition ${filtroEntorno === valor ? 'border-cyan-400 bg-cyan-600 text-white' : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
-            >
-              {etiqueta}
-            </button>
-          ))}
-        </div>
-      )}
 
       {mensaje && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
@@ -566,10 +465,9 @@ export default function UsuariosPage({ usuarioActual }) {
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-800/80 shadow-xl">
-        <div className="min-w-[1050px]">
-          <div className="grid grid-cols-[minmax(220px,1fr)_150px_150px_110px_minmax(210px,auto)] gap-3 border-b border-slate-700 bg-slate-900/70 px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-400">
+        <div className="min-w-[900px]">
+          <div className="grid grid-cols-[minmax(260px,1fr)_150px_110px_minmax(210px,auto)] gap-3 border-b border-slate-700 bg-slate-900/70 px-4 py-3 text-[10px] font-black uppercase tracking-wide text-slate-400">
             <span>Cuenta</span>
-            <span>Base autorizada</span>
             <span>Perfil</span>
             <span>Estado</span>
             <span className="text-right">Acciones</span>
@@ -579,23 +477,21 @@ export default function UsuariosPage({ usuarioActual }) {
             <div className="py-12 text-center text-sm text-slate-400">
               Cargando usuarios…
             </div>
-          ) : usuariosVisibles.length === 0 ? (
+          ) : usuarios.length === 0 ? (
             <div className="py-12 text-center text-sm text-slate-400">
               No hay usuarios en esta categoría.
             </div>
           ) : (
-            usuariosVisibles.map((usuario) => {
+            usuarios.map((usuario) => {
               const esAdministrador = usuario.rol === 'administrador';
               const protegida =
                 usuario.esPropietario ||
                 (esAdministrador && !usuarioActual.esPropietario);
-              const esActual =
-                Number(usuario.id) === Number(usuarioActual?.id) &&
-                usuario.entornoDatos === usuarioActual?.entornoDatos;
+              const esActual = Number(usuario.id) === Number(usuarioActual?.id);
               return (
                 <div
-                  key={`${usuario.entornoDatos}-${usuario.id}`}
-                  className="grid grid-cols-[minmax(220px,1fr)_150px_150px_110px_minmax(210px,auto)] items-center gap-3 border-b border-slate-700/60 px-4 py-4 last:border-0"
+                  key={usuario.id}
+                  className="grid grid-cols-[minmax(260px,1fr)_150px_110px_minmax(210px,auto)] items-center gap-3 border-b border-slate-700/60 px-4 py-4 last:border-0"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -628,8 +524,6 @@ export default function UsuariosPage({ usuarioActual }) {
                       </div>
                     )}
                   </div>
-
-                  <EtiquetaEntorno entorno={usuario.entornoDatos} />
 
                   <span className={`w-fit rounded-full border px-2.5 py-1 text-[10px] font-black ${esAdministrador ? 'border-amber-500/50 bg-amber-500/10 text-amber-800' : usuario.rol === 'odontologo' ? 'border-violet-500/40 bg-violet-500/10 text-violet-800' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-800'}`}>
                     {NOMBRES_ROL[usuario.rol] || usuario.rol}
@@ -686,7 +580,7 @@ export default function UsuariosPage({ usuarioActual }) {
           <strong>Recepción:</strong> pacientes, agenda, cobros y planes de pago. No modifica información clínica especializada.
         </div>
         <div className="dp-user-role-card dp-user-role-transfer rounded-xl border p-4 text-xs leading-relaxed">
-          <strong>Cambiar una cuenta de base:</strong> desactívala en la base actual y créala nuevamente en la base correcta. No puede estar activa en ambas.
+          <strong>Base clínica única:</strong> todas las cuentas autorizadas trabajan sobre el mismo archivo oficial; no existe selector de base.
         </div>
       </div>
 
